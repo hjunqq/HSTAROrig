@@ -410,7 +410,7 @@
                             rotation=>element(ielem)%rotation
                             ex=e
                             if (name=='NOLINORMK')then
-                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !ÓÃÉÏÒ»²½Ó¦Á¦Çóµ¯Ä£
+                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Ä£
                             endif
                             call dmatxf_change(ex,dmatx,rotation)
                             nullify(rotation)
@@ -659,13 +659,13 @@
                 endif
                 ! assembling to element stiff matrix
 
-                if (alfa_p4>0.and.index==22)then !20231007  ¶ÔÓÚ×ª¶¯¸Õ¶È°´¾Ö²¿×ø±êÇó½âÊ±×Ô¶¯¸³ÓèÖ¸¶¨´óÖµ(ÊÂÊµÉÏ¸Ã×ÔÓÉ¶ÈÒÑ±»Ô¼Êø£©
+                if (alfa_p4>0.and.index==22)then !20231007  ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½Õ¶È°ï¿½ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½Öµ(ï¿½ï¿½Êµï¿½Ï¸ï¿½ï¿½ï¿½ï¿½É¶ï¿½ï¿½Ñ±ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½
                     lnods=>element(ielem)%field(1)%lnods_f
                     if(any(local_p4(lnods)==1))call change_estif_p4
                     nullify(lnods)
                 endif  !20231007
 
-                !if(index==1.and.(any(listglocbeam==igroup)))call change_estif_barsteel !¿ÉÒÔÍ¨¹ýÖ»¸Ä±äB¾ØÕóÊµÏÖ
+                !if(index==1.and.(any(listglocbeam==igroup)))call change_estif_barsteel !ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½Ö»ï¿½Ä±ï¿½Bï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½
 
                 element(ielem)%field(1)%khandmc(1)%fstif=estif*thick
                 !if(ielem==763)then
@@ -869,7 +869,7 @@
                 if ((appear_process(igroup,iblks-1)==0.or.  &
                     (appear_process(igroup,iblks-1)==1.and.    &
                     appear_process(igroup,iblks)==2))       &
-                    .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1
+                    .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1                
 10              continue
                 call PKPN(matno,evk,sgtot,first)
                 element(ielem)%evk(:,igaus)=evk
@@ -1185,7 +1185,7 @@
 
 
         humidification=props(matno)%mechanical%solid%SandPZ%humidification
-        if(type_problem=='F'.and.humidification==3)then    !µÃµ½lamdaÎªÁËÇó×èÄá±È
+        if(type_problem=='F'.and.humidification==3)then    !ï¿½Ãµï¿½lamdaÎªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             if(type_nl==5)then
                 stran=element(ielem)%field(1)%gpvar0(nstre+1:2*nstre,igaus)
             elseif(type_nl==4.or.type_nl==8)then
@@ -1194,11 +1194,11 @@
 
             CALL INVART(matno,nstre,DEVIA,strsg,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
             !		write(7,*)'ie=',ielem,'igaus=',igaus,'stran=',stran
-            steff=steff/sqrt(3.d0);smean=-smean   !ÒòPZ²ÄÁÏÔÚinvart×Ó³ÌÐòÀïÇóp¡¢qÊ±Óë³£¹æ²»Ì«Ò»Ñù
+            steff=steff/sqrt(3.d0);smean=-smean   !ï¿½ï¿½PZï¿½ï¿½ï¿½ï¿½ï¿½ï¿½invartï¿½Ó³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½pï¿½ï¿½qÊ±ï¿½ë³£ï¿½æ²»Ì«Ò»ï¿½ï¿½
 
             call Get_SandPZ_lamda(matno,steff,theta,smean,stran,lamda)
             element(ielem)%egaus(order_int)%vdval(6,igaus)=lamda
-            element(ielem)%egaus(order_int)%vdval0(6,igaus)=lamda  !vd(6) ´æ¶¯Á¦Ê±µÄlamda
+            element(ielem)%egaus(order_int)%vdval0(6,igaus)=lamda  !vd(6) ï¿½æ¶¯ï¿½ï¿½Ê±ï¿½ï¿½lamda
         endif
 
         !stran=stran0   !20220728
@@ -2345,7 +2345,7 @@
                 else
                     nullify(perme)
                 endif
-            endif
+                endif
 
 10          continue
         end if        !! for appear group
@@ -2457,7 +2457,7 @@
 
         endif
 
-        if (index/=20.and.index/=21.and.index/=22.and.index/=26)then  !! 2000  20230910(±¡Ä¤µ¥Ôª²»¿¼ÂÇÖÊÁ¿¾ØÕó)
+        if (index/=20.and.index/=21.and.index/=22.and.index/=26)then  !! 2000  20230910(ï¿½ï¿½Ä¤ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
             nnode = elkn(index)%el_field(ifield)%nnode_f
             ndofn=  group(igroup)%dof(ifield)%nfdof
             nevab=    nnode*ndofn
@@ -2506,13 +2506,13 @@
                     shape = elkn(index)%ggaus(order_intx)%shape(:,igaus)
 
                     if (fieldid(1:2)=='UW'.and.UPW=='W') then
-                        if (material(1:6)=='NSSoil') then !´Ë´¦material-->name
+                        if (material(1:6)=='NSSoil') then !ï¿½Ë´ï¿½material-->name
                             pwatr=element(ielem)%egaus(order_int)%pwatr(igaus)
                             csmos=element(ielem)%egaus(order_int)%csmos(igaus)
                             poros=element(ielem)%egaus(order_int)%poros(igaus)
                             satur=element(ielem)%egaus(order_int)%satur(igaus)
 
-                            if (material=='NSSoilPZ') then  !´Ë´¦material-->name
+                            if (material=='NSSoilPZ') then  !ï¿½Ë´ï¿½material-->name
                                 if (.not.allocated(value)) then
                                     ppp=element(ielem)%egaus(order_int)%vdval(5,igaus)
                                 else
@@ -3536,11 +3536,11 @@
                         if (ikh==2)coef=-omega*cmplx(omega,group(igroup)%alfa)
                     elseif(fieldid(ifield:ifield)=='W') then
                         if (nrfields==2)then
-                            if (ikh==1)coef=-1./cmplx(0.,omega)  !¶Ô³ÆÐÔÏµÊýÓë×ÔÉí³Ë»ý
-                            if (ikh==2)coef=cmplx(1.,0.)  !¶Ô³ÆÐÔÏµÊýÓë×ÔÉí³Ë»ý
+                            if (ikh==1)coef=-1./cmplx(0.,omega)  !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
+                            if (ikh==2)coef=cmplx(1.,0.)  !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
                         elseif(nrfields==1)then
-                            if (ikh==1)coef=-1./cmplx(omega**2,0.)/theta1/ditime   !¶Ô³ÆÐÔÏµÊýÓë×ÔÉí³Ë»ý   ! /theta1/ditime zhao 060530
-                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !¶Ô³ÆÐÔÏµÊýÓë×ÔÉí³Ë»ý
+                            if (ikh==1)coef=-1./cmplx(omega**2,0.)/theta1/ditime   !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½   ! /theta1/ditime zhao 060530
+                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
                             if (ifsnedge/=0)then !ifs2006
                                 if (ikh==1)coef=cmplx(-1./omega**2,0.)/beeta2/ditime**2
                                 if (ikh==2)coef=cmplx(1.,0.)/beeta2/ditime**2
@@ -4574,7 +4574,7 @@
     deallocate(dmatxl,rr,rr0,tt)
     end subroutine change1_dmatx
 
-    subroutine dmatxf_change(e,dmatx,rotation) !ÕâÊÇÔ­À´µÄ³ÌÐò£¬ËÆºõÓÐµãÎÊÌâ£¬Ö÷ÒªÊÇÉÙÁËtti£¬²¢ÇÒ2.0ÏµÊýÒ²²»¶Ô
+    subroutine dmatxf_change(e,dmatx,rotation) !ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ï¿½ï¿½Ä³ï¿½ï¿½ï¿½ï¿½Æºï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½â£¬ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ttiï¿½ï¿½ï¿½ï¿½ï¿½ï¿½2.0Ïµï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½
     integer(ink) idimn,jdimn
     real   (irk) e,dmatx(:,:),rotation(:,:)
     real   (irk),allocatable:: rr(:,:),rr0(:,:),tt(:,:),dmatxl(:,:),rot(:)
@@ -5183,7 +5183,7 @@
         rott(1:3,1:3)=rotation; rott(4:6,4:6)=rotation
         if(alfa_p4>0.)then
             ipoin=element(ielem)%field(1)%lnods_f(inode) !20221124
-            if(local_p4(ipoin)==1)then  !½ÚµãµÄ¾Ö²¿×ø±ê·½ÏòÓëµ¥ÔªµÄ¾Ö²¿×ø±ê·½Ïò¿ÉÄÜ²»ÍêÈ«Ò»ÖÂ£¬¾Ö²¿×ø±êÇó½âÊ±£¬ÓÃµÄÊÇ½ÚµãµÄ¾Ö²¿×ø±ê
+            if(local_p4(ipoin)==1)then  !ï¿½Úµï¿½Ä¾Ö²ï¿½ï¿½ï¿½ï¿½ê·½ï¿½ï¿½ï¿½ëµ¥Ôªï¿½Ä¾Ö²ï¿½ï¿½ï¿½ï¿½ê·½ï¿½ï¿½ï¿½ï¿½Ü²ï¿½ï¿½ï¿½È«Ò»ï¿½Â£ï¿½ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½Ãµï¿½ï¿½Ç½Úµï¿½Ä¾Ö²ï¿½ï¿½ï¿½ï¿½ï¿½
                 allocate(rotstar(ndimn,ndimn),unitx(ndimn,ndimn))
                 rotstar=prot(:,:,ipoin)
                 unitx=matmul(rotation,transpose(rotstar))
@@ -5481,7 +5481,7 @@
         endif
     endif
 
-    if(varj2<1.e-25)varj2=1.e-25   !20230907 ÌØ±ð×¢Òâ£¬¶ÔÓ¦±ä¿Õ¼äµÄ»ìÄýÍÁËðÉËÄ£ÐÍ£¬varj2ÉèÖÃ²»Ì«´ó
+    if(varj2<1.e-25)varj2=1.e-25   !20230907 ï¿½Ø±ï¿½×¢ï¿½â£¬ï¿½ï¿½Ó¦ï¿½ï¿½Õ¼ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½Í£ï¿½varj2ï¿½ï¿½ï¿½Ã²ï¿½Ì«ï¿½ï¿½
     !if(varj2<.001)varj2=.001    !20220721
 
     varj3=0.0
@@ -5848,105 +5848,48 @@
     SUBROUTINE PKPN(matno,EVK,ps,first)
     integer(ink) matno,first
     real   (irk) evk(:),ps(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
-        r(3),cohes,ft, ps_tang_norm, m_soft, calculated_evk
-    
-    real(irk) :: r_factor(size(ps)-1) ! ÖØÃüÃû R ÒÔÃâÓëÄÚÖÃº¯Êý»ìÏý
-    
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
+        r(3),cohes,ft,gamaw_local
     !write(7,*) 'ps=',ps
+    
+    ! ç®€åŒ–PKPNé€»è¾‘ï¼Œæ¢å¤æŽ¥è¿‘åŽŸå§‹è®¾è®¡
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
         Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
+    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw
+    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
-    Ft    =props(matno)%mechanical%solid%Goodman%Ft
-
+    Ft   =props(matno)%mechanical%solid%Goodman%Ft
+    
+    ! åˆå§‹åˆšåº¦è®¡ç®—
+    if (first==1)then
+        evk(ndimn)=kzz
+        evk(1)=K1*gamaw_local
+        if (ndimn==3)evk(2)=K1*gamaw_local
+        return
+    endif
+    
+    ! æ ‡å‡†æ‘©æ“¦-é»èšæ¨¡åž‹è®¡ç®—ï¼Œä¿æŒæŽ¥è¿‘åŽŸå§‹è®¾è®¡
     n    =props(matno)%mechanical%solid%Goodman%n
     Rf   =props(matno)%mechanical%solid%Goodman%Rf
     phi  =props(matno)%mechanical%solid%Goodman%phi
     cohes=props(matno)%mechanical%solid%Goodman%cohes
-    m_soft = 1.0_irk
+    EVK(ndimn)=Kzz
 
-    if (first==1)then
-        evk(ndimn)=kzz
-        evk(1)=K1*gamaw
-        if (ndimn==3)evk(2)=K1*gamaw
-        return
-    endif
-
-    ! Çé¿ö1: ·¨ÏòÓ¦Á¦ÎªÀ­Éì»òÁã (ps(ndimn) >= 0)
-    ! ÕâÒâÎ¶×Å½Ó´¥Ãæ´¦ÓÚÕÅ¿ª»ò¼´½«ÕÅ¿ªµÄ×´Ì¬¡£
-    ! ´ËÊ±Ó¦¸³ÓèÒ»¸ö·Ç³£Ð¡µÄ¸Õ¶È£¬ÒÔÔÊÐíÆä×ÔÓÉÕÅ¿ª£¬²»´«µÝÑ¹Á¦¡£
-    if (ps(ndimn) >= ft) then
-        evk(:) = pa ! ¶ÔËùÓÐ·½Ïò¶¼Ê¹ÓÃÐ¡µÄ¡°´óÆøÑ¹¡±¸Õ¶È
-        return     ! Ö±½Ó·µ»Ø
-    endif
-
-    ! ²½Öè 2: Ö»ÒªÎ´À­¶Ï£¬¾Í´¦ÓÚ½Ó´¥×´Ì¬£¬¸³Óè¸ßµÄ·¨Ïò¸Õ¶È
-    ! ÕâÈ·±£ÁËÔÚ·¨Ïò²»»áÓÐ´óµÄÇÖÈë±äÐÎ¡£
-    EVK(ndimn) = Kzz
+    TF=-ps(ndimn)*tand(phi)+cohes
     
-    ! 3a. ¼ÆËãµ±Ç°·¨ÏòÓ¦Á¦ÏÂµÄÇÐÏòÇ¿¶È TF
-    if (ps(ndimn) < 0.0_irk) then
-        ! ÊÜÑ¹×´Ì¬£ºÇ¿¶ÈÓÉÄ¦²Á½ÇºÍÕ³¾ÛÁ¦¹²Í¬Ìá¹©
-        TF = -ps(ndimn) * tand(phi) + cohes
+    ! è®¡ç®—åˆ‡å‘åˆšåº¦
+    if (TF <= 0.0) then
+        EVK(1:ndimn-1)=K1*gamaw_local*0.01
     else
-        ! Õ³½áÊÜÀ­×´Ì¬£ºÇ¿¶È½öÓÉÕ³¾ÛÁ¦Ìá¹©
-        TF = cohes
-    endif
-    ! °²È«¼ì²é£¬·ÀÖ¹Ç¿¶ÈÎªÁã
-    if (TF < 1.e-9_irk) TF = 1.e-9_irk
-    
-    ! 3b. ¼ÆËãµ±Ç°ÇÐÏòÓ¦Á¦µÄºÏÁ¦´óÐ¡
-    if (ndimn == 2) then
-        ps_tang_norm = abs(ps(1))
-    else
-        ps_tang_norm = sqrt(ps(1)**2 + ps(2)**2)
-    endif
-
-    ! 3c. ¡¾¹Ø¼üÅÐ¶Ï¡¿ÅÐ¶ÏÊÇÕ³ÖÍ»¹ÊÇ»¬ÒÆ
-    if (ps_tang_norm >= TF * (1.0 - 1.0e-6_irk)) then
-        ! --- »¬ÒÆ (Slip) ×´Ì¬ ---
-        ! ÇÐÏòÁ¦´ïµ½Ç¿¶È¼«ÏÞ£¬½çÃæÕýÔÚ»ò¼´½«»¬¶¯¡£
-        ! ´ËÊ±ÇÐÏò¸Õ¶ÈÓ¦ÎªÁã£¬ÒòÎªÔÙÔö¼ÓÎ»ÒÆ²»»áÔö¼ÓµÖ¿¹Á¦¡£
-        evk(1:ndimn-1) = 0.0_irk
-
-    else
-        ! --- Õ³ÖÍ (Stick) ×´Ì¬ ---
-        ! ÇÐÏòÁ¦Ð¡ÓÚÇ¿¶È¼«ÏÞ£¬½çÃæÕ³ÔÚÒ»Æð¡£
-        ! Ê¹ÓÃµË¿Ï-ÕÅÄ£ÐÍ¼ÆËãÒ»¸ö¸ßµÄÇÐÏò¸Õ¶È¡£
-        r_factor(:) = 1.0_irk - Rf * ps_tang_norm / TF
-        where (r_factor < 0.0_irk) r_factor = 0.0_irk
+        R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
+        R(1:ndimn-1)=max(0.01, min(1.0, R(1:ndimn-1)))
         
-        ! Ê¹ÓÃ¸Ä½øµÄ¹«Ê½£¬ÔÚµÍ·¨ÏòÓ¦Á¦ÏÂ¸üÎÈ¶¨
-        calculated_evk = Kzx * gamaw * (abs(PS(ndimn))/pa)**n * r_factor(1)**2
-        ! Ê¹ÓÃ max º¯ÊýÈ·±£¸Õ¶È²»µÍÓÚÉè¶¨µÄ×îÐ¡Öµ£¬Õâ¶ÔÓÚÐ¡±äÐÎÖÁ¹ØÖØÒª
-        EVK(1) = max(calculated_evk, pa)
-        
-        if(ndimn==3) then
-            calculated_evk = Kzy * gamaw * (abs(PS(ndimn))/pa)**n * r_factor(2)**2
-            EVK(2) = max(calculated_evk, pa)
-        endif
+        EVK(1)=Kzx*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1)**2
+        if(ndimn==3) EVK(2)=Kzy*gamaw_local*(abs(PS(ndimn))/pa)**n*R(2)**2
     endif
-
-    !if (PS(ndimn)>=ft.or.abs(ps(ndimn))<.01)then
-    !    EVK(ndimn)=pa
-    !    EVK(1:ndimn-1)=pa
-    !    GOTO 1
-    !endif
-    !n    =props(matno)%mechanical%solid%Goodman%n
-    !Rf   =props(matno)%mechanical%solid%Goodman%Rf
-    !phi  =props(matno)%mechanical%solid%Goodman%phi
-    !cohes=props(matno)%mechanical%solid%Goodman%cohes
-    !EVK(ndimn)=Kzz
-    !
-    !TF=-ps(ndimn)*tand(phi)+cohes
-    !R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    !EVK(1)=Kzx*gamaw*(abs(PS(ndimn))/pa)**n*R(1)**2
-    !if(ndimn==3)EVK(2)=Kzy*gamaw*(abs(PS(ndimn))/pa)**n*R(2)**2
-1   CONTINUE
     END SUBROUTINE PKPN
 
 
@@ -5985,7 +5928,7 @@
             if(abs(gdelta)> para_a(14))evk(ndimn)=para_a(3)/(1-para_a(4)*abs(gdelta))**2+para_a(8)
         endif
     endif
-
+    
 10  continue
     if(ndimn==3) then
         gdelta=abs(relat_dis_gaus(1))
@@ -6181,7 +6124,7 @@
         endif
     elseif(xlwmodel==3)then !Bilinear sofening , from Petersson
         sigmanc=(((1.+(wx/w0)**3)*exp(-5.64*wx/w0))-(wx/w0)*7.105773e-3)*ft
-    elseif(xlwmodel==4)then !cornelissen ÑÕÌìÓÓÂÛÎÄ£¨¹ÌÌåÁ¦Ñ§Ñ§±¨£©
+    elseif(xlwmodel==4)then !cornelissen ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ§Ñ§ï¿½ï¿½ï¿½ï¿½
         sigmanc=((1+(c1*wx/w0)**3)*exp(-c2*wx/w0)-wx/w0*(1+c1**3)*exp(-c2))*ft
     elseif(xlwmodel==5)then ! Jiaji Du,Albert S. Kobayashi and Neil M. Hawkins, FEM DYNAMIC FRACTURE ANALYSIS OF CONCRETE BEAMS
         ! Journal of Engineering Mechanics, Vol. 115, No. 10, October, 1989
@@ -6210,13 +6153,14 @@
     SUBROUTINE PKPNs(matno,EVK,ps,first,stran,ps0)
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw 20230402
-        r(3),cohes,ft
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
+        r(3),cohes,ft,gamaw_local
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
         Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
+    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw  !ï¿½Þ¸ï¿½gamawï¿½ï¿½ï¿½ï¿½
+    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
     n    =props(matno)%mechanical%solid%Goodman%n
@@ -6228,8 +6172,8 @@
 
     if (first==1)then
         evk(ndimn)=kzz
-        evk(1)=k1*gamaw
-        if (ndimn==3)evk(2)=k1*gamaw
+        evk(1)=k1*gamaw_local
+        if (ndimn==3)evk(2)=k1*gamaw_local
         goto 300
     endif
 
@@ -6248,8 +6192,8 @@
     TF=-ps(ndimn)*tand(phi)+cohes
 
     R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    STIF=K1*gamaw
-    EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
+    STIF=K1*gamaw_local
+    EVK(1:ndimn-1)=K1*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
 300 if(first==1) then
         ps=evk*stran
     else
@@ -6268,13 +6212,14 @@
     SUBROUTINE PKPNs0(matno,EVK,ps,first,stran,ps0)
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
-        r(3),cohes,ft
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
+        r(3),cohes,ft,gamaw_local
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
         Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
+    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw  !ï¿½Þ¸ï¿½gamawï¿½ï¿½ï¿½ï¿½
+    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
     n    =props(matno)%mechanical%solid%Goodman%n
@@ -6286,8 +6231,8 @@
 
     if (first==1)then
         evk(ndimn)=kzz
-        evk(1)=k1*gamaw
-        if (ndimn==3)evk(2)=k1*gamaw
+        evk(1)=k1*gamaw_local
+        if (ndimn==3)evk(2)=k1*gamaw_local
         goto 300
     endif
 
@@ -6304,8 +6249,8 @@
         GOTO 300
     endif
 200 R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    STIF=K1*gamaw
-    EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
+    STIF=K1*gamaw_local
+    EVK(1:ndimn-1)=K1*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
 300 if(first==1) then
         ps=evk*stran
     else
@@ -6396,7 +6341,7 @@
         if(Smax<S)Smax=S  !20220409
         if(Qmax<Q)Qmax=Q  !20220409
         E=K*Pa*(P3/Pa)**N*(1.0-RF*S)**2
-    endif
+        endif
     !  write(chkunit,*)'q=',q,'qf=',qf,'s=',s,'ps=',ps
     !     IF(E.LT.100.*pa) E=100.*pa
     END SUBROUTINE
@@ -6612,16 +6557,16 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     call main_stran_r( stemp, stmin)
-    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !×î´ó¼ôÓ¦±ä(2D) !zhao
-    !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !×î´ó¼ôÓ¦±ä(3D)
-    if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !×î´ó¶¯¼ôÓ¦±ä yuanli
+    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½(2D) !zhao
+    !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½(3D)
+    if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !ï¿½ï¿½ó¶¯¼ï¿½Ó¦ï¿½ï¿½ yuanli
     if(gamamax/=0)strain_s=element(ielem)%field(1)%gamamax_ini(igaus)
     strain_s=strain_s*100 !yuanli
     gamba=0.65*strain_s*(p/pa)**(nd-1)
-    lamda=k1*gamba*lamdaMax/(1+k1*gamba)     !µÈÐ§Õ³µ¯ÐÔÄ£ÐÍ 20190225
+    lamda=k1*gamba*lamdaMax/(1+k1*gamba)     !ï¿½ï¿½Ð§Õ³ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ 20190225
     p=-smean
     if(p<p0)p=p0     !psy  2019.04.26
-    Gmoud=k2/(1+k1*gamba)*Pa*(P/Pa)**Nd     !µÈÐ§Õ³µ¯ÐÔÄ£ÐÍ Ó¦¸ÃÓÃ¹éÒ»»¯¼ôÓ¦±ägamaba ÒÑÐÞÕý
+    Gmoud=k2/(1+k1*gamba)*Pa*(P/Pa)**Nd     !ï¿½ï¿½Ð§Õ³ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ Ó¦ï¿½ï¿½ï¿½Ã¹ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½gamaba ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     e=Gmoud*2*(1.+v)
     END SUBROUTINE
     !20231215YL
@@ -8720,7 +8665,7 @@
     !	XMFC=D(5)*XMGC
     ETAF=(1.0+1.0/D(6))*XMFC
 
-    !goto 222   £¡20220728
+    !goto 222   ï¿½ï¿½20220728
     if(eta>etaf) then  !1111
         !       if(ielem==1) &
         !write(7,*)'ie=',ielem,'eta=',eta,'etaf=',etaf
@@ -9086,7 +9031,7 @@
         model=props(matno)%mechanical%solid%DuncanChang%model
 
         !    CALL invart (matno,nstre,devia,sig,theta,steff,smean,vj2,vj3,sint3)
-        steff=steff/sqrt(3.d0);smean=-smean   !ÒòPZ²ÄÁÏÔÚinvart×Ó³ÌÐòÀïÇóp¡¢qÊ±Óë³£¹æ²»Ì«Ò»Ñù
+        steff=steff/sqrt(3.d0);smean=-smean   !ï¿½ï¿½PZï¿½ï¿½ï¿½ï¿½ï¿½ï¿½invartï¿½Ó³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½pï¿½ï¿½qÊ±ï¿½ë³£ï¿½æ²»Ì«Ò»ï¿½ï¿½
 
         smax=0.0;qmax=0.0;ps=0.
         if(model=='EV'.or.model=='CR') then
@@ -9146,7 +9091,7 @@
     END IF
 
 
-    !ÒÔÏÂÇónzw PHD Thesis,P79, (3.8.27)ÖÐµÄeatmax
+    !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½nzw PHD Thesis,P79, (3.8.27)ï¿½Ðµï¿½eatmax
     tt=1.-d(4)*eta/d(3)/(1.+d(4))
     if(tt.le.0.) then
         tt=0.
@@ -9181,14 +9126,14 @@
 
         FACTV=1.0-ETA/XMGC                  ! nzw PHD Thesis P79, (3.8.28b)
 
-        EQP=VD(1)			!ÀÛ»ýÆ«Ó¦±ä
+        EQP=VD(1)			!ï¿½Û»ï¿½Æ«Ó¦ï¿½ï¿½
         IF(EQP.EQ.0.0) THEN
             FACTS=d(9)*d(10)
         ELSE
             FACTS=d(9)*d(10)*EXP(-d(9)*ABS(EQP))    ! nzw PHD Thesis P79, (3.8.28c)
         END IF
 
-        ETAMAX=VD(3)		!ÀúÊ·ÉÏµÄ×î´óÆ«Ó¦±ä
+        ETAMAX=VD(3)		!ï¿½ï¿½Ê·ï¿½Ïµï¿½ï¿½ï¿½ï¿½Æ«Ó¦ï¿½ï¿½
         tt=1.-d(4)*eta/d(3)/(1.+d(4))
         if(tt.le.0.) then
             tt=0.
@@ -9346,7 +9291,7 @@
         elcod0(:,:),cnd(:),normal(:),rotation(:,:),ax(:),xxxx(:,:),xjaci(:,:),     &
         l(:,:),matrix(:,:)
 
-    !Icaddmass=1:ÖØÁ¦°Ó¶¯Ë®Ñ¹Á¦¸½¼ÓÖÊÁ¿£»Icaddmass=2: ¶É²Û¶¯Ë®Ñ¹Á¦¸½¼ÓÖÊÁ¿+¶¯Ë®Ñ¹Á¦
+    !Icaddmass=1:ï¿½ï¿½ï¿½ï¿½ï¿½Ó¶ï¿½Ë®Ñ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Icaddmass=2: ï¿½É²Û¶ï¿½Ë®Ñ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½Ë®Ñ¹ï¿½ï¿½
     if(Icaddmass/=0)then
         allocate(addmp(ndimn,npoin),icmp(npoin))
         addmp=0.
@@ -9543,7 +9488,7 @@
 
 
     !write(7,*)'addtional mass matrix'   !2017/04/16
-    if(Icaddmass>=1) then  !£¨Ãæ°å°Ó¡¢ÖØÁ¦°Ó¡¢¹°°Ó¹æ·¶Ëã·¨£©!20220330
+    if(Icaddmass>=1) then  !ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½ï¿½ï¿½ï¿½Ó¹æ·¶ï¿½ã·¨ï¿½ï¿½!20220330
         allocate(ax(npoin),norp(ndimn,npoin),xxxx(ndimn,ndimn),l(ndimn,1))
         ax=0. ; norp=0. ;  xxxx=0. ; l=0.
         do iedge=1,ifsnedge !iedge
@@ -9715,7 +9660,7 @@
                             enddo
                         endif
                     else
-                        write(*,*)'***********¼¯³Éassemble_stiff_ifs2006³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                        write(*,*)'***********ï¿½ï¿½ï¿½ï¿½assemble_stiff_ifs2006ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                         stop
                     endif
 
@@ -9765,7 +9710,7 @@
                             endif
                         enddo
                     else
-                        write(*,*)'***********¼¯³Éassemble_stiff_ifs2006³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                        write(*,*)'***********ï¿½ï¿½ï¿½ï¿½assemble_stiff_ifs2006ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                         stop
                     endif
                 enddo
@@ -9796,7 +9741,7 @@
                         endif
                     enddo
                 else
-                    write(*,*)'***********¼¯³Éassemble_stiff_ifs2006³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                    write(*,*)'***********ï¿½ï¿½ï¿½ï¿½assemble_stiff_ifs2006ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                     stop
                 endif
 
@@ -10302,8 +10247,8 @@
             speed(ndimn)=sqrt(alfa/density)
             speed(1:(ndimn-1))=sqrt(g/density)
             if(tedge==1)write(7,*)'speed=',speed
-            spring(ndimn)=e !alfa*.5  !.25 ÊÇÈÎÑ¡µÄ²ÎÊý zhao 05/08/18
-            spring(1:(ndimn-1))=G !*.5  !!.25 ÊÇÈÎÑ¡µÄ²ÎÊý zhao 05/08/18
+            spring(ndimn)=e !alfa*.5  !.25 ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½Ä²ï¿½ï¿½ï¿½ zhao 05/08/18
+            spring(1:(ndimn-1))=G !*.5  !!.25 ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½Ä²ï¿½ï¿½ï¿½ zhao 05/08/18
 
             lnode=tabss(tedge)%lnods
 
@@ -10348,7 +10293,7 @@
                 do inode=1,nnode
                     rrb((inode-1)*ndimn+1:inode*ndimn,(inode-1)*ndimn+1:inode*ndimn)=rr
                 end do
-                tabss(tedge)%rr=rr  !ÊÂÊµÉÏÊÇÓÃ×îºóÒ»¸ö¸ßË¹µãµÄÊýÖµ
+                tabss(tedge)%rr=rr  !ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ë¹ï¿½ï¿½ï¿½ï¿½ï¿½Öµ
 
                 estif_mid1=speedb.x.shapeb
                 estif_mid2=transpose(shapeb).x.estif_mid1
@@ -10518,7 +10463,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********¼¯³ÉÁ÷¹ÌñîºÏ¾ØÕóÊ±³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                            write(*,*)'***********ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¾ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                             stop
                         endif
                         !                   if (ieq/=0.and.ieq<=jeq) then
@@ -10676,7 +10621,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********¼¯³ÉÁ÷ÌåÎüÊÕ¾ØÕóÊ±³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                            write(*,*)'***********ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¾ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                             stop
                         endif
 
@@ -10786,7 +10731,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********¼¯³É¹ÌÌåÎüÊÕ¾ØÕóÊ±³ö´í£¬Ã»ÓÐÖÖÇó½â·½Ê½************'
+                            write(*,*)'***********ï¿½ï¿½ï¿½É¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¾ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·½Ê½************'
                             stop
                         endif
                         !                   if (ieq/=0.and.ieq<=jeq) then
@@ -11000,8 +10945,8 @@
     stran(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     call main_stran_r( stemp, stmin)
 
-    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !×î´ó¼ôÓ¦±ä(2D) !zhao
-    if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !×î´ó¼ôÓ¦±ä(3D)
+    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½(2D) !zhao
+    if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½(3D)
 
     sigmad1=props(matno)%mechanical%solid%SandPZ%sigmad(1)
     sigmad2=props(matno)%mechanical%solid%SandPZ%sigmad(2)
@@ -11079,7 +11024,7 @@
     np=props(matno)%mechanical%solid%STEEL_EP%np
     sig=>props(matno)%mechanical%solid%STEEL_EP%sig
     es=>props(matno)%mechanical%solid%STEEL_EP%es
-    if(sigeffect>sig(1).and.sigeffect<sig0)then  !¶ÔÓ¦ÓÚÇü·þºóµÄÐ¶ÔØ×´Ì¬
+    if(sigeffect>sig(1).and.sigeffect<sig0)then  !ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½×´Ì¬
         ep=es(1)
         goto 10
     endif
@@ -11145,9 +11090,9 @@
 
                 force_e=element(ielem)%field(1)%tload
                 force_i=element(ielem)%field(1)%gpvar(1:6*(ndimn-1),1)  !20200116
-                force_i=force_i-force_e !²»ÐèÒªÓÃtrot.x.force_e£¬%tloadºÍ%gpvar¶¼ÊÇÕûÌå×ø±êÏµÄÚµÄ
+                force_i=force_i-force_e !ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½trot.x.force_eï¿½ï¿½%tloadï¿½ï¿½%gpvarï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½Úµï¿½
                 force_e=force_i
-                force_i=trot.x.force_e  !×ª³É¾Ö²¿×ø±êÏµÏÂµÄÄÚÁ¦
+                force_i=trot.x.force_e  !×ªï¿½É¾Ö²ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½
             endif
             sig(1:ndimn)=force_i(1:ndimn)/aera
             sigeffect=0.
@@ -11224,9 +11169,9 @@
 
                 force_e=element(ielem)%field(1)%tload
                 force_i=element(ielem)%field(1)%gpvar(1:6*(ndimn-1),1)  !20200116
-                force_i=force_i-force_e !²»ÐèÒªÓÃtrot.x.force_e£¬%tloadºÍ%gpvar¶¼ÊÇÕûÌå×ø±êÏµÄÚµÄ
+                force_i=force_i-force_e !ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½trot.x.force_eï¿½ï¿½%tloadï¿½ï¿½%gpvarï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½Úµï¿½
                 force_e=force_i
-                force_i=trot.x.force_e  !×ª³É¾Ö²¿×ø±êÏµÏÂµÄÄÚÁ¦
+                force_i=trot.x.force_e  !×ªï¿½É¾Ö²ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½
             endif
 
             !element(ielem)%field(1)%kdiag(1:ndimn)=0.

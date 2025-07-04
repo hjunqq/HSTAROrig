@@ -1,6 +1,37 @@
 input
 0 0 0 0 0 0  ! restart,relis,sysrelis,ADINA,Uopt_R,gamax
 input
+G:\BB\lyr\fix\1
+1
+
+G:\BB\lyr\safety\1
+1
+
+
+
+
+G:\BB\lyr\solid\fix\1
+1
+
+G:\BB\lyr\freq\1
+1
+
+
+G:\BB\lyr\solid\safety\1
+1
+
+
+
+
+G:\BB\lyr\solid\safety\1
+1
+
+
+
+
+
+
+
 E:\Desktop\Example\Example_Hstar\Dam_AddMass\1
 1
 

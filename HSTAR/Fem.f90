@@ -53,7 +53,7 @@
 
 
     !** SOLUTION VECTOR. CONTAINS VALUES X FOR F(X)
-    !double precision,allocatable::Xvalue(:)  ÔÚglobalÖĞ¶¨Òå
+    !double precision,allocatable::Xvalue(:)  åœ¨globalä¸­å®šä¹‰
     !** PRECISIONS FOR STOP-CRITERIA (SEE MANUAL FOR MORE DETAILS)
     double precision    EPS (6),JAC_EPS
     double precision,allocatable:: FVEC (:),FJAC (:, :) ,Fvec1(:),Fvec2(:), &
@@ -374,7 +374,7 @@
 
         if(submodel==-1)then
             print *,'input total groups or elements for submodel analysis: ngroup_sub,nel_sub'
-            !ÊäÈë×ÓÄ£ĞÍ·ÖÎöµÄ×éÊı»òµ¥ÔªÊı£ºngroup_sub,nel_sub
+            !è¾“å…¥æ€»æ¨¡å‹åˆ†æå­æ¨¡å‹ç»„æˆ–å…ƒç´ æ•°ï¼šngroup_sub,nel_sub
             read *, ngroup_sub,nel_sub
             if(ngroup_sub==0.and.nel_sub==0) goto 11
 
@@ -662,7 +662,7 @@
 
 
     subroutine parameter_back_analysis(N,M) !20190810
-    !NËæ»ú±äÁ¿Êı,M²âµãÊı
+    !Nä¸ºå‚æ•°ä¸ªæ•°,Mä¸ºè§‚æµ‹æ•°
     implicit none
 
     INTEGER  i,j, N, M,ivalue,inode,idofn,jnode,jtotv,iobstimes,  &
@@ -1150,7 +1150,7 @@
     endif
     !write(7,*)'dkstar=',dkstar,'dkpre=',dkpre,'rk=',rk,'eta1=',eta1,'eta2=',eta2
 
-    !!!Ğ£ÕıĞÅÀµÇø¼ä
+    !!!æ ¡æ ¸å‚æ•°è°ƒæ•´
     if(rk<eta1)then
         deltak=.5*(0+gama1*deltak)
     elseif(rk>=eta1.and.rk<=eta2)then
@@ -1328,7 +1328,7 @@
 
     end subroutine solve_dx
 
-    subroutine update_bk(N,yk,sk,bk0,bk)  !BFGS¹«Ê½(À´Ô´ÓÚ×îÓÅ»¯·½·¨.ppt)
+    subroutine update_bk(N,yk,sk,bk0,bk)  !BFGSå…¬å¼(æ¥æºï¼šæœ€ä¼˜åŒ–æ–¹æ³•.ppt)
     integer(ink) i,j,N
     real(irk) yk(:),sk(:),bk0(:,:),bk(:,:),BS(N),BS1(N),x1
 
@@ -1378,7 +1378,7 @@
 
             do igdis_bk=1,ngdis_bk
                 write(7,*)'iblks=',iblks,'iincs=',iincs,'igdis_bk=',igdis_bk
-                write(7,*)'      istep                 ¸ÕÌåÎ»ÒÆ'
+                write(7,*)'      istep                 æœ€å¤§ä½ç§»'
 
                 backrdisp=0
                 backrdisp(rigid_bk(igdis_bk)%node_bk)=1
@@ -1424,7 +1424,7 @@
 
 
                     write(7,20)istep,rgdis(:,1)
-                    write(7,*)'    ¹Û²âµãºÅ    ¸ÕÌåÎ»ÒÆ      µ¯ĞÔÎ»ÒÆ'
+                    write(7,*)'    æ­¥æ•°        è®¡ç®—ä½ç§»      æµ‹é‡ä½ç§»'
                     nmbpoint=0
                     do i=1,mvalue
                         if(iblks/=Value_observ(i)%iblks)cycle
@@ -1582,7 +1582,7 @@
 
 
 
-    !write(observ_unit,*)'information for given points£ºNpoints_pb'
+    !write(observ_unit,*)'information for given pointsï¼ŒNpoints_pb'
     !write(observ_unit,10) nback_point
     !write(observ_unit,*)'1:Npoints_pb/i0,ndofn,imdofn,nintf'
     ! k0=0 ; nintf=1
@@ -1707,7 +1707,7 @@
 
         !20231215YL
         if(restart==0) then !20231008
-            if(gamamax/=0) then !yuanli20230926 µÈĞ§ÏßĞÔ»¯ÍÁÌå¶¯Á¦±¾¹¹
+            if(gamamax/=0) then !yuanli20230926 æœ‰æ•ˆåº”åŠ›åˆ†æéçº¿æ€§è¿­ä»£æ ¡æ ¸
                 open(gamamaxunit,file=probn(1:len1)//'.gamax')
                 call readgamamax
             endif
@@ -1980,7 +1980,7 @@
     end do    !iblks
 
     !20231215YL
-    !&  µÈĞ§ÏßĞÔ¶¯¼ôÓ¦Á¦Êä³ö yuanli20230926 !20231008
+    !&  æœ‰æ•ˆåº”åŠ›åˆ†æéçº¿æ€§åº”åŠ›çŠ¶æ€ yuanli20230926 !20231008
     if (restart==0.and.gamamax/=0) then
         call writegamamax
     endif
@@ -2015,7 +2015,7 @@
     enddo
     read(back_ctl_unit,*)text
     read(back_ctl_unit,*)eps,iter1,iter2,rs,jac_eps
-    read(back_ctl_unit,*)text  !´ı·´Ñİ²ÎÊı³õÊ¼Öµ
+    read(back_ctl_unit,*)text  !è¯»å–å‚æ•°åˆå§‹å€¼
     read(back_ctl_unit,*)Xvalue
 
     write(7,*)'xvalue=',xvalue
@@ -2052,7 +2052,7 @@
         trustp(1)%gama1,trustp(1)%gama2,trustp(1)%eps,  &
         trustp(1)%eta01,trustp(1)%eta02,trustp(1)%delta0, &
         trustp(1)%deltab,trustp(1)%mtter
-    read(back_ctl_unit,*)text  !´ı·´Ñİ²ÎÊı³õÊ¼Öµ
+    read(back_ctl_unit,*)text  !è¯»å–å‚æ•°åˆå§‹å€¼
     read(back_ctl_unit,*)Xvalue
 
 
@@ -2070,7 +2070,7 @@
     open(back_ctl_unit,file=probn(1:len1)//'.btl')
     open(observ_unit,file=probn(1:len1)//'.obsc')
 
-    read(back_ctl_unit,*)text  !ÊäÈëÓëBparameteÎª¸ºÊ±µÄÏà¹ØÄÚÈİ£¨¸ø¶¨Ëæ»ú±äÁ¿²ÎÊı£¬½øĞĞÕı·ÖÎö¼ÆËã£¬Êä³öÏà¹Ø½á¹ûÓÃÓÚ·´Ñİ·ÖÎö·½·¨ÑéÖ¤£©
+    read(back_ctl_unit,*)text  !è¯»å–å½“Bparameteä¸ä¸º0æ—¶ï¼Œè¿›è¡Œååˆ†æï¼Œè¿™é‡Œæ˜¯ä¸ºäº†å®ç°éšæœºå˜é‡è¾“å…¥ã€éšæœºå€¼åˆ†æçš„åŠŸèƒ½
 
     read(back_ctl_unit,*)Npara,nback_point,nstoch
     print *,'Npara,nback_point,nstoch=',Npara,nback_point,nstoch
@@ -2108,8 +2108,8 @@
     enddo
 
     read(back_ctl_unit,*)text
-    read(back_ctl_unit,*)mean_value  !Ëæ»ú±äÁ¿¾ùÖµ
-    read(back_ctl_unit,*)sigma_value !Ëæ»ú±äÁ¿ÀëÉ¢ÏµÊı
+    read(back_ctl_unit,*)mean_value  !è¯»å–å‚æ•°å‡å€¼
+    read(back_ctl_unit,*)sigma_value !è¯»å–å‚æ•°æ ‡å‡†å·®ç³»æ•°
     do i=1,Npara
         sigma_value(i)=sigma_value(i)*mean_value(i)
     end do
@@ -2121,7 +2121,7 @@
         end do
     endif !20210805
 
-    write(7,*)'ÓÉËæ»úÊıÉú³ÉµÄÏà»¥¶ÀÁ¢Ëæ»ú±äÁ¿ĞòÁĞ'
+    write(7,*)'è’™ç‰¹å¡æ´›åˆ†æéšæœºæŠ½æ ·å‚æ•°ç”Ÿæˆç»“æœ'
     do i=1,nstoch
         write(7,10)i,para_stoch(1:Npara,i)
     end do
@@ -2159,13 +2159,13 @@
     endif !20210805
 
 
-    write(7,*)'Ä£ÄâÊı¾İ¾ùÖµÓëÓë¸ø¶¨Öµ±È½Ï'
-    write(7,11)mean_value  !Ëæ»ú±äÁ¿¾ùÖµ
+    write(7,*)'æ¨¡å‹å‚æ•°å‡å€¼å¯¹æ¯”ï¼šè¾“å…¥å‡å€¼vsè®¡ç®—å‡å€¼'
+    write(7,11)mean_value  !è¾“å…¥å‚æ•°å‡å€¼
     write(7,11)xvalue
-    write(7,*)'Ä£ÄâÊı¾İ·½²îÓëÓë¸ø¶¨Öµ±È½Ï'
-    write(7,11)sigma_value  !Ëæ»ú±äÁ¿¾ùÖµ
+    write(7,*)'æ¨¡å‹å‚æ•°æ–¹å·®å¯¹æ¯”ï¼šè¾“å…¥æ–¹å·®vsè®¡ç®—æ–¹å·®'
+    write(7,11)sigma_value  !è¾“å…¥å‚æ•°æ–¹å·®
     write(7,11)sigma_t
-    write(7,*)'Ïà¹ØÏµÊı'
+    write(7,*)'ç›¸å…³ç³»æ•°'
     do i=1,npara
         write(7,11)ruo(i,:)
     end do
@@ -2204,10 +2204,9 @@
     DOUBLE PRECISION    value
 
     real(irk),allocatable::obs_value(:)
-    ! ttime_pb,dtime_pbµÄµ¥Î»ÎªÌì£¬ËùÒÔÊµ¼Ê¹¤³Ì·´·ÖÎöÊ±½«ÕâÁ½¸ö±äÁ¿°´ÕûÊı´¦Àí¡£
+    ! ttime_pb,dtime_pbçš„å•ä½ä¸ºå¤©ï¼Œè¿›è¡Œå®é™…è§‚æµ‹æ—¶é—´åˆ†æçš„æ—¶é—´å¤„ç†åŠŸèƒ½
 
     !open(observ_unit,file=probn(1:len1)//'.obs')
-    !read(back_ctl_unit,*)text  !ÊäÈëÓëBparameter/=0Ê±µÄÏà¹ØÄÚÈİ£¨²»ÎªÁãÊ±£¬Ö´ĞĞ²ÎÊıÓÅ»¯·´Ñİ£©
     tbstep=0
     ttime_pb=0.
     mobstimes=0
@@ -2266,7 +2265,7 @@
         !begin_day_obs=para_points(j)%begin_day_obs
 
         do j0=1,observ_pb
-            read(observ_unit,*)ix,i1,j1,begin_day_obs    !¶ÔÓ¦²âµãµãºÅ£¬·½ÏòºÅ
+            read(observ_unit,*)ix,i1,j1,begin_day_obs    !å¯¹åº”è§‚æµ‹ç‚¹ç¼–å·
             !print *,'j=','j0=',j0,'i1=',i1,'j1=',j1
             read(observ_unit,*)obs_value
 
@@ -2686,7 +2685,7 @@
 
 
                             end do  !igapb
-                            call forAdirect_back_analysis !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect_back_analysis !fzx !æ­£å‘åˆ†æ
 
 
                             do igapb=1,ngapb
@@ -2702,7 +2701,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect_back_analysis !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect_back_analysis !fzx 
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -3289,7 +3288,7 @@
 
 
                             end do  !igapb
-                            !call forAdirect_back_analysis !fzx !ĞÎ³ÉA¾ØÕó
+                            !call forAdirect_back_analysis !fzx !
 
 
                             do igapb=1,ngapb
@@ -3305,7 +3304,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect_back_analysis !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect_back_analysis !fzx !
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -3698,7 +3697,7 @@
 
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
 
-                    call stran0_creep4   !20180630  (²©¸ñË¹Ä£ĞÍÈä±ä³õÓ¦±äÔöÁ¿£¬ÒòÎªÓ¦Á¦ÔöÁ¿ÔÚ±ä»¯£¬ËùÒÔÃ¿Ò»µü´ú²½Çó½â£¬Ö»ÊÊÓÃÓÚNSOLN=5£©
+                    call stran0_creep4   !20180630  
                     if(iiter==1)   call effect_stres_modul_for_steel_beam !20211125
                     if(iiter==1)   call stiffness_for_bolt_spring  !20211125
 
@@ -3894,7 +3893,7 @@
                                     deallocate(cmatrixl)
                                 end do
                             end do  !igapb
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx 
 
                             do igapb=1,ngapb
                                 !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -3909,7 +3908,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx 
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -4051,7 +4050,7 @@
                     !write(7,*)'varupdate'
                     call varupdate
                     !write(7,*)'af varupdate'
-                    call relative_dis_watertight !20231007 Ö¹Ë® !20240305
+                    call relative_dis_watertight !20231007 æ­¢æ°´ !20240305
                     call eload_initialize
 
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
@@ -4357,7 +4356,6 @@
             !!
             operation='SOLVE'
             call solve
-            !! ÕÒ³ö¹Û²âµã´¦µÄdu/dx
 
             do ivalue=1,mvalue
                 if(Value_observ(ivalue)%ic==0)cycle
@@ -4988,7 +4986,7 @@
                         else
                             if(iiter==1.and.allocated(torel))tofor=tofor+torel
                         endif
-                        write(*,*)'   ' !ºÜÆæ¹Ö£¬ÓĞÕâÒ»ĞĞµÄ»°£¬¾Í²»³ö´í£¬Ã»ÓĞµÄ»°£¬SOLVEÖĞallocate(resultm(ntotv))ÕâÒ»ĞĞ³ö´í£¡
+                        write(*,*)'   ' !åœ¨è¿™é‡Œï¼Œå¦‚æœæœ‰åŸºç¡€å›è°ƒç³»ç»Ÿå’Œå‚æ•°å›è°ƒç³»ç»Ÿä¸¤ç§å›è°ƒåŸºç¡€SOLVEï¼šallocate(resultm(ntotv))åªè°ƒç”¨ä¸€æ¬¡
 
 
                         if(ngaps/=0.and.iblks>=iblks_bt.and.iiter==1.and.mdiv==1)call ctfor_to_tofor(tofor0,tofor)  !!ctt2005
@@ -5100,7 +5098,7 @@
                                         deallocate(cmatrixl)
                                     end do
                                 end do  !igapb
-                                call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                                call forAdirect !fzx !
 
                                 do igapb=1,ngapb
                                     !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -5115,7 +5113,7 @@
                                 deallocate(rot)
 
                             elseif(restart_ctt==1)then !restart_ctt
-                                call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                                call forAdirect !fzx !
                                 rewind(recttunit)
                                 do igapb=1,ngapb
                                     npgblock=gapb(igapb)%npgblock
@@ -5516,7 +5514,7 @@
             zmult(i)=zmult(i)*real(j)
         end do
     end do
-    !!!!for ´®²¢ÁªÏµÍ³
+    !!!!for å¯é æ€§ç³»ç»Ÿ
     relat_ave=0.
     do i=1,ntmod
         do j=1,ntmod
@@ -5535,19 +5533,19 @@
 
     call aft_gauss(beta_ave,relat_ave,aft,ntmod,ymult,zmult)
     !call aft_gauss(4.23_irk,0.57_irk,aft,10,ymult,zmult)
-    print*,'´®ÁªÏµÍ³Ê§Ğ§¸ÅÂÊ=',aft
-    write(7,*)'´®ÁªÏµÍ³Ê§Ğ§¸ÅÂÊ=',aft
+    print*,'å¯é æ€§ç³»ç»Ÿå¤±æ•ˆæ¦‚ç‡=',aft
+    write(7,*)'å¯é æ€§ç³»ç»Ÿå¤±æ•ˆæ¦‚ç‡=',aft
 
     call af_beta(1-aft,betax,ymult,zmult)
-    print*,'´®ÁªÏµÍ³¿É¿¿Ö¸±ê=',betax
-    write(7,*)'´®ÁªÏµÍ³¿É¿¿Ö¸±ê=',betax
+    print*,'å¯é æ€§ç³»ç»Ÿå®‰å…¨æŒ‡æ ‡=',betax
+    write(7,*)'å¯é æ€§ç³»ç»Ÿå®‰å…¨æŒ‡æ ‡=',betax
 
     betax=beta_ave*sqrt(ntmod/(1+relat_ave*(ntmod-1)))
     !betax=4.23*sqrt(10/(1+0.57*(10-1)))
-    print*,'²¢ÁªÏµÍ³¿É¿¿Ö¸±ê=',betax
-    write(7,*)'²¢ÁªÏµÍ³¿É¿¿Ö¸±ê=',betax
+    print*,'å¯é æ€§ç³»ç»Ÿå®‰å…¨æŒ‡æ ‡=',betax
+    write(7,*)'å¯é æ€§ç³»ç»Ÿå®‰å…¨æŒ‡æ ‡=',betax
     !stop
-    !!!!end for ´®²¢ÁªÏµÍ³
+    !!!!end for å¯é æ€§ç³»ç»Ÿ
 
     allocate(rep(ntmod))
     rep=0
@@ -6106,7 +6104,7 @@
                                     gapb(igapb)%cmatrix=0.
                                 end do
 
-                                call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                                call forAdirect !fzx 
                                 do igapb=1,ngapb
                                     do itotvbt=1,gapb(igapb)%ntotv_bt
                                         do jtotvbt=1,gapb(igapb)%ntotv_bt
@@ -6116,7 +6114,7 @@
                                 enddo  !igapb
 
                             elseif(restart_ctt==1)then !restart_ctt
-                                call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                                call forAdirect !fzx 
                                 rewind(recttunit)
                                 do igapb=1,ngapb
                                     npgblock=gapb(igapb)%npgblock
@@ -6333,7 +6331,7 @@
                                 gapb(igapb)%cmatrix=0.
                             end do
 
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                             do igapb=1,ngapb
                                 do itotvbt=1,gapb(igapb)%ntotv_bt
                                     do jtotvbt=1,gapb(igapb)%ntotv_bt
@@ -6343,7 +6341,7 @@
                             enddo  !igapb
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -6544,12 +6542,12 @@
 
             do idimn=1,gapb(igapb)%nrdof
                 do jdimn=1,ndimn
-                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !´æÃ¿¸öµãµÄÎ»ÒÆ£¬Îª¼ÆËãA(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !é”Ÿæ–¤æ‹·æ¯é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·ç–²é”Ÿè½¿îæ‹·é”Ÿæ–¤æ‹·é”Ÿç´¸(T)F
                 enddo
             end do
             if(block_stab==1)then
                 do jdimn=ndimn+1,3*(ndimn-1)
-                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !´æÃ¿¸öµãµÄÎ»ÒÆ£¬Îª¼ÆËãA(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !é”Ÿæ–¤æ‹·æ¯é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·ç–²é”Ÿè½¿îæ‹·é”Ÿæ–¤æ‹·é”Ÿç´¸(T)F
                 enddo
             endif
         enddo
@@ -6620,7 +6618,7 @@
 
 
         do kpoin=1,npgblock
-            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !Ç°ËÄ¸öµã»¹ÊÇºóËÄ¸öµã£¬Ò²¾ÍÊÇµÚÒ»µã»¹ÊÇµÚ¶şµã
+            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !å‰é”Ÿä¾¥é©æ‹·é”Ÿå§è¿˜é”Ÿè§’çŒ´æ‹·é”Ÿä¾¥é©æ‹·é”Ÿå§ï¼Œä¹Ÿé”Ÿæ–¤æ‹·é”Ÿè§’ç¢‰æ‹·ä¸€é”Ÿå§è¿˜é”Ÿè§’ç¬¬è®¹æ‹·é”Ÿæ–¤æ‹·
             if(onetwo==1)coef=1.
             if(onetwo==2)coef=-1.
             igaps=gapb(igapb)%nodegblock_igaps(kpoin)
@@ -6716,7 +6714,7 @@
     end subroutine forAdirect_back_analysis   !20150925
 
 
-    subroutine forAdirect !fzx !ĞÎ³ÉA¾ØÕó  2010/7/13
+    subroutine forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·  2010/7/13
 
     integer(ink) igapb,npgblock,onetwo,ipoin,jpoin,ipair,idimn,itotvbt,itotv,ielem, &
         kpoin,lpoin,jdimn,jtotv,jtotvbt,nevab,ieqx,ievab,igaps,nnode,ii,matno,index,order_int,ngaus, &
@@ -6846,12 +6844,12 @@
 
             do idimn=1,gapb(igapb)%nrdof
                 do jdimn=1,ndimn
-                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !´æÃ¿¸öµãµÄÎ»ÒÆ£¬Îª¼ÆËãA(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !é”Ÿæ–¤æ‹·æ¯é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·ç–²é”Ÿè½¿îæ‹·é”Ÿæ–¤æ‹·é”Ÿç´¸(T)F
                 enddo
             end do
             if(block_stab==1)then
                 do jdimn=ndimn+1,3*(ndimn-1)
-                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !´æÃ¿¸öµãµÄÎ»ÒÆ£¬Îª¼ÆËãA(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !é”Ÿæ–¤æ‹·æ¯é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·ç–²é”Ÿè½¿îæ‹·é”Ÿæ–¤æ‹·é”Ÿç´¸(T)F
                 enddo
             endif
             !		  write(7,*)jpoin,ipoin,gapb(igapb)%npdisp(:,jpoin,:)
@@ -6872,7 +6870,7 @@
         if (restart_ctt/=0) cycle
 
         do kpoin=1,npgblock
-            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !Ç°ËÄ¸öµã»¹ÊÇºóËÄ¸öµã£¬Ò²¾ÍÊÇµÚÒ»µã»¹ÊÇµÚ¶şµã
+            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !å‰é”Ÿä¾¥é©æ‹·é”Ÿå§è¿˜é”Ÿè§’çŒ´æ‹·é”Ÿä¾¥é©æ‹·é”Ÿå§ï¼Œä¹Ÿé”Ÿæ–¤æ‹·é”Ÿè§’ç¢‰æ‹·ä¸€é”Ÿå§è¿˜é”Ÿè§’ç¬¬è®¹æ‹·é”Ÿæ–¤æ‹·
             if(onetwo==1)coef=1.
             if(onetwo==2)coef=-1.
             igaps=gapb(igapb)%nodegblock_igaps(kpoin)
@@ -7004,7 +7002,7 @@
         read(back_ctl_unit,*)npoin_bk
         rigid_bk(igdis_bk)%npoin_bk=npoin_bk
         allocate(rigid_bk(igdis_bk)%node_bk(npoin_bk))
-        read(back_ctl_unit,*)rigid_bk(igdis_bk)%node_bk  !¶ÔÓ¦µÄÊÇpara_points(1:npoints_pb)µÄĞòºÅ
+        read(back_ctl_unit,*)rigid_bk(igdis_bk)%node_bk  !é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·para_points(1:npoints_pb)é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿ?
         ngroup_bk=sum(appear_gdis_bk)
         print *,'ngroup_bk=',ngroup_bk
         rigid_bk(igdis_bk)%ngroup_bk=ngroup_bk
@@ -7094,7 +7092,7 @@
 
             do idimn=1,3*(ndimn-1)
                 do jdimn=1,ndimn
-                    rigid_bk(igdis_bk)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !´æÃ¿¸öµãµÄÎ»ÒÆ£¬Îª¼ÆËãA(T)F
+                    rigid_bk(igdis_bk)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !é”Ÿæ–¤æ‹·æ¯é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·ç–²é”Ÿè½¿îæ‹·é”Ÿæ–¤æ‹·é”Ÿç´¸(T)F
                 enddo
             end do
             !		  write(7,*)jpoin,ipoin,gapb(igapb)%npdisp(:,jpoin,:)
@@ -7710,7 +7708,7 @@
 
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
 
-                    call stran0_creep4   !20180630  (²©¸ñË¹Ä£ĞÍÈä±ä³õÓ¦±äÔöÁ¿£¬ÒòÎªÓ¦Á¦ÔöÁ¿ÔÚ±ä»¯£¬ËùÒÔÃ¿Ò»µü´ú²½Çó½â£¬Ö»ÊÊÓÃÓÚNSOLN=5£©
+                    call stran0_creep4   !20180630  (é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ–¯æ¨¡é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä¸ºåº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸèŠ‚å˜åŒ–é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ¯ä¸€é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·çŒ“îƒ±ä¼™æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿçµ…SOLN=5é”Ÿæ–¤æ‹·
                     if(iiter==1)   call effect_stres_modul_for_steel_beam !20211125
                     if(iiter==1)   call stiffness_for_bolt_spring  !20211125
 
@@ -7793,7 +7791,7 @@
                         operation='FACTORIZE'
                         call solve
 
-                        !20230216 ĞÎ³É·´Ñİ±ß½çÎÂ¶ÈĞèÒªµÄC¾ØÕó
+                        !20230216 é”Ÿè½¿æˆå‡¤æ‹·é”Ÿæ·è¾¹æ–¤æ‹·é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·è¦é”Ÿæ–¤æ‹·Cé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                         if(nbackdT==2.and.istep==1.and.iiter==1) then
                             if(allocated(cmatrix_dtv))deallocate(cmatrix_dtv)
                             if(allocated(inv_cmatrix_dtv2))deallocate(inv_cmatrix_dtv2)
@@ -7894,7 +7892,7 @@
                                     deallocate(cmatrixl)
                                 end do
                             end do  !igapb
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
 
                             do igapb=1,ngapb
                                 !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -7909,7 +7907,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                            call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -8037,7 +8035,7 @@
 
                     call varupdate
 
-                    !20230216 ·´Ñİ±ß½çÎÂ¶È
+                    !20230216 é”Ÿæ–¤æ‹·é”Ÿæ·è¾¹æ–¤æ‹·é”Ÿé“°è®¹æ‹·
                     if(nbackdT==2.and.iiter==1) then
                         allocate(observstar(Npoints_pbx),dtv(nfixsets),dtvi(nfixsets))
                         observstar=0.
@@ -8083,7 +8081,7 @@
 
 
 
-                    call relative_dis_watertight !20231007 Ö¹Ë® !20240305
+                    call relative_dis_watertight !20231007 æ­¢æ°´ !20240305
                     call eload_initialize
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
                     call residu_f
@@ -8136,7 +8134,7 @@
                 call outputres !for output
             endif
 
-            if(outinp<0)then  !ÎÈ¶¨ÉøÁ÷³¡·ÖÎöÊ±ÏòoipÎÄ¼şÊä³ö½áµãÑ¹Á¦ 20220623
+            if(outinp<0)then  !é”Ÿé¥ºè®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·oipé”Ÿä¾¥ç¡·æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹· 20220623
                 !write(outinpunit,'(a)')'ipoin    pore_pressure'
                 !idofn=lmdofn(8)
                 !do ipoin=1,npoin
@@ -8221,7 +8219,7 @@
             endif  !20200812
             if((bparameter>=1.and.bparameter<=2).and.balgor>=1) call dudx
 
-            if(upliftin<0)then  !¿¼ÂÇÉøÁ÷³¡Ó°Ïì·ÖÎöÊ±ÏòupfÎÄ¼şÊä³ö½áµãÑ¹Á¦ 20220623
+            if(upliftin<0)then  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å½±é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿçµ¬pfé”Ÿä¾¥ç¡·æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹· 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -8697,13 +8695,13 @@
             allocate(inpru(ntotv),inpzi(ntotv))     !sanshe  hxl !hxl2006 MIF
             inpru=0.0 ; inpzi=0.0
             if(type_abc=='MIF')call modf_inpwav     !hxl2006 MIF
-            !modf_inpwav£ºµÃµ½ÈëÉä²¨³¡inpru¼°×ÔÓÉ³¡inpzi
+            !modf_inpwavé”Ÿæ–¤æ‹·é”ŸçŸ«ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢é”Ÿæ–¤æ‹·inprué”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·inpzi
 
             deltafi=0.0
             call modf_var_prescribed
             if(submodel==1)call value_submodel_boundary  !20210321
-            !modf_var_prescribed£ºÔÚÕâ¸ö×Ó³ÌĞòÀïÊµÏÖ²åÖµ£¬ÓÉÇ°¼¸²½ÈË¹¤±ß½çÇøµãµÄÎ»ÒÆÖµµÃµ½µ±Ç°²½ÈË¹¤±ß½çµãµÄÖµ£¬
-            !ÒÔ×÷ÎªÔ¼ÊøÖµ£¬´æÔÚfixedÖĞ£¬»òÕßËµ¸üĞÂfixed
+            !modf_var_prescribedé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ˜ é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç»ç¢‰æ‹·æ¤é”Ÿè¡—ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿè§’å¸®æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ–¯é”Ÿæ–¤æ‹·å‘“é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä½é”Ÿæ–¤æ‹·å€¼é”ŸçŸ«ç¢‰æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿå‰¿ç™¸æ‹·é”Ÿç«­æ–¤æ‹·é”Ÿæ–¤æ‹·å€¼é”Ÿæ–¤æ‹·
+            !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä¸ºçº¦é”Ÿæ–¤æ‹·å€¼é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·fixedé”Ÿå«ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è¯´é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·fixed
             !write(7,*)'result_zero(1:10)1=',result_zero(1:10)
 
             call heat_internal1
@@ -8836,7 +8834,7 @@
 
                     operation='FACTORIZE'
                     call solve
-                    !20230216 ĞÎ³É·´Ñİ±ß½çÎÂ¶ÈĞèÒªµÄC¾ØÕó
+                    !20230216 é”Ÿè½¿æˆå‡¤æ‹·é”Ÿæ·è¾¹æ–¤æ‹·é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·è¦é”Ÿæ–¤æ‹·Cé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                     if(nbackdT==2.and.istep==1) then
                         if(allocated(cmatrix_dtv))deallocate(cmatrix_dtv)
                         if(allocated(inv_cmatrix_dtv2))deallocate(inv_cmatrix_dtv2)
@@ -8852,7 +8850,7 @@
 2               continue
                 if (ngaps/=0.and.(iiter==1.and.istep==inc_step).and.iblks==iblks_bt)then   !!ctt2005
                     if (restart_ctt==0)then !restart_ctt
-                        call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                        call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                         kdimn=ndimn
                         if(block_stab==1)kdimn=3*(ndimn-1) !2015/11/17
                         allocate(rot(kdimn,kdimn))
@@ -8890,9 +8888,9 @@
                                     call solve
 
                                     do kpoin=1,npgblock
-                                        jgaps=gapb(igapb)%nodegblock_igaps(kpoin)   !ÒòÎªÉÏÃæÓĞidimnÑ­»·£¬ÕâÀï²»ÄÜÓÃigaps±äÁ¿
+                                        jgaps=gapb(igapb)%nodegblock_igaps(kpoin)   !é”Ÿæ–¤æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·idimnå¾ªé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤ä¸é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·igapsé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                                         jpair=gapb(igapb)%nodegblock_ipairs(kpoin)
-                                        ij0=gapb(igapb)%nodegblock_onetwo(kpoin)    !ÒòÎªÉÏÃæÓĞidimnÑ­»·£¬ÕâÀï²»ÄÜÓÃij±äÁ¿      !£¡2017/04/03
+                                        ij0=gapb(igapb)%nodegblock_onetwo(kpoin)    !é”Ÿæ–¤æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·idimnå¾ªé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤ä¸é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ijé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·      !é”Ÿæ–¤æ‹·2017/04/03
                                         call result_node_to_center(kdimn,ij0,jgaps,jpair,result,unitg)
 
                                         do jdimn=1,kdimn
@@ -8983,7 +8981,7 @@
                         deallocate(rot)
                     elseif(restart_ctt==1)then !restart_ctt
                         write(7,*)'read_cmatrix'
-                        call forAdirect !fzx !ĞÎ³ÉA¾ØÕó
+                        call forAdirect !fzx !é”Ÿè½¿ç­¹æ‹·Aé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                         rewind(recttunit)
                         do igapb=1,ngapb
                             if(block_appear_process(igapb,iblks)==0)cycle  !20200331
@@ -9082,7 +9080,7 @@
 
                 call varupdate !20230216
 
-                !20230216 ·´Ñİ±ß½çÎÂ¶ÈÔöÁ¿ËÙÂÊ
+                !20230216 é”Ÿæ–¤æ‹·é”Ÿæ·è¾¹æ–¤æ‹·é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                 if(nbackdT==2.and.iiter==1) then
                     allocate(observstar(Npoints_pbx),dtv(nfixsets),dtvi(nfixsets))
                     observstar=0.
@@ -9134,7 +9132,7 @@
                 !20230216
 
                 !call varupdate !20230216
-                !call relative_dis_watertight !20231007 Ö¹Ë® !20240305
+                !call relative_dis_watertight !20231007 æ­¢æ°´ !20240305
                 call eload_initialize
                 call residu_f
                 call eload_couple
@@ -9206,7 +9204,7 @@
             call gpvarupdate
             !write(7,*)'af gpvarupdate','stres0=',element(1)%field(1)%gpvar(1:3,1) !,'stres=',element(1)%field(1)%gpvar(1:3,1)
 
-            if(gamamax/=0)call gamamaxupdate !20231125YL ¸üĞÂµØÕğ¹ı³ÌÖĞ×î´ó¶¯¼ôÓ¦±ä
+            if(gamamax/=0)call gamamaxupdate !20231125YL é”Ÿæ–¤æ‹·é”Ÿé“°ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¥ŸåŠ¨ç¡·æ‹·åº”é”Ÿæ–¤æ‹·
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
                 call out_record
@@ -9266,12 +9264,9 @@
                         !dissanru(istep,ldofixb(i))=result_zero(ldofixb(i))-inpru(ldofixb(i))
                         !dissanzi(istep,ldofixb(i))=result_zero(ldofixb(i))-inpzi(ldofixb(i))
                         disA(ldofixb(ilaymif))=result_zero(ldofixb(ilaymif))-inpru(ldofixb(ilaymif))
-                        !¶Ôµ×±ß½ç£¬½«×Ü²¨³¡·Ö½âÎªÈëÉä²¨³¡ÓëÉ¢Éä²¨³¡£¬disA¼´ÎªÉ¢Éä²¨
                         disB(ldofixb(ilaymif))=result_zero(ldofixb(ilaymif))-inpzi(ldofixb(ilaymif))
-                        !¶Ô²à±ß½ç£¬½«×Ü²¨³¡·Ö½âÎª×ÔÓÉ²¨³¡ÓëÉ¢Éä²¨³¡£¬disB¼´ÎªÉ¢Éä²¨
 
-                        !Ô­ÒòÔÚÓÚÍ¸Éä±ß½ç½ö¶ÔÉ¢Éä²¨³¡£¬±£Ö¤É¢Éä²¨³¡ÄÜ¹»´©¹ıÈË¹¤±ß½ç¶øÍ¸ÏòÎŞÏŞÔ¶´¦£¬µ«Í¬Ê±ÓëÒªÔÊĞíÈëÉä²¨³¡ÄÜ¹»ÏòÉÏ´«²¥
-                        !¹Ê½øĞĞ²¨³¡·ÖÀë¡£
+                        !é”Ÿç»æ–¤æ‹·é”Ÿå«è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¯«ã€‚
                     end do
                     nullify(ldofixb)
                 end do
@@ -9360,7 +9355,7 @@
                 end do
             endif  !20200812
 
-            if(outinp<0)then  !·ÇÎÈ¶¨ÉøÁ÷³¡·ÖÎöÊ±ÏòoipÎÄ¼şÊä³ö½áµãÑ¹Á¦ 20220623
+            if(outinp<0)then  !é”Ÿæ–¤æ‹·é”Ÿé¥ºè®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·oipé”Ÿä¾¥ç¡·æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹· 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -9375,7 +9370,7 @@
 
             endif
 
-            if(upliftin<0)then  !·ÇÎÈ¶¨ÉøÁ÷³¡·ÖÎöÊ±ÏòupfÎÄ¼şÊä³ö½áµãÑ¹Á¦ 20220623
+            if(upliftin<0)then  !é”Ÿæ–¤æ‹·é”Ÿé¥ºè®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·upfé”Ÿä¾¥ç¡·æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹· 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -9670,7 +9665,7 @@
     do jpoin=1,gapb(igapb)%npblock
         ipoin=gapb(igapb)%nodeblock(jpoin)
         df=0.
-        do jdimn=1,kdimn !ÑÏ¸ñµÄËµ£¬Ó¦¸ÃÓÃcdofn,ndof
+        do jdimn=1,kdimn !é”Ÿè¾ƒé©æ‹·é”Ÿå‰¿ç¢‰æ‹·é”Ÿæ¥ï¸¼æ‹·é”Ÿæ–¤æ‹·é”Ÿçµšdofn,ndof
             itotv=nodfn(jdimn,ipoin)
             if(itotv/=0) &
                 df(jdimn)=-stfor_inc(itotv)-force_rigid(itotv)
@@ -9774,7 +9769,7 @@
     do jpoin=1,gapb(igapb)%npblock
         ipoin=gapb(igapb)%nodeblock(jpoin)
         df=0.
-        do jdimn=1,kdimn !ÑÏ¸ñµÄËµ£¬Ó¦¸ÃÓÃcdofn,ndof
+        do jdimn=1,kdimn !é”Ÿè¾ƒé©æ‹·é”Ÿå‰¿ç¢‰æ‹·é”Ÿæ¥ï¸¼æ‹·é”Ÿæ–¤æ‹·é”Ÿçµšdofn,ndof
             itotv=nodfn(jdimn,ipoin)
             if(itotv/=0) &
                 df(jdimn)=stfor_inc(itotv)
@@ -10821,7 +10816,7 @@
             !
             !
             !allocate(disl(gapb(igapb)%nrdof)) !20171130
-            !disl=ditime*gapb(igapb)%rdisp_first+.5*ditime**2*gapb(igapb)%rdisp_second !´Ë´¦Îª¸ÕÌå×ª¶¯¼ÓËÙ¶ÈÔöÁ¿
+            !disl=ditime*gapb(igapb)%rdisp_first+.5*ditime**2*gapb(igapb)%rdisp_second !é”Ÿå‰¿è¾¾æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è½¬é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«è®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
             !   call dis_modify(igapb,disl)
             !disl=.5*ditime*gapb(igapb)%rdisp_second
             !   call vel_modify(igapb,disl)
@@ -10933,7 +10928,7 @@
             if(gapb(igapb)%nrdof==0)cycle   !20231026
             allocate(disl(gapb(igapb)%nrdof))
 
-            disl=gapb(igapb)%rdisp_inc !´Ë´¦Îª¸ÕÌå×ª¶¯¼ÓËÙ¶ÈÔöÁ¿
+            disl=gapb(igapb)%rdisp_inc !é”Ÿå‰¿è¾¾æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è½¬é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«è®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
             write(7,*)'igapb=',igapb,'disl=',disl
             if(type_problem=='Q')then !!20121001
                 gapb(igapb)%rdisp_delitfi=disl
@@ -11005,7 +11000,7 @@
     END SUBROUTINE varupdate
 
     !20231215YL
-    SUBROUTINE relative_dis_watertight   !20231007 Ö¹Ë®
+    SUBROUTINE relative_dis_watertight   !20231007 æ­¢æ°´
     character (10) model,field1,material
     integer(ink) ielem,nnode,nevab,ngaus,nnode_half,inode,idofn,ielgroup,igroup,idimn,index
     integer(ink),allocatable:: lnods(:),ldofs(:)
@@ -11388,7 +11383,7 @@
                         element(ielem)%field(1)%state0=element(ielem)%field(1)%state
                     endif
                     !20231215_YL
-                    !!20231007 Ö¹Ë®
+                    !!20231007 æ­¢æ°´
                     if(material=='GOODMAN') then
                         model=props(matno)%mechanical%solid%Goodman%model
                         if(model=='WATERTIGHT')then
@@ -11671,7 +11666,7 @@
     real(irk) djacb,weigp,dis,thickness
     ! define gpvar
     write(7,*)'in modf_element_lib'
-    if(type_problem=='WT')then !20220409 ÓÃÓÚ±ùÑ©¶³ÈÚ
+    if(type_problem=='WT')then !20220409 é”Ÿæ–¤æ‹·é”ŸèŠ‚æ†‹æ‹·é›ªé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
         DO jgroup =1,ngroup
             index = group(jgroup)%index
             ngaus =elkn(index)%ggaus(1)%ngaus
@@ -11829,7 +11824,7 @@
 
                 allocate(element(ielem)%field(1)%gpvar0(ngvar,ngaus))  !20210125
                 allocate(element(ielem)%field(1)%gpvar(ngvar,ngaus),element(ielem)%field(1)%sigz(ngaus))
-                allocate(element(ielem)%field(1)%bmatx(nstre,nevab,ngaus)) !20231215YL ´æ´¢µ¥ÔªB¾ØÕó
+                allocate(element(ielem)%field(1)%bmatx(nstre,nevab,ngaus)) !20231215YL é”ŸèŠ¥å‚¨é”Ÿæ–¤æ‹·å…ƒBé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
 
                 !if(material=='DUNCANCHANG'.and.uplift_ic/=0)then !20220409
                 !if(material=='DUNCANCHANG')then !20220607
@@ -11989,7 +11984,7 @@
                     allocate(element(ielem)%rotation(ndimn,ndimn), &
                         element(ielem)%aera_local(ngaus),a3(ndimn),element(ielem)%evk(ndimn,ngaus))
                     !20231215_YL
-                    if(model=='WATERTIGHT')then !20231007 Ö¹Ë®
+                    if(model=='WATERTIGHT')then !20231007 æ­¢æ°´
                         jndex=1
                         if(ndimn==3)jndex=5
                         order_int=elkn(jndex)%el_field(1)%order_intrules(1)
@@ -12113,7 +12108,7 @@
         endif !for field(1:1)='U'
 
         !! end for Simo & Rifai element
-        !! 11/6/04   ! µ¥´¿ÉøÁ÷³¡¿¼ÂÇ·Ç±¥ºÍ
+        !! 11/6/04   ! é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè§’éæ†‹æ‹·é”Ÿæ–¤æ‹·
         if (field1(1:1)=='W'.and.name(1:6)=='NSSoil') then
 
             order_int=elkn(index)%el_field(1)%order_intrules(1)
@@ -12305,8 +12300,8 @@
 
         else if(ifixvar==10.and.jfixvar/=0)then  !20230402
 
-            !½«°ÓÌåÉÏÏÂÓÎ·ÖÎª²»Í¬Çø£¬jfixvar=0Ê±£¬ÓëÍ¨³£·½·¨ÏàÍ¬£¬ÓÉ*.loaÖĞµÄÇúÏß£¬¸ù¾İÊ±¼äÀ´È·¶¨ÎÂ¶ÈÖµ£»
-            !jfixvar/=0Ê±£¬jfixvarÎªÖ¸¶¨ÇøÓòÑØ²»Í¬Éî¶ÈËæÊ±¼ä±ä»¯ÇúÏß£¬¿ÉÒÔ·ÖÎªÉÏÓÎºÍÏÂÓÎ¡£
+            !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿å‡¤æ‹·ä¸ºé”Ÿæ–¤æ‹·åŒé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·jfixvar=0æ—¶é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é€šé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åŒé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·*.loaé”Ÿå«ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿç«­ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ç¡®é”Ÿæ–¤æ‹·é”Ÿé“°è®¹æ‹·å€¼é”Ÿæ–¤æ‹·
+            !jfixvar/=0æ—¶é”Ÿæ–¤æ‹·jfixvarä¸ºæŒ‡é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæˆªè¯§æ‹·åŒé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿæˆ’åŒ–é”Ÿæ–¤æ‹·é”Ÿç«­ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿçš†å‡¤æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿè½¿çŒ´æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿â˜…æ‹·
             inode=prescrib(idofix)%nodfix
             vertical_direction=temp_surface(jfixvar)%vertical_direction
             corz=coord(vertical_direction,inode)
@@ -12712,8 +12707,14 @@
     integer (ink),pointer::ldofs(:)
     real    (irk),allocatable::rot(:),eldis(:),nordis(:),shape(:,:),gapnod(:),gapgaus(:)
     real    (irk),allocatable::centerx(:),gapx(:),gapalfax(:)  !20231006
+    real    (irk):: current_gap, gap_change,natural_thickness
+    character(20):: previous_state, current_state
+    real    (irk):: old_gap
 
-    eps=1.e-5   !20231006
+
+    eps = 1.e-4  ! å¢å¤§epsæé«˜æ•°å€¼ç¨³å®šæ€§
+
+
     write(7,*)'contact_state********************'
     DO igroup =1,ngroup
         field1= group(igroup)%fieldid(1:1)
@@ -12809,7 +12810,6 @@
                                 element(ielem)%field(1)%gapg0=gapgaus
                                 element(ielem)%field(1)%gapg=element(ielem)%field(1)%gapg0
                                 element(ielem)%field(1)%gapn=element(ielem)%field(1)%gapn0
-
                             elseif(igap0==99)then !zhao 05/07/19
                                 do inode=1,nnode
                                     idofn=element(ielem)%field(1)%lnods_f(inode)
@@ -12868,7 +12868,9 @@
                             endif
                             element(ielem)%field(1)%gapg=gapgaus+element(ielem)%field(1)%gapg0
                         endif
-
+                        write(7,"(A15,I10,5(A10,3E15.7))")'å½“å‰é—´éš™ä¸ºï¼šie=',ielem,'gapg=   ',element(ielem)%field(1)%gapg
+                        write(7,"(A15,I10,5(A10,3E15.7))")'å½“å‰é—´éš™ä¸ºï¼šie=',ielem,'gapg0=  ',element(ielem)%field(1)%gapg0
+                        write(7,"(A15,I10,5(A10,3E15.7))")'å½“å‰é—´éš™ä¸ºï¼šie=',ielem,'gapgaus=',gapgaus
                         do igaus=1,ngaus
                             icftg=element(ielem)%field(1)%icftcontact(igaus)
                             if (material=='GOODMAN') then
@@ -12883,15 +12885,47 @@
                             else
                                 ft0=0.01
                             endif
-                            !write(7,*)'ie=',ielem,'ig=',igaus,'ft0=',ft0,'gapg=',element(ielem)%field(1)%gapg(igaus),'eps=',eps
-                            if (element(ielem)%field(1)%gapg(igaus)>eps.and.smean>ft0) then !ooo
-                                element(ielem)%field(1)%icftcontact(igaus)=1
-                                element(ielem)%field(1)%state(igaus)='open'
-                                !                        write(7,*)'ielem=',ielem,'igaus=',igaus,'gapg=',element(ielem)%field(1)%gapg(igaus),'smean=',smean
+
+                            ! è·å–é—´éš™å˜åŒ–é‡ï¼ˆç›¸å¯¹äºåˆå§‹çŠ¶æ€çš„å˜åŒ–ï¼‰
+                            current_gap = element(ielem)%field(1)%gapg(igaus)  ! æ€»é—´éš™ï¼ˆç”¨äºæ˜¾ç¤ºï¼‰
+                            gap_change = current_gap-element(ielem)%field(1)%gapg0(igaus)  ! é—´éš™å˜åŒ–é‡
+
+
+                            previous_state = element(ielem)%field(1)%state1(igaus)
+
+                            if (previous_state == 'contact') then
+                                ! contact â†’ open åˆ¤æ–­ï¼šåŸºäºä½ç§»å¢é‡å’ŒçœŸå®åº”åŠ›
+
+                                ! ä¿®æ­£çš„åˆ¤æ–­æ¡ä»¶ï¼š
+                                ! 1. ä½ç§»å¢é‡æ˜æ˜¾ä¸ºæ­£ï¼ˆå¼ å¼€æ–¹å‘ï¼‰
+                                ! 2. åº”åŠ›è¶…è¿‡æ‹‰ä¼¸æé™ï¼ˆè¿™é‡Œsmeanè¿˜æ˜¯çœŸå®åº”åŠ›ï¼‰
+                                if (smean > ft0) then
+                                    element(ielem)%field(1)%state(igaus) = 'open'
+                                else
+                                    element(ielem)%field(1)%state(igaus) = 'contact'
+                                endif
+
+                            elseif (previous_state == 'open') then
+                                ! open â†’ contact åˆ¤æ–­ï¼šåŸºäºé—´éš™é—­åˆå‡ ä½•æ¡ä»¶
+
+                                ! æ­£ç¡®çš„åˆ¤æ–­æ¡ä»¶ï¼š
+                                ! open â†’ contact çš„æ ¸å¿ƒï¼šé—´éš™è¶³å¤Ÿå°ï¼Œæ¥è¿‘çœŸæ­£æ¥è§¦
+                                ! åˆ¤æ–­ä¾æ®ï¼šå½“å‰é—´éš™æ¥è¿‘æ¥è§¦é˜ˆå€¼
+
+                                if (current_gap < element(ielem)%field(1)%gapg0(igaus)) then
+                                    element(ielem)%field(1)%state(igaus) = 'contact'
+                                else
+                                    element(ielem)%field(1)%state(igaus) = 'open'
+                                endif
                             endif
-                            !write(7,*)'ie=',ielem,'ig=',igaus,'state=',element(ielem)%field(1)%state(igaus)
 
 
+                            ! --- æ ¹æ®æœ€ç»ˆçš„ 'state' å­—ç¬¦ä¸²æ›´æ–°æ•´æ•°æ ‡å¿—ä½ icftcontact ---
+                            if (element(ielem)%field(1)%state(igaus) == 'open') then
+                                element(ielem)%field(1)%icftcontact(igaus) = 1 ! 1 ä»£è¡¨å¼ å¼€
+                            else
+                                element(ielem)%field(1)%icftcontact(igaus) = 0 ! 0 ä»£è¡¨æ¥è§¦
+                            endif
 
                         end do  !!igaus
                         element(ielem)%field(1)%icok=0
@@ -13429,7 +13463,7 @@
     if (type_problem=='F')then
 
 
-        ic_inertia=0    !ic_inertia,ic_inertia_group Ö÷ÒªÓÃÀ´Ê¶±ğµ±½Ó´¥¿éÌåÍêÈ«ÕÅ¿ªºó£¬²»ÔÚÊ©¼ÓµØÕğ¹ßĞÔÁ¦
+        ic_inertia=0    !ic_inertia,ic_inertia_group é”Ÿæ–¤æ‹·è¦é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è¯†é”Ÿé‡‘å½“æ¥è¾¾æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å…¨é”Ÿè„šåŒ¡æ‹·é”Ÿè¥Ÿï¼Œè¯§æ‹·é”Ÿæ–¤æ‹·æ–½é”Ÿæ¥ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿ?
         allocate(ic_inertia_group(ngroup))
         ic_inertia_group=1
 
@@ -13535,9 +13569,9 @@
                 if(SPtype=='PS')alfa=e/(1.0-nu**2)
                 if(SPtype=='PS')beta=alfa*nu
                 G= e/(2.*(1.+nu))
-                speed(ndimn)=sqrt(alfa/density) !P²¨²¨ËÙ
-                speed(1:(ndimn-1))=sqrt(g/density) !S²¨²¨ËÙ
-                if (cdbound==2)then           !µ×±ß½ç
+                speed(ndimn)=sqrt(alfa/density) !Pé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
+                speed(1:(ndimn-1))=sqrt(g/density) !Sé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
+                if (cdbound==2)then           !é”Ÿé˜¶è¾¹æ–¤æ‹·
                     if(hwdirec==0) then !20220105
 
                         call dfact_time_curve(ttime)
@@ -13546,8 +13580,8 @@
                             itdis=earthquake_curve_d(idimn)     !!hxl_l
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
                             if(itdis>0) &
-                                dfact1(idimn)=tcurves(itdis)%dfact     !ÈëÉäÎ»ÒÆ²¨
-                            if(itveloc>0)dfact2(idimn)=2.*tcurves(itveloc)%dfact    !ÈëÉäËÙ¶È²¨ *2£¿
+                                dfact1(idimn)=tcurves(itdis)%dfact     !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä½é”Ÿç‹¡è¯§æ‹·
+                            if(itveloc>0)dfact2(idimn)=2.*tcurves(itveloc)%dfact    !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«åº¦è¯§æ‹· *2é”Ÿæ–¤æ‹·
                         end do
                         do inode=1,nnode
                             do idimn=1,ndimn
@@ -13566,7 +13600,7 @@
                             else if(hwdirec<0)then !20220105
                                 timer0=(hcoord-coord(hwdirec,lnods(inode)))/speed(-hwdirec) !20220105
                             endif  !20220105
-                            timer0=ttime-timer0 !¼ÆËãÊ±¼äÓëÊäÈë²¨´«²¥ÖÁµ±Ç°µãµÄÊ±¼äÖ®²î£¬¼´ÒÑ´«²¥ÖÁµ±Ç°µãµÄÊ±¼ä
+                            timer0=ttime-timer0 !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¯«æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿè¡—î‡†æ‹·ç¿î„Šæ‹·é”Ÿæ–¤æ‹·æ±›é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè§’å¸®æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·
                             dfact1=0.;dfact2=0.;  sxyz=0.
                             if (timer0>0.)then
                                 call dfact_time_curve(timer0)
@@ -13588,7 +13622,7 @@
                     endif !20220105
 
 
-                elseif(cdbound==1)then       !²à±ß½ç
+                elseif(cdbound==1)then       !é”Ÿæ–¤æ‹·å‘“é”Ÿ?
                     dfact1=0.;dfact2=0.;  sxyz=0.
                     do inode=1,nnode
                         timer0=0.  !20220105
@@ -13601,24 +13635,24 @@
                         do idimn=1,ndimn
                             itdis=earthquake_curve_d(idimn)     !!hxl_l
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
-                            timer1=(coordzi-inpcord)/speed(idimn) !ÊäÈë²¨´«²¥ÖÁµ±Ç°µãµÄÊ±¼ä
+                            timer1=(coordzi-inpcord)/speed(idimn) !é”Ÿæ–¤æ‹·é”Ÿè¯«æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿ?
                             timer1=timer1+timer0 !20220105
-                            timer1=ttime-timer1 !¼ÆËãÊ±¼äÓëÊäÈë²¨´«²¥ÖÁµ±Ç°µãµÄÊ±¼äÖ®²î£¬¼´ÒÑ´«²¥ÖÁµ±Ç°µãµÄÊ±¼ä
+                            timer1=ttime-timer1 !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¯«æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿè¡—î‡†æ‹·ç¿î„Šæ‹·é”Ÿæ–¤æ‹·æ±›é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè§’å¸®æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·
                             if (timer1>0.)then
                                 call dfact_time_curve(timer1)
                                 if(itdis>0)  dfact1(idimn)=tcurves(itdis)%dfact
                                 if(itveloc>0)dfact2(idimn)=tcurves(itveloc)%dfact
                                 if(itveloc>0)sxyz(idimn)=-speed(idimn)*density*tcurves(itveloc)%dfact
-                                ! sxyz ÈëÉäËÙ¶È²¨²úÉúµÄÓ¦Á¦§Ô=-¦Ñ*Cs*V
+                                ! sxyz é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«åº¦è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·=-é”Ÿæ–¤æ‹·*Cs*V
                             endif
                         end do
 
-                        if (ndimn==2)then ! ÓÉ1:nidmn-1¸öÇĞÓ¦Á¦¼°ndimn·¨ÏòÓ¦Á¦ÍÆÇóÈëÉäËÙ¶È²¨²úÉúÓ¦Á¦ÕÅÁ¿dsxyz
+                        if (ndimn==2)then ! é”Ÿæ–¤æ‹·1:nidmn-1é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ndimné”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«åº¦è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·dsxyz
                             dsxyz(1,1)=beta/alfa*sxyz(2)
                             dsxyz(2,2)=sxyz(2)
                             dsxyz(1,2)=sxyz(1)
                             dsxyz(2,1)=sxyz(1)
-                        elseif(ndimn==3)then ! ÓÉ1:nidmn-1¸öÇĞÓ¦Á¦¼°ndimn·¨ÏòÓ¦Á¦ÍÆÇóÈëÉäËÙ¶È²¨²úÉúÓ¦Á¦ÕÅÁ¿dsxyz
+                        elseif(ndimn==3)then ! é”Ÿæ–¤æ‹·1:nidmn-1é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ndimné”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«åº¦è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·dsxyz
                             dsxyz(1,1)=beta/alfa*sxyz(3)
                             dsxyz(2,2)=dsxyz(1,1)
                             dsxyz(3,3)=sxyz(3)
@@ -13629,8 +13663,8 @@
                             dsxyz(3,1)=sxyz(1)
                             dsxyz(3,2)=sxyz(2)
                         endif
-                        xyz1=dsxyz.x.tabss(ielem)%rr(ndimn,:) !×ª»»ÖÁÕûÌå×ø±êÏµ
-                        ! xyz1:ÕûÌå×ø±êÏµÏÂÉÏĞĞ²¨²úÉúµÄÓ¦Á¦
+                        xyz1=dsxyz.x.tabss(ielem)%rr(ndimn,:) !è½¬é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ç³»
+                        ! xyz1:é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ç³»é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå«è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·
 
                         dfact3=0.
                         dfact4=0.
@@ -13640,14 +13674,14 @@
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
                             timer2=(cordzfree(inode)-inpcord)/speed(idimn)+(cordzfree(inode)-coordzi)/speed(idimn)
                             timer2=timer2+timer0 !20220105
-                            !timer2:ÈëÉä²¨´«²¥ÖÁ¶¥ÃæµÄÊ±¼ä+´Ó¶¥ÃæÔÙ´«²¥ÖÁµ±Ç°µãµÄÊ±¼ä
-                            timer2=ttime-timer2 !¼ÆËãÊ±¼äÓëÈëÉä²¨´Ó¶¥Ãæ·´ÉäÖÁµ±Ç°µãµÄÊ±¼äÖ®²î
+                            !timer2:é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿ?+é”Ÿæ¥è®¹æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«è¾¾æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿ?
+                            timer2=ttime-timer2 !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ—¶é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢é”Ÿæ¥è®¹æ‹·é”ŸèŠ¥åé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿè¡—î‡†æ‹·é”Ÿ?
                             if (timer2>0.) then
                                 call dfact_time_curve(timer2)
                                 if(itdis>0)dfact3(idimn)=tcurves(itdis)%dfact
                                 if(itveloc>0)dfact4(idimn)=tcurves(itveloc)%dfact
                                 if(itveloc>0)sxyz(idimn)=speed(idimn)*density*tcurves(itveloc)%dfact
-                                ! sxyz ÈëÉäËÙ¶È²¨²úÉúµÄÓ¦Á¦§Ô=¦Ñ*Cs*V
+                                ! sxyz é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸåŠ«åº¦è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·=é”Ÿæ–¤æ‹·*Cs*V
                             endif
                         end do
 
@@ -13670,21 +13704,21 @@
                             dsxyz(3,2)=sxyz(2)
                         endif
                         xyz2=dsxyz.x.tabss(ielem)%rr(ndimn,:)
-                        ! xyz1:ÕûÌå×ø±êÏµÏÂÏÂĞĞ²¨²úÉúµÄÓ¦Á¦
+                        ! xyz1:é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ç³»é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå«è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·
                         do idimn=1,ndimn
-                            value_d((inode-1)*ndimn+idimn)=(dfact1(idimn)+dfact3(idimn)) !×ÔÓÉ³¡Î»ÒÆ²¨
-                            value_v((inode-1)*ndimn+idimn)=(dfact2(idimn)+dfact4(idimn)) !×ÔÓÉ³¡ËÙ¶È²¨
-                            value_s((inode-1)*ndimn+idimn)=xyz1(idimn)+xyz2(idimn)       !×ÔÓÉ³¡Ó¦Á¦²¨
-                            !Êµ¼ÊÉÏ½«×ÔÓÉ³¡·ÖÎªÁ½²¿·Ö£ºÉÏĞĞ²¨£¨¼´ÊäÈë²¨£©ÓëÏÂĞĞ²¨£¨¼´·´Éä²¨£©
+                            value_d((inode-1)*ndimn+idimn)=(dfact1(idimn)+dfact3(idimn)) !é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·ä½é”Ÿç‹¡è¯§æ‹·
+                            value_v((inode-1)*ndimn+idimn)=(dfact2(idimn)+dfact4(idimn)) !é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·é”ŸåŠ«åº¦è¯§æ‹·
+                            value_s((inode-1)*ndimn+idimn)=xyz1(idimn)+xyz2(idimn)       !é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
+                            !å®é”Ÿæ–¤æ‹·é”Ÿè¾ƒæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·é”Ÿæ–¤æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¡—ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿå«è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¯«æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå«è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢é”Ÿæ–¤æ‹·
                         end do
                     end do
                 endif
 
-                !estif  =Int. (RT NT ¦Ñ*Cs N R)
+                !estif  =Int. (RT NT é”Ÿæ–¤æ‹·*Cs N R)
                 !estif0 =Int. (RT NT k/(2*rb) N R)
                 !eload_s=Int. (NT N)
 
-                !½«×ÔÓÉ³¡Ó¦Á¦×ª»»Îª½áµãºÉÔØÀÛ¼ÓÖÁ×ÜÌåºÉÔØÁĞÕótofor
+                !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·åº”é”Ÿæ–¤æ‹·è½¬é”Ÿæ–¤æ‹·ä¸ºé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ¡”ç¡·æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿçµ«ofor
                 ldofs=>tabss(ielem)%ldofs
                 allocate(eload(size(ldofs)))
                 estif=>tabss(ielem)%estif
@@ -13793,7 +13827,7 @@
         enddo
     endif
 
-    if(alfa_p4>0)then  !20221124 ¶ÔÓ¦ÓÚ¾Ö²¿×ø±ê×÷Î´ÖªÁ¿µÄ½Úµã£¬½«ÍâÔØ½øĞĞ×ª»»
+    if(alfa_p4>0)then  !20221124 é”Ÿæ–¤æ‹·åº”é”ŸèŠ‚å±€è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æœªçŸ¥é”Ÿæ–¤æ‹·é”Ÿä¾¥èŠ‚ç‚¹ï¼Œé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæˆªæ–¤æ‹·é”Ÿæ–¤æ‹·è½¬é”Ÿæ–¤æ‹·
         allocate(value(ndimn))
         do ipoin=1,npoin
             if (local_p4(ipoin)==0)cycle
@@ -14010,7 +14044,7 @@
     real   (irk),allocatable::value(:),values(:),valuef(:)
     real   (irk) coef,accx,accz
 
-    if(Icaddmass==3)then  !¼ÆËã¶É²Û²Ûµ×ÖĞĞÄÏßÉÏË®Æ½¼ÓËÙ¶ÈÒıÆğµÄÊúÏòÑ¹Á¦£¬ÒÔ¼°²Ûµ×ÖĞĞÄÏßÉÏÊúÏò¼ÓËÙ¶ÈÒıÆğµÄ²àÏòÑ¹Á¦
+    if(Icaddmass==3)then  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åˆ¹é„„é„£é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå‰¿î†æ–¤æ‹·é”Ÿæ–¤æ‹·ä¿£é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿçš†ç¡·æ‹·é”Ÿæ¡”ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä¿£é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿä¾¥è¯§æ‹·é”Ÿæ–¤æ‹·å‹é”Ÿæ–¤æ‹·
         !20220330
         igroup=dwpre_aqu%aqu_group
         if(appear(igroup)==0) goto 10
@@ -14552,7 +14586,7 @@
     !!ifs2000
 
     !ifs2006 zhao, 06/03/29
-    if(icaddmass==0)then    !20231215YL ¶Ô¸½¼ÓÖÊÁ¿·¨²»ĞèÒªÒÔÏÂ¼¯³É
+    if(icaddmass==0)then    !20231215YL é”Ÿçš†é©æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è¦é”Ÿæ–¤æ‹·é”Ÿé“°ç¡·æ‹·é”Ÿæ–¤æ‹·
         do iedge=1,ifsnedge
             felem=ifsedges(iedge)%felem
             igroup=element(felem)%group
@@ -15125,8 +15159,8 @@
                         !write(7,*)'ipairs=',ipairs,'ctforce=', gaps(igaps)%ctforce(1:ndimn,ipairs),'state=',gaps(igaps)%state(ipairs)
                         if(kinit==2)gaps(igaps)%ctforce_stres0(1:ndimn,ipairs)=gaps(igaps)%ctforce0(1:ndimn,ipairs) !2019/03/19
                         !if(gaps(igaps)%state(ipairs)==2.and.xlwsol==1)then
-                        ! gaps(igaps)%kxyz(1,1,ipairs)=gaps(igaps)%kgroup1(1,1)  !Èá¶ÈÏµÊıÈ¡´óÖµÄ£Äâ×ÔÓÉ»¬¶¯
-                        !if(ndimn==3)gaps(igaps)%kxyz(2,2,ipairs)=gaps(igaps)%kgroup1(2,2)  !Èá¶ÈÏµÊıÈ¡´óÖµÄ£Äâ×ÔÓÉ»¬¶¯
+                        ! gaps(igaps)%kxyz(1,1,ipairs)=gaps(igaps)%kgroup1(1,1)  !é”Ÿæ–¤æ‹·é”Ÿè¾ƒç¢‰æ‹·é”Ÿé¥ºâ˜…æ‹·é”Ÿè¡—çš„ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è‹«é”Ÿæ–¤æ‹·é”Ÿ?
+                        !if(ndimn==3)gaps(igaps)%kxyz(2,2,ipairs)=gaps(igaps)%kgroup1(2,2)  !é”Ÿæ–¤æ‹·é”Ÿè¾ƒç¢‰æ‹·é”Ÿé¥ºâ˜…æ‹·é”Ÿè¡—çš„ï½æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è‹«é”Ÿæ–¤æ‹·é”Ÿ?
                         !end if
                     enddo
                 enddo
@@ -15236,7 +15270,7 @@
                         ldofs => element(ielem)%field(ifield)%ldofs_f
                         result_zero(ldofs)=temperature
 
-                        !do idofn=1,size(ldofs)     !ĞŞ¸Ä½½Öş²ã½çÃæÎÂ¶È
+                        !do idofn=1,size(ldofs)     !é”Ÿç«æ”¹æ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·éœ²é”Ÿ?
                         !	if(abs(result_zero(ldofs(idofn)))<.0001) then
                         !		result_zero(ldofs(idofn))=temperature
                         !	else
@@ -15244,12 +15278,12 @@
                         !	endif
                         !            enddo
 
-                        do idofn=1,size(ldofs)     !cj042@126.com  20191120ĞŞ¸Ä½½Öş²ã½çÃæÎÂ¶È
+                        do idofn=1,size(ldofs)     !cj042@126.com  20191120é”Ÿç«æ”¹æ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·éœ²é”Ÿ?
                             if(abs(result0(ldofs(idofn)))<.0001) then
                                 result_zero(ldofs(idofn))=temperature
-                                result1(ldofs(idofn))=temperature  !20191127ĞŞ¸Ä½½Öş²ã³ı½Ó´¥ÃæÒâÍâµÄ½ÚµãµÄ»ù×¼ÎÂ¶È
+                                result1(ldofs(idofn))=temperature  !20191127é”Ÿç«æ”¹æ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å“Ÿé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿä¾¥èŠ‚ç¢‰æ‹·å¹•é”Ÿé˜¶ç¡·æ‹·éœ²é”Ÿ?
                             else
-                                result_zero(ldofs(idofn))=(result0(ldofs(idofn))+temperature)*.5  !»ù×¼Öµresult0²»±ä¡¾ÒÔÏÂ²ãÎª×¼¡¿
+                                result_zero(ldofs(idofn))=(result0(ldofs(idofn))+temperature)*.5  !é”Ÿæ–¤æ‹·å‡†å€¼result0é”Ÿæ–¤æ‹·é”Ÿæˆ’ã€é”Ÿæ–¤æ‹·é”Ÿé“°è¯§æ‹·ä¸ºå‡†é”Ÿæ–¤æ‹·
                             endif
                         enddo
 
@@ -15278,7 +15312,7 @@
     result0=result1
     deallocate(result1)
 
-    !! ¶Ô´Ó½ÚµãÊıÖµ½øĞĞĞŞ¸Ä£¬ÒÔ±£Ö¤Ë®¹Üµ¥Ôª³õÊ¼ÎÂ¶ÈÓëÒÀÀµµÄ»ìÄıÍÁ½ÚµãÎÂ¶ÈÏàÍ¬(20210417)
+    !! é”Ÿçš†ä»èŠ‚ç¢‰æ‹·é”Ÿæ–¤æ‹·å€¼é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç«æ”¹ï½æ‹·é”Ÿçš†æ†‹æ‹·è¯æ°´é”Ÿæ°ç¢‰æ‹·å…ƒé”Ÿæ–¤æ‹·å§‹é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿä¾¥ä¼™æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸèŠ‚ç¢‰æ‹·é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·åŒ(20210417)
     do itotv=1,ntotv
         nintf=trans(itotv)%nintf
         if (nintf==0) cycle
@@ -15309,7 +15343,7 @@
             nullify(pairnode_wc)
         end do
     end do
-    !!end ¶Ô´Ó½ÚµãÊıÖµĞŞ¸Ä£¬ÒÔ±£Ö¤Ë®¹Üµ¥Ôª³õÊ¼ÎÂ¶ÈÓëÒÀÀµµÄ»ìÄıÍÁ½ÚµãÎÂ¶ÈÏàÍ¬(20210417)
+    !!end é”Ÿçš†ä»èŠ‚ç¢‰æ‹·é”Ÿæ–¤æ‹·å€¼é”Ÿç«æ”¹ï½æ‹·é”Ÿçš†æ†‹æ‹·è¯æ°´é”Ÿæ°ç¢‰æ‹·å…ƒé”Ÿæ–¤æ‹·å§‹é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿä¾¥ä¼™æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”ŸèŠ‚ç¢‰æ‹·é”Ÿé“°è®¹æ‹·é”Ÿæ–¤æ‹·åŒ(20210417)
 
 
 
@@ -15674,7 +15708,7 @@
     !!ifs2000
 
     !ifs2006 zhao, 06/03/29
-    if(icaddmass==0)then    !20231215YL ¶Ô¸½¼ÓÖÊÁ¿·¨²»ĞèÒªÒÔÏÂ¼¯³É
+    if(icaddmass==0)then    !20231215YL é”Ÿçš†é©æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·è¦é”Ÿæ–¤æ‹·é”Ÿé“°ç¡·æ‹·é”Ÿæ–¤æ‹·
         do iedge=1,ifsnedge
             felem=ifsedges(iedge)%felem
             igroup=element(felem)%group
@@ -15836,7 +15870,7 @@
                 ipair=gapb(igapb)%nodegblock_ipairs(i0)
                 ij=gapb(igapb)%nodegblock_onetwo(i0)
                 ipoin=gaps(igaps)%pairnode(ij,ipair)
-                gapb(igapb)%force_ct(1:kkdimn,i0)=-refor(nodfn(1:kkdimn,ipoin))  !°ÓºÍµØ»ù½»½çµã´¦Î»ÒÆ
+                gapb(igapb)%force_ct(1:kkdimn,i0)=-refor(nodfn(1:kkdimn,ipoin))  !é”Ÿæ¥å’Œåœ°ä¼™æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·æ„¦Î¾ä¼™æ‹·é”Ÿ?
             end do
         end do
     endif
@@ -17125,22 +17159,22 @@
         lnofixb=>prescrib(idofix)%lnofixb
         ldofixb=>prescrib(idofix)%ldofixb
         inpvar=abs(ifixvar0_inpb)
-        if (ifixvar0_inpb==ifixvar0)then !µ×±ß½ç
+        if (ifixvar0_inpb==ifixvar0)then !é”Ÿé˜¶è¾¹æ–¤æ‹·
             do ilaymif=1,nlaymif
-                tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif !ÈëÉäÎ»ÒÆ²¨´«²¥ÖÁµ±Ç°²ãµÄÊ±¼ä
+                tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·ä½é”Ÿç‹¡è¯§æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿç»æ†‹æ‹·é”Ÿ?
                 call dfact_time_curve(ttime)
-                inpru(ldofixb(ilaymif))=tcurves(iwavcurve)%dfact !µ±Ç°²ãµÄÈëÉäÎ»ÒÆ²¨
+                inpru(ldofixb(ilaymif))=tcurves(iwavcurve)%dfact !é”Ÿæ–¤æ‹·å‰é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè½¿ä¼™æ‹·æ’‡é”Ÿ?
                 tcurves(iwavcurve)%dtbegin=0.0
             enddo
         else
             do ilaymif=1,nlaymif
                 tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif
                 call dfact_time_curve(ttime)
-                dfact1=tcurves(iwavcurve)%dfact !ÈëÉä²¨
+                dfact1=tcurves(iwavcurve)%dfact !é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢
                 tcurves(iwavcurve)%dtbegin=abs((bfrecoord-inpcord)/camif)+abs(coord(inpvar,lnofixb(ilaymif))-bfrecoord)/camif
                 call dfact_time_curve(ttime)
-                dfact2=tcurves(iwavcurve)%dfact !ÈëÉä²¨´«²¥ÖÁ×ÔÓÉ±íÃæºóÏÂĞĞ·´Éä²¨
-                inpzi(ldofixb(ilaymif))=dfact1+dfact2 !¶şÕßµÄµü¼Ó¾ÍÊÇ×ÔÓÉ³¡
+                dfact2=tcurves(iwavcurve)%dfact !é”Ÿæ–¤æ‹·é”Ÿæˆ’æ³¢é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç¼´æ†‹æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·èŸ¹é”Ÿæ–¤æ‹·æ´³?
+                inpzi(ldofixb(ilaymif))=dfact1+dfact2 !é”Ÿæ–¤æ‹·é”Ÿç«­çš„ç¢‰æ‹·é”Ÿæ¥æ’…æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿç¼´ç­¹æ‹·
                 tcurves(iwavcurve)%dtbegin=0.0
             enddo
         endif
@@ -17186,7 +17220,7 @@
             endif
         end do
     end do
-    !!!!!!·Ö×é¼ÆËãÖÜÊı
+    !!!!!!é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿ?
 
     DO igroup =1,ngroup
         liquj=  group(igroup)%liquj
@@ -17214,7 +17248,7 @@
                 ielem = group(igroup)%list(ielgroup)
 
                 npeak=0
-                !!¼ÆËã·åÖµµã¸öÊı
+                !!é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¡—ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
                 do i0=2,nliqu-1
                     bi=shear(igroup)%stres(i0-1,ielgroup)
                     bj=shear(igroup)%stres(i0,ielgroup)
@@ -17230,8 +17264,8 @@
                     endif
                 end do
                 !        write(7,*)'ig=',igroup,'ie=',ielgroup,'npeak=',npeak,'speak=',speak(1:npeak)
-                !!end¼ÆËã·åÖµµã¸öÊı
-                !!¼ÆËãµÈĞ§ÖÜÊı
+                !!endé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿè¡—ç¢‰æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·
+                !!é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå«Ñæ‹·é”Ÿæ–¤æ‹·é”Ÿ?
                 neqcy=0
                 if(npeak>0)then
                     !write(7,*)'*******************************npeak=*********************',npeak
@@ -17249,7 +17283,7 @@
                 end if
                 !	print *,'neqcy=',neqcy
                 element(ielem)%neqcy=neqcy
-                !!end¼ÆËãµÈĞ§ÖÜÊı
+                !!endé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿå«Ñæ‹·é”Ÿæ–¤æ‹·é”Ÿ?
                 !! take out the initial vertical normal stress and the horizontal shear stress
                 !sigma0=sum(element(ielem)%field(1)%STRES0(ndimn,:))/ngaus
                 sigma0=sum(element(ielem)%STRES0(ndimn,:))/ngaus
@@ -17426,11 +17460,11 @@
                 stemp=stran
                 stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
                 call main_stran_r( stemp, stmin)
-                ! if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))*0.5  !×î´ó¼ôÓ¦±ä(2D) !zhao
-                ! if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))*0.5  !×î´ó¼ôÓ¦±ä(3D)
-                if(ndimn==2)strain_s=(stmin(1)-stmin(2))!*0.5  !×î´ó¼ôÓ¦±ä(2D) !zhao
-                !if(ndimn==3)strain_s=(stmin(1)-stmin(3))!*0.5  !×î´ó¼ôÓ¦±ä(3D)
-                if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !×î´ó¶¯¼ôÓ¦±ä yuanli
+                ! if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(2D) !zhao
+                ! if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(3D)
+                if(ndimn==2)strain_s=(stmin(1)-stmin(2))!*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(2D) !zhao
+                !if(ndimn==3)strain_s=(stmin(1)-stmin(3))!*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(3D)
+                if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !é”Ÿæ–¤æ‹·è –î‡±é”Ÿæ¥ï¸¼æ‹·é”Ÿ? yuanli
                 !			 if (strain_s<=0) stop
                 !			 print *,'srain_s0'
                 allocate(sigx(nstre))
@@ -17482,13 +17516,13 @@
                     do igaus = 1,ngaus
                         bmatx = element(ielem)%field(1)%bmatx(:,:,igaus)
                         stran = matmul(bmatx,eldis)
-                        !Î´´¦ÀíÆ½ÃæÓ¦Á¦Çé¿ö
+                        !æœªé”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·å¹³é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿ?
                         stemp=stran
                         stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
                         call main_stran_r( stemp, stmin)
-                        if(ndimn==2)gamad=abs((stmin(1)-stmin(2)))   !*0.5  !×î´ó¼ôÓ¦±ä(2D) !zhao
-                        !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !×î´ó¼ôÓ¦±ä(3D)
-                        if(ndimn==3)gamad=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !×î´ó¶¯¼ôÓ¦±ä yuanli
+                        if(ndimn==2)gamad=abs((stmin(1)-stmin(2)))   !*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(2D) !zhao
+                        !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·åº”é”Ÿæ–¤æ‹·(3D)
+                        if(ndimn==3)gamad=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !é”Ÿæ–¤æ‹·è –î‡±é”Ÿæ¥ï¸¼æ‹·é”Ÿ? yuanli
                         gamad0 = element(ielem)%field(1)%gamamax0(igaus)
                         if(gamad>=gamad0)then
                             element(ielem)%field(1)%gamamax(igaus) = gamad
@@ -17569,7 +17603,7 @@
         endif
     enddo
     gamamax_ratio=abs(Tgamamax-Tgamamax0)/Tgamamax
-    write(gamamaxunit,*) '½áµã×î´óÏà¶ÔÎó²î',gamamax_error_max,'×ÜÎó²î',Tgamamax,'×ÜÏà¶ÔÎó²î',gamamax_ratio
+    write(gamamaxunit,*) 'é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·',gamamax_error_max,'é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿ?',Tgamamax,'é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·é”Ÿæ–¤æ‹·',gamamax_ratio
     close(gamamaxunit)
     end subroutine writegamamax
 
@@ -17704,9 +17738,9 @@
     ipi(listnode)=1
     select case(index)
     case(5,22)
-        if(sum(ipi)==3)call change4(listnode)   !¶ÔÍË»¯µÄËÄ±ßĞÎ´¦Àí
+        if(sum(ipi)==3)call change4(listnode)   !
     case(9)
-        if(sum(ipi)==6)then  !¶ÔÍË»¯µÄÁùÃæÌå´¦Àí
+        if(sum(ipi)==6)then  !
             ipi=0
             ipi(listnode(1:4))=1
 
@@ -17859,10 +17893,10 @@
                 elseif(criteria(1:2)=='DP')then
                     frict_angle=props(imat)%mechanical%solid%ClassicalEP%frict_angle
                     sigma0=props(imat)%mechanical%solid%ClassicalEP%sigma0
-                    !if(criteria=='DP1')then !Íâ¶¥µã
+                    !if(criteria=='DP1')then 
                     !    dp_alfa=2.0*sind(frict_angle)/(sqrt(3.0)*(3.0-sind(frict_angle)))
                     !    dp_k=   6.0*sigma0*cosd(frict_angle)/(sqrt(3.0)*(3.0-sind(frict_angle)))
-                    !elseif(criteria=='DP2')then !ÄÚ¶¥µã  DP3ÄÚÇĞ
+                    !elseif(criteria=='DP2')then 
                     dp_alfa=2.0*sind(frict_angle)/(sqrt(3.0)*(3.0+sind(frict_angle)))
                     dp_k=   6.0*sigma0*cosd(frict_angle)/(sqrt(3.0)*(3.0+sind(frict_angle)))
                     !else

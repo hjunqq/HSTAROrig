@@ -45,6 +45,9 @@
     real   (irk),allocatable::gapnod(:),nordis(:),gapgaus(:),shapecg(:,:),rot(:),sig(:),ft(:),dmatxd(:,:)
     real   (irk) aera,g,iy,iiy,iz,iiz,twist,itj,iea,dl,tincr_g,alfa
     real   (irk) factgi,ggg,a,b,c,d,l0,dgap0,dgap1,dgap,pps,strabar,tao,ftx,fcx,dx,ep !ep2010
+    real   (irk) penetration_ratio,current_gap,raw_factgi,ideal_factgi  ! æ–°å¢ç©¿é€æ£€æŸ¥å˜é‡
+    real   (irk) penetration_depth,initial_gap  ! ç©¿é€æ·±åº¦åˆ†æå˜é‡
+    real   (irk),allocatable:: stran_before(:)  ! ç”¨äºè°ƒè¯•åº”å˜ä¿®æ­£
     integer(ink),pointer::ldofs_t(:)
 
     !write(7,*)'iblks=',iblks,'iincs=',iincs,'idiv=',idiv,'istep=',istep,'iiter=',iiter
@@ -110,7 +113,7 @@
                 else
                     Nu=props(matno)%mechanical%solid%Nu !uxx !
                 endif  !20190810
-                if (icreep.ne.0.and.icreep<=3)e=group(igroup)%educ  !20180630  20190810(¿´Çé¿ö´ıĞŞ¸Ä£¡£©
+                if (icreep.ne.0.and.icreep<=3)e=group(igroup)%educ  !20180630  20190810(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ş¸Ä£ï¿½ï¿½ï¿½
                 alfa =props(matno)%mechanical%solid%alfa
                 if (ntpel==1)bulkt   =e/(3.0*(1.0-2.0*nu))
             endif
@@ -409,10 +412,10 @@
                         endif
                         !end crack 2006
                         if (name=='NORMK'.or.name=='NOLINORMK')then
-                            rotation=>element(ielem)%rotation !µæ²ã²ÄÁÏĞèÒªÇóÕâÒ»ÏÂ·¨Ïò
+                            rotation=>element(ielem)%rotation !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½Ò»ï¿½Â·ï¿½ï¿½ï¿½
                             ex=e
                             if (name=='NOLINORMK')then
-                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !ÓÃÉÏÒ»²½Ó¦Á¦Çóµ¯Ä£
+                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Ä£
                             endif
                             call dmatxf_change(ex,dcmatx,rotation)
                             nullify(rotation)
@@ -491,7 +494,7 @@
                             nullify(rotation)
                         endif
 
-                        element(ielem)%field(1)%bmatx(:,:,igaus)=bmatx !20231215YL´æ´¢B¾ØÕó
+                        element(ielem)%field(1)%bmatx(:,:,igaus)=bmatx !20231215YLï¿½æ´¢Bï¿½ï¿½ï¿½ï¿½
                         ! compute strain and elastic stres increment
 
 
@@ -499,7 +502,9 @@
                         if (special(1:1)=='D')stran=matmul(bmatx,eldis_dd)
 
 
+                        ! è®°å½•ä¿®æ­£å‰åçš„åº”å˜
                         stran=stran*factgi
+
                         if(element(ielem)%icper==1)stran=stran-element(ielem)%strainx0(1:nstre,igaus) !20231215YL
                         ! for creep and temperature---> stran=stran-stran(creep)-stran(temp)
                         if (jfield/=0.or.icreep>=3)   &
@@ -553,14 +558,14 @@
 
                         endif
                         if(upliftin>0.and.iblks>=upliftin.and.uplift_ic/=0)  &
-                            strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220409(ÉøÍ¸Ñ¹Á¦£©
+                            strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220409(ï¿½ï¿½Í¸Ñ¹ï¿½ï¿½ï¿½ï¿½
                         !if(upliftin>0.and.iblks>=upliftin.and.uplift_ic/=0.and.ielgroup==1) then
                         !      write(7,*)'ie=',ielem,'igaus=',igaus,'upliftg=',upliftg
                         !           endif
 
                         if(upliftin==0.and.uplift_ic/=0.and.kind_wt>0) then
                             if(element(ielem)%field(1)%isatu(igaus)>=1) &
-                                strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220502(ÉøÍ¸Ñ¹Á¦£©
+                                strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220502(ï¿½ï¿½Í¸Ñ¹ï¿½ï¿½ï¿½ï¿½
                         endif
                         !if(ielem==1.and.igaus==1) &
                         !write(7,*)'ie_residu=',ielem,'igaus=',igaus,'strsg=',strsg
@@ -751,7 +756,7 @@
 
                     element(ielem)%field(1)%gpvar(:,1)=eload0
 
-                    eload=eload0 !ÄÚÁ¦¼°×ª»»ºóµÄºÉÔØ¾ùÎªÕûÌå×ø±êÏÂµÄ½á¹û  !20200220
+                    eload=eload0 !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½Äºï¿½ï¿½Ø¾ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÂµÄ½ï¿½ï¿½  !20200220
                     !if(kinit_g==2.and.igroup_iblks/=1)then  !20201203
                     if((TYPE_PROBLEM=='Q'.and.(kinit_g==2.and.igroup_iblks/=1)).or. &
                         (TYPE_PROBLEM/='Q'.and.kinit_g==2))then  !20211214
@@ -1527,7 +1532,7 @@
             else
                 Nu=props(matno)%mechanical%solid%Nu !uxx !
             endif  !20190810
-            if (icreep.ne.0)e=group(igroup)%educ  !20190810(´ıĞŞ¸Ä£¡£©
+            if (icreep.ne.0)e=group(igroup)%educ  !20190810(ï¿½ï¿½ï¿½Ş¸Ä£ï¿½ï¿½ï¿½
             allocate (lnods(nnode),ldofs(nevab),    &
                 eldis(nevab),eload(nevab))
             thick=1.
@@ -1840,7 +1845,7 @@
             else
                 Nu=props(matno)%mechanical%solid%Nu !uxx !
             endif  !20190810
-            if (icreep.ne.0)e=group(igroup)%educ  !¿¼ÂÇĞì±ä²ÎÊı±ä»¯Ê±£¬´ıĞŞ¸Ä
+            if (icreep.ne.0)e=group(igroup)%educ  !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ä»¯Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Ş¸ï¿½
 
             allocate (lnods(nnode),ldofs(nevab),    &
                 eldis(nevab),eload(nevab))
@@ -2659,6 +2664,8 @@
     real   (irk) harden0,hards,rot(3),gpcod(:)
     real   (irk) s,smax,qmax,et,vt,phi,density,snorm,ft,yld,p0,px,ratio
     real   (irk),pointer::rr(:,:)
+    ! å±€éƒ¨å˜é‡å£°æ˜å·²ç§»é™¤ï¼Œä¸å†éœ€è¦
+
 
     eps=-1.e-3
     material=props(matno)%mechanical%solid%material
@@ -2675,7 +2682,7 @@
         if(type_load/='LOAD2'.and.type_nl==4)strsg0=strsg !806
         stres=matmul(dmatx,stran)
         strsg=strsg0+stres
-        element(ielem)%field(1)%gpvar(1:nstre,igaus)=strsg  !´¢´æ¾Ö²¿×ø±êÏÂÓ¦Á¦
+        element(ielem)%field(1)%gpvar(1:nstre,igaus)=strsg  !ï¿½ï¿½ï¿½ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½
         call  stres_local_to_global(strsg,element(ielem)%rotation)
         deallocate(strsg0)
 
@@ -2715,16 +2722,17 @@
             !20231215_YL
         elseif(model=='JANBU'.or.model=='EQUBOLT'.or.model=='WATERTIGHT')then  !20210913
             !20231215_YL
+            !20231215_YL
             Ft    =props(matno)%mechanical%solid%Goodman%Ft
             strsg=element(ielem)%field(1)%gpvar(1:nstre,igaus)
             allocate(strsg0(size(strsg)))  !806
-            !		if(type_load=='LOAD2') &   !806
             strsg0=element(ielem)%field(1)%gpvar0(1:nstre,igaus) !806
             if(type_load/='LOAD2'.and.type_nl==4)strsg0=strsg !806
             sgtot=strsg
             allocate(evk(ndimn))
             evk=element(ielem)%evk(:,igaus)
-            sgtot=strsg0+evk*stran
+            sgtot=strsg0+evk*stran   !202501
+            !write(7,*)'idiv=',idiv,'ie=',ielem,'ig=',igaus,'evk=',evk,'stran=',stran,'sgtot=',sgtot
 
             strsg=sgtot
             element(ielem)%field(1)%gpvar(1:nstre,igaus)=sgtot
@@ -3131,8 +3139,8 @@
         !	endif
 
         humidification=props(matno)%mechanical%solid%SandPZ%humidification
-        !	if(abs(humidification)==2.and.iblks==uplift_ic.and.istep==1.and.iiter==1)then   !  ÔÚ½şË®Ê±Ò»´Î¿Û³ıÓ¦±ä
-        if(abs(humidification)==2.and.iblks==uplift_ic)then   !  ÔÚ½şË®Ê±Ò»´Î¿Û³ıÓ¦±ä
+        !	if(abs(humidification)==2.and.iblks==uplift_ic.and.istep==1.and.iiter==1)then   !  ï¿½Ú½ï¿½Ë®Ê±Ò»ï¿½Î¿Û³ï¿½Ó¦ï¿½ï¿½
+        if(abs(humidification)==2.and.iblks==uplift_ic)then   !  ï¿½Ú½ï¿½Ë®Ê±Ò»ï¿½Î¿Û³ï¿½Ó¦ï¿½ï¿½
             if(element(ielem)%field(1)%isatu(igaus)==1)then
                 curconfining=sum(strsg(1:ndimn))/real(ndimn)
                 if(ndimn==2.and.nstre==4)curconfining=(sum(strsg(1:ndimn))+strsg(4))/real(ndimn+1)
@@ -3140,20 +3148,20 @@
 
                 bline=props(matno)%mechanical%solid%SandPZ%bline(1)
                 eline=props(matno)%mechanical%solid%SandPZ%eline(1)
-                call get_humidification(bline,eline,curconfining,curSlevel,sa)        !²åÖµÖáÓ¦±ä
+                call get_humidification(bline,eline,curconfining,curSlevel,sa)        !ï¿½ï¿½Öµï¿½ï¿½Ó¦ï¿½ï¿½
 
                 bline=props(matno)%mechanical%solid%SandPZ%bline(2)
                 eline=props(matno)%mechanical%solid%SandPZ%eline(2)
-                call get_humidification(bline,eline,curconfining,curSlevel,sv)        !²åÖµÌåÓ¦±ä
+                call get_humidification(bline,eline,curconfining,curSlevel,sv)        !ï¿½ï¿½Öµï¿½ï¿½Ó¦ï¿½ï¿½
 
                 if(ielem==group(igroup)%list(1).and.istep==1.and.iiter==1)then
                     write(7,'(a,3i6,10e16.8)')'igroup,ielem,igaus,sa,sv,curconfining,curSlevel,stran=',igroup,ielem,igaus,sa,sv,curconfining,curSlevel,stran
                 endif
 
-                sa=(3*sa-sv)/3.0    !ÓÉÖáÓ¦±äºÍÌåÓ¦±äÇóµÃÆ«Ó¦±ä
+                sa=(3*sa-sv)/3.0    !ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½Æ«Ó¦ï¿½ï¿½
                 call dispatch_sa_sv(igroup,ielem,igaus,matno,nstre,strsg,sa,sv,stran)
 
-                element(ielem)%field(1)%isatu(igaus)=2  ! µ¥Ôª¸ßË¹µãµÄÊª»¯Ö»¿¼ÂÇÒ»´Î
+                element(ielem)%field(1)%isatu(igaus)=2  ! ï¿½ï¿½Ôªï¿½ï¿½Ë¹ï¿½ï¿½ï¿½Êªï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
 
             endif
         endif
@@ -3533,17 +3541,17 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !´ËÊ±Çó³öµÄSTEFFÎªµÚ¶şÓ¦±ä²»±äÁ¿µÄ¿ª·½,SmeanÎªÓ¦±äÕÅÁ¿µÚÒ»²»±äÁ¿
+    !ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½STEFFÎªï¿½Ú¶ï¿½Ó¦ï¿½ä²»ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½,SmeanÎªÓ¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     A=props(matno)%mechanical%solid%Concrete%A
     B=props(matno)%mechanical%solid%Concrete%B
     C=props(matno)%mechanical%solid%Concrete%C
     D=props(matno)%mechanical%solid%Concrete%D
     et0=ct*fc/e
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !×î´óÖ÷Ó¦±ä
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½
 
     a1=a*steff**2
     b1=b*steff+c*stran1+3.*d*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !Çó½â¶ş´Î·½³ÌµÃµ½
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !ï¿½ï¿½ï¿½ï¿½ï¿½Î·ï¿½ï¿½ÌµÃµï¿½
     !print*,et0
     if(estar<et0)then
         damage=0.
@@ -3589,7 +3597,7 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !´ËÊ±Çó³öµÄSTEFFÎªµÚ¶şÓ¦±ä²»±äÁ¿µÄ¿ª·½,SmeanÎªÓ¦±äÕÅÁ¿µÚÒ»²»±äÁ¿
+    !ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½STEFFÎªï¿½Ú¶ï¿½Ó¦ï¿½ä²»ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½,SmeanÎªÓ¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     if(Bparameter/=0.and.props(matno)%mechanical%solid%ie/=0)then !20190810
         e=xvalue(props(matno)%mechanical%solid%ie)
     else
@@ -3619,13 +3627,13 @@
     !ce=0.445*x0**6-2.855*x0**5+5.736*x0**4-1.93*x0**3-5.264*x0**2+3.558*x0-0.182
     !de=-.256*x0**6+1.6*x0**5-2.986*x0**4+0.322*x0**3+3.85*x0**2-2.3*x0+0.738
 
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !×î´óÖ÷Ó¦±ä
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½
 
     !if(istep>=10) &
     !write(7,*)'x0=',x0,'ae,be,ce,de=',ae,be,ce,de,'stran1=',stran1
     a1=ae*steff**2
     b1=be*steff+ce*stran1+3.*de*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !Çó½â¶ş´Î·½³ÌµÃµ½
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !ï¿½ï¿½ï¿½ï¿½ï¿½Î·ï¿½ï¿½ÌµÃµï¿½
     !write(7,*)'estar=',estar
 
     element(ielem)%field(1)%strain(1:nstre,igaus)=stran
@@ -3717,7 +3725,7 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !´ËÊ±Çó³öµÄSTEFFÎªµÚ¶şÓ¦±ä²»±äÁ¿µÄ¿ª·½,SmeanÎªÓ¦±äÕÅÁ¿µÚÒ»²»±äÁ¿
+    !ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½STEFFÎªï¿½Ú¶ï¿½Ó¦ï¿½ä²»ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½,SmeanÎªÓ¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     if(Bparameter/=0.and.props(matno)%mechanical%solid%ie/=0)then !20190810
         e=xvalue(props(matno)%mechanical%solid%ie)
     else
@@ -3740,11 +3748,11 @@
     ce=0.445*x0**6-2.855*x0**5+5.736*x0**4-1.93*x0**3-5.264*x0**2+3.558*x0-0.182
     de=-.256*x0**6+1.6*x0**5-2.986*x0**4+0.322*x0**3+3.85*x0**2-2.3*x0+0.738
 
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !×î´óÖ÷Ó¦±ä
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½
 
     a1=ae*steff**2
     b1=be*steff+ce*stran1+3.*de*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !Çó½â¶ş´Î·½³ÌµÃµ½
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !ï¿½ï¿½ï¿½ï¿½ï¿½Î·ï¿½ï¿½ÌµÃµï¿½
 
     element(ielem)%field(1)%strain(1:nstre,igaus)=stran
     element(ielem)%field(1)%strain(nstre+1,igaus)=estar
@@ -4363,11 +4371,11 @@
                         if (ikh==2)coef=-ttime*cmplx(ttime,group(igroup)%alfa)
                     elseif(fieldid(ifield:ifield)=='W') then
                         if (nrfields==2)then
-                            if (ikh==1)coef=-1./cmplx(0.,ttime)  !¶Ô³ÆĞÔÏµÊıÓë×ÔÉí³Ë»ı
-                            if (ikh==2)coef=cmplx(1.,0.)  !¶Ô³ÆĞÔÏµÊıÓë×ÔÉí³Ë»ı
+                            if (ikh==1)coef=-1./cmplx(0.,ttime)  !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
+                            if (ikh==2)coef=cmplx(1.,0.)  !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
                         elseif(nrfields==1)then
-                            if (ikh==1)coef=-1./cmplx(ttime**2,0.)/theta1/ditime   !¶Ô³ÆĞÔÏµÊıÓë×ÔÉí³Ë»ı
-                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !¶Ô³ÆĞÔÏµÊıÓë×ÔÉí³Ë»ı
+                            if (ikh==1)coef=-1./cmplx(ttime**2,0.)/theta1/ditime   !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
+                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !ï¿½Ô³ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½
                             if (ifsnedge/=0)then !ifs2006
                                 if (ikh==1)coef=cmplx(-1./ttime**2,0.)/beeta2/ditime**2
                                 if (ikh==2)coef=cmplx(1.,0.)/beeta2/ditime**2
@@ -5506,7 +5514,7 @@
 
             do igaus=1,ngaus
                 ! compute initial strain and the omega for creep
-                element(ielem)%field(1)%stran0_s(:,igaus)=0. !Êª»¯±äĞÎÖ»ÔÚ³õÊ¼Êª»¯¼ÆËãÒ»´Î
+                element(ielem)%field(1)%stran0_s(:,igaus)=0. !Êªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½Ú³ï¿½Ê¼Êªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
                 !write(7,*)'ie=',ielem,'ig=',igaus,'isatu=',element(ielem)%field(1)%isatu(igaus)
                 if(element(ielem)%field(1)%isatu(igaus)/=1)cycle
                 steff=element(ielem)%field(1)%gpvar0(1+nstre,igaus)
@@ -5568,7 +5576,7 @@
 
     call invart(matno,nstre,devia,sig,theta,q,p,rj2,rj3,sint3)
 
-    if(humidification==2)then   ! ÓÃeta/etafÇóÓ¦Á¦Ë®Æ½
+    if(humidification==2)then   ! ï¿½ï¿½eta/etafï¿½ï¿½Ó¦ï¿½ï¿½Ë®Æ½
 
         sinfg=3*d(3)/(6.+d(3))
         sinff=3*d(5)/(6.+d(5))
@@ -5581,7 +5589,7 @@
         ETAF=(1.0+1.0/D(6))*XMFC  ! nzw PHD Thesis, (3.8.28a)
         curSlevel=eta/etaf
 
-    elseif(humidification==-2)then   !ÓÃDCÄ£ĞÍÖĞµÄ·½·¨ÇóÓ¦Á¦Ë®Æ½
+    elseif(humidification==-2)then   !ï¿½ï¿½DCÄ£ï¿½ï¿½ï¿½ĞµÄ·ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½Ë®Æ½
         ROOT3=1.73205080757
         pei  = 3.1415926535
         cohes=d(17)
@@ -5589,7 +5597,7 @@
         P0  =d(19)
         Pa  =d(20)
 
-        smean=-p    !ĞŞ¸ÄpºÍqÊÇÒòÎªinvartÖĞPZ²ÄÁÏÇóµÃµÄpºÍqºÍDCµÄÓĞµã²»Í¬
+        smean=-p    !ï¿½Ş¸ï¿½pï¿½ï¿½qï¿½ï¿½ï¿½ï¿½Îªinvartï¿½ï¿½PZï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½pï¿½ï¿½qï¿½ï¿½DCï¿½ï¿½ï¿½Ğµã²»Í¬
         steff=q/sqrt(3.d0)
 
         ps(3)=-(2.*steff/root3*sin(theta+2*pei/3.)+smean)
@@ -5637,7 +5645,7 @@
     endif
 
     do istre=1,nstre
-        stran(istre)=stran(istre)-sv/100.0*a1(istre)   !³ı100ÊÇÒòÎªÓÉÇúÏß²åÖµµÃµ½µÄÌåÓ¦±äµ¥Î»ÊÇ%
+        stran(istre)=stran(istre)-sv/100.0*a1(istre)   !ï¿½ï¿½100ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ß²ï¿½Öµï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½äµ¥Î»ï¿½ï¿½%
         stran(istre)=stran(istre)-alfa1*a2(istre)
     end do
 
