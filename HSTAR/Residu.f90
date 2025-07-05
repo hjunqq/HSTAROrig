@@ -113,7 +113,7 @@
                 else
                     Nu=props(matno)%mechanical%solid%Nu !uxx !
                 endif  !20190810
-                if (icreep.ne.0.and.icreep<=3)e=group(igroup)%educ  !20180630  20190810(��������޸ģ���
+                if (icreep.ne.0.and.icreep<=3)e=group(igroup)%educ  !20180630  20190810(看情况待修改！）
                 alfa =props(matno)%mechanical%solid%alfa
                 if (ntpel==1)bulkt   =e/(3.0*(1.0-2.0*nu))
             endif
@@ -412,10 +412,10 @@
                         endif
                         !end crack 2006
                         if (name=='NORMK'.or.name=='NOLINORMK')then
-                            rotation=>element(ielem)%rotation !��������Ҫ����һ�·���
+                            rotation=>element(ielem)%rotation !垫层材料需要求这一下法向
                             ex=e
                             if (name=='NOLINORMK')then
-                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !����һ��Ӧ����ģ
+                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !用上一步应力求弹模
                             endif
                             call dmatxf_change(ex,dcmatx,rotation)
                             nullify(rotation)
@@ -494,7 +494,7 @@
                             nullify(rotation)
                         endif
 
-                        element(ielem)%field(1)%bmatx(:,:,igaus)=bmatx !20231215YL�洢B����
+                        element(ielem)%field(1)%bmatx(:,:,igaus)=bmatx !20231215YL存储B矩阵
                         ! compute strain and elastic stres increment
 
 
@@ -502,9 +502,7 @@
                         if (special(1:1)=='D')stran=matmul(bmatx,eldis_dd)
 
 
-                        ! 记录修正前后的应变
                         stran=stran*factgi
-
                         if(element(ielem)%icper==1)stran=stran-element(ielem)%strainx0(1:nstre,igaus) !20231215YL
                         ! for creep and temperature---> stran=stran-stran(creep)-stran(temp)
                         if (jfield/=0.or.icreep>=3)   &
@@ -558,14 +556,14 @@
 
                         endif
                         if(upliftin>0.and.iblks>=upliftin.and.uplift_ic/=0)  &
-                            strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220409(��͸ѹ����
+                            strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220409(渗透压力）
                         !if(upliftin>0.and.iblks>=upliftin.and.uplift_ic/=0.and.ielgroup==1) then
                         !      write(7,*)'ie=',ielem,'igaus=',igaus,'upliftg=',upliftg
                         !           endif
 
                         if(upliftin==0.and.uplift_ic/=0.and.kind_wt>0) then
                             if(element(ielem)%field(1)%isatu(igaus)>=1) &
-                                strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220502(��͸ѹ����
+                                strsg(1:ndimn)=strsg(1:ndimn)-upliftg  !20220502(渗透压力）
                         endif
                         !if(ielem==1.and.igaus==1) &
                         !write(7,*)'ie_residu=',ielem,'igaus=',igaus,'strsg=',strsg
@@ -756,7 +754,7 @@
 
                     element(ielem)%field(1)%gpvar(:,1)=eload0
 
-                    eload=eload0 !������ת����ĺ��ؾ�Ϊ���������µĽ��  !20200220
+                    eload=eload0 !内力及转换后的荷载均为整体坐标下的结果  !20200220
                     !if(kinit_g==2.and.igroup_iblks/=1)then  !20201203
                     if((TYPE_PROBLEM=='Q'.and.(kinit_g==2.and.igroup_iblks/=1)).or. &
                         (TYPE_PROBLEM/='Q'.and.kinit_g==2))then  !20211214
@@ -1532,7 +1530,7 @@
             else
                 Nu=props(matno)%mechanical%solid%Nu !uxx !
             endif  !20190810
-            if (icreep.ne.0)e=group(igroup)%educ  !20190810(���޸ģ���
+            if (icreep.ne.0)e=group(igroup)%educ  !20190810(待修改！）
             allocate (lnods(nnode),ldofs(nevab),    &
                 eldis(nevab),eload(nevab))
             thick=1.
@@ -1845,7 +1843,7 @@
             else
                 Nu=props(matno)%mechanical%solid%Nu !uxx !
             endif  !20190810
-            if (icreep.ne.0)e=group(igroup)%educ  !�����������仯ʱ�����޸�
+            if (icreep.ne.0)e=group(igroup)%educ  !考虑徐变参数变化时，待修改
 
             allocate (lnods(nnode),ldofs(nevab),    &
                 eldis(nevab),eload(nevab))
@@ -2664,7 +2662,6 @@
     real   (irk) harden0,hards,rot(3),gpcod(:)
     real   (irk) s,smax,qmax,et,vt,phi,density,snorm,ft,yld,p0,px,ratio
     real   (irk),pointer::rr(:,:)
-    ! 局部变量声明已移除，不再需要
 
 
     eps=-1.e-3
@@ -2682,7 +2679,7 @@
         if(type_load/='LOAD2'.and.type_nl==4)strsg0=strsg !806
         stres=matmul(dmatx,stran)
         strsg=strsg0+stres
-        element(ielem)%field(1)%gpvar(1:nstre,igaus)=strsg  !����ֲ�������Ӧ��
+        element(ielem)%field(1)%gpvar(1:nstre,igaus)=strsg  !储存局部坐标下应力
         call  stres_local_to_global(strsg,element(ielem)%rotation)
         deallocate(strsg0)
 
@@ -3139,8 +3136,8 @@
         !	endif
 
         humidification=props(matno)%mechanical%solid%SandPZ%humidification
-        !	if(abs(humidification)==2.and.iblks==uplift_ic.and.istep==1.and.iiter==1)then   !  �ڽ�ˮʱһ�ο۳�Ӧ��
-        if(abs(humidification)==2.and.iblks==uplift_ic)then   !  �ڽ�ˮʱһ�ο۳�Ӧ��
+        !	if(abs(humidification)==2.and.iblks==uplift_ic.and.istep==1.and.iiter==1)then   !  在浸水时一次扣除应变
+        if(abs(humidification)==2.and.iblks==uplift_ic)then   !  在浸水时一次扣除应变
             if(element(ielem)%field(1)%isatu(igaus)==1)then
                 curconfining=sum(strsg(1:ndimn))/real(ndimn)
                 if(ndimn==2.and.nstre==4)curconfining=(sum(strsg(1:ndimn))+strsg(4))/real(ndimn+1)
@@ -3148,20 +3145,20 @@
 
                 bline=props(matno)%mechanical%solid%SandPZ%bline(1)
                 eline=props(matno)%mechanical%solid%SandPZ%eline(1)
-                call get_humidification(bline,eline,curconfining,curSlevel,sa)        !��ֵ��Ӧ��
+                call get_humidification(bline,eline,curconfining,curSlevel,sa)        !插值轴应变
 
                 bline=props(matno)%mechanical%solid%SandPZ%bline(2)
                 eline=props(matno)%mechanical%solid%SandPZ%eline(2)
-                call get_humidification(bline,eline,curconfining,curSlevel,sv)        !��ֵ��Ӧ��
+                call get_humidification(bline,eline,curconfining,curSlevel,sv)        !插值体应变
 
                 if(ielem==group(igroup)%list(1).and.istep==1.and.iiter==1)then
                     write(7,'(a,3i6,10e16.8)')'igroup,ielem,igaus,sa,sv,curconfining,curSlevel,stran=',igroup,ielem,igaus,sa,sv,curconfining,curSlevel,stran
                 endif
 
-                sa=(3*sa-sv)/3.0    !����Ӧ�����Ӧ�����ƫӦ��
+                sa=(3*sa-sv)/3.0    !由轴应变和体应变求得偏应变
                 call dispatch_sa_sv(igroup,ielem,igaus,matno,nstre,strsg,sa,sv,stran)
 
-                element(ielem)%field(1)%isatu(igaus)=2  ! ��Ԫ��˹���ʪ��ֻ����һ��
+                element(ielem)%field(1)%isatu(igaus)=2  ! 单元高斯点的湿化只考虑一次
 
             endif
         endif
@@ -3541,17 +3538,17 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !��ʱ�����STEFFΪ�ڶ�Ӧ�䲻�����Ŀ���,SmeanΪӦ��������һ������
+    !此时求出的STEFF为第二应变不变量的开方,Smean为应变张量第一不变量
     A=props(matno)%mechanical%solid%Concrete%A
     B=props(matno)%mechanical%solid%Concrete%B
     C=props(matno)%mechanical%solid%Concrete%C
     D=props(matno)%mechanical%solid%Concrete%D
     et0=ct*fc/e
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !�����Ӧ��
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !最大主应变
 
     a1=a*steff**2
     b1=b*steff+c*stran1+3.*d*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !�����η��̵õ�
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !求解二次方程得到
     !print*,et0
     if(estar<et0)then
         damage=0.
@@ -3597,7 +3594,7 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !��ʱ�����STEFFΪ�ڶ�Ӧ�䲻�����Ŀ���,SmeanΪӦ��������һ������
+    !此时求出的STEFF为第二应变不变量的开方,Smean为应变张量第一不变量
     if(Bparameter/=0.and.props(matno)%mechanical%solid%ie/=0)then !20190810
         e=xvalue(props(matno)%mechanical%solid%ie)
     else
@@ -3627,13 +3624,13 @@
     !ce=0.445*x0**6-2.855*x0**5+5.736*x0**4-1.93*x0**3-5.264*x0**2+3.558*x0-0.182
     !de=-.256*x0**6+1.6*x0**5-2.986*x0**4+0.322*x0**3+3.85*x0**2-2.3*x0+0.738
 
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !�����Ӧ��
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !最大主应变
 
     !if(istep>=10) &
     !write(7,*)'x0=',x0,'ae,be,ce,de=',ae,be,ce,de,'stran1=',stran1
     a1=ae*steff**2
     b1=be*steff+ce*stran1+3.*de*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !�����η��̵õ�
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !求解二次方程得到
     !write(7,*)'estar=',estar
 
     element(ielem)%field(1)%strain(1:nstre,igaus)=stran
@@ -3725,7 +3722,7 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     CALL INVART (matno,nstre,DEVIA,stemp,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
-    !��ʱ�����STEFFΪ�ڶ�Ӧ�䲻�����Ŀ���,SmeanΪӦ��������һ������
+    !此时求出的STEFF为第二应变不变量的开方,Smean为应变张量第一不变量
     if(Bparameter/=0.and.props(matno)%mechanical%solid%ie/=0)then !20190810
         e=xvalue(props(matno)%mechanical%solid%ie)
     else
@@ -3748,11 +3745,11 @@
     ce=0.445*x0**6-2.855*x0**5+5.736*x0**4-1.93*x0**3-5.264*x0**2+3.558*x0-0.182
     de=-.256*x0**6+1.6*x0**5-2.986*x0**4+0.322*x0**3+3.85*x0**2-2.3*x0+0.738
 
-    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !�����Ӧ��
+    stran1=2*steff/sqrt(3.)*sin(theta+2.*3.14159/3.)+smean  !最大主应变
 
     a1=ae*steff**2
     b1=be*steff+ce*stran1+3.*de*smean
-    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !�����η��̵õ�
+    estar=0.5*(b1+sqrt(b1**2+4.*a1))  !求解二次方程得到
 
     element(ielem)%field(1)%strain(1:nstre,igaus)=stran
     element(ielem)%field(1)%strain(nstre+1,igaus)=estar
@@ -4371,11 +4368,11 @@
                         if (ikh==2)coef=-ttime*cmplx(ttime,group(igroup)%alfa)
                     elseif(fieldid(ifield:ifield)=='W') then
                         if (nrfields==2)then
-                            if (ikh==1)coef=-1./cmplx(0.,ttime)  !�Գ���ϵ���������˻�
-                            if (ikh==2)coef=cmplx(1.,0.)  !�Գ���ϵ���������˻�
+                            if (ikh==1)coef=-1./cmplx(0.,ttime)  !对称性系数与自身乘积
+                            if (ikh==2)coef=cmplx(1.,0.)  !对称性系数与自身乘积
                         elseif(nrfields==1)then
-                            if (ikh==1)coef=-1./cmplx(ttime**2,0.)/theta1/ditime   !�Գ���ϵ���������˻�
-                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !�Գ���ϵ���������˻�
+                            if (ikh==1)coef=-1./cmplx(ttime**2,0.)/theta1/ditime   !对称性系数与自身乘积
+                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !对称性系数与自身乘积
                             if (ifsnedge/=0)then !ifs2006
                                 if (ikh==1)coef=cmplx(-1./ttime**2,0.)/beeta2/ditime**2
                                 if (ikh==2)coef=cmplx(1.,0.)/beeta2/ditime**2
@@ -5514,7 +5511,7 @@
 
             do igaus=1,ngaus
                 ! compute initial strain and the omega for creep
-                element(ielem)%field(1)%stran0_s(:,igaus)=0. !ʪ������ֻ�ڳ�ʼʪ������һ��
+                element(ielem)%field(1)%stran0_s(:,igaus)=0. !湿化变形只在初始湿化计算一次
                 !write(7,*)'ie=',ielem,'ig=',igaus,'isatu=',element(ielem)%field(1)%isatu(igaus)
                 if(element(ielem)%field(1)%isatu(igaus)/=1)cycle
                 steff=element(ielem)%field(1)%gpvar0(1+nstre,igaus)
@@ -5576,7 +5573,7 @@
 
     call invart(matno,nstre,devia,sig,theta,q,p,rj2,rj3,sint3)
 
-    if(humidification==2)then   ! ��eta/etaf��Ӧ��ˮƽ
+    if(humidification==2)then   ! 用eta/etaf求应力水平
 
         sinfg=3*d(3)/(6.+d(3))
         sinff=3*d(5)/(6.+d(5))
@@ -5589,7 +5586,7 @@
         ETAF=(1.0+1.0/D(6))*XMFC  ! nzw PHD Thesis, (3.8.28a)
         curSlevel=eta/etaf
 
-    elseif(humidification==-2)then   !��DCģ���еķ�����Ӧ��ˮƽ
+    elseif(humidification==-2)then   !用DC模型中的方法求应力水平
         ROOT3=1.73205080757
         pei  = 3.1415926535
         cohes=d(17)
@@ -5597,7 +5594,7 @@
         P0  =d(19)
         Pa  =d(20)
 
-        smean=-p    !�޸�p��q����Ϊinvart��PZ������õ�p��q��DC���е㲻ͬ
+        smean=-p    !修改p和q是因为invart中PZ材料求得的p和q和DC的有点不同
         steff=q/sqrt(3.d0)
 
         ps(3)=-(2.*steff/root3*sin(theta+2*pei/3.)+smean)
@@ -5645,7 +5642,7 @@
     endif
 
     do istre=1,nstre
-        stran(istre)=stran(istre)-sv/100.0*a1(istre)   !��100����Ϊ�����߲�ֵ�õ�����Ӧ�䵥λ��%
+        stran(istre)=stran(istre)-sv/100.0*a1(istre)   !除100是因为由曲线插值得到的体应变单位是%
         stran(istre)=stran(istre)-alfa1*a2(istre)
     end do
 

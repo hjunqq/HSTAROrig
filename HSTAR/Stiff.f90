@@ -410,7 +410,7 @@
                             rotation=>element(ielem)%rotation
                             ex=e
                             if (name=='NOLINORMK')then
-                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !����һ��Ӧ����ģ
+                                call find_e_NOLINORMK(matno,rotation,element(ielem)%field(1)%gpvar0(1:nstre,igaus),ex) !用上一步应力求弹模
                             endif
                             call dmatxf_change(ex,dmatx,rotation)
                             nullify(rotation)
@@ -659,13 +659,13 @@
                 endif
                 ! assembling to element stiff matrix
 
-                if (alfa_p4>0.and.index==22)then !20231007  ����ת���նȰ��ֲ��������ʱ�Զ�����ָ����ֵ(��ʵ�ϸ����ɶ��ѱ�Լ����
+                if (alfa_p4>0.and.index==22)then !20231007  对于转动刚度按局部坐标求解时自动赋予指定大值(事实上该自由度已被约束）
                     lnods=>element(ielem)%field(1)%lnods_f
                     if(any(local_p4(lnods)==1))call change_estif_p4
                     nullify(lnods)
                 endif  !20231007
 
-                !if(index==1.and.(any(listglocbeam==igroup)))call change_estif_barsteel !����ͨ��ֻ�ı�B����ʵ��
+                !if(index==1.and.(any(listglocbeam==igroup)))call change_estif_barsteel !可以通过只改变B矩阵实现
 
                 element(ielem)%field(1)%khandmc(1)%fstif=estif*thick
                 !if(ielem==763)then
@@ -869,7 +869,7 @@
                 if ((appear_process(igroup,iblks-1)==0.or.  &
                     (appear_process(igroup,iblks-1)==1.and.    &
                     appear_process(igroup,iblks)==2))       &
-                    .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1                
+                    .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1
 10              continue
                 call PKPN(matno,evk,sgtot,first)
                 element(ielem)%evk(:,igaus)=evk
@@ -887,7 +887,7 @@
             end select ! type_stiff
 
             !20231215YL
-        elseif(model=='WATERTIGHT')then !20231007 ֹˮ
+        elseif(model=='WATERTIGHT')then !20231007 止水
             allocate(evk(ndimn))
             call PKPN_watertight(matno,element(ielem)%field(1)%relat_dis_gaus(:,igaus),EVK)
             element(ielem)%evk(:,igaus)=evk
@@ -1185,7 +1185,7 @@
 
 
         humidification=props(matno)%mechanical%solid%SandPZ%humidification
-        if(type_problem=='F'.and.humidification==3)then    !�õ�lamdaΪ���������
+        if(type_problem=='F'.and.humidification==3)then    !得到lamda为了求阻尼比
             if(type_nl==5)then
                 stran=element(ielem)%field(1)%gpvar0(nstre+1:2*nstre,igaus)
             elseif(type_nl==4.or.type_nl==8)then
@@ -1194,11 +1194,11 @@
 
             CALL INVART(matno,nstre,DEVIA,strsg,THETA,STEFF,SMEAN,vj2,vj3,sint3,rot)
             !		write(7,*)'ie=',ielem,'igaus=',igaus,'stran=',stran
-            steff=steff/sqrt(3.d0);smean=-smean   !��PZ������invart�ӳ�������p��qʱ�볣�治̫һ��
+            steff=steff/sqrt(3.d0);smean=-smean   !因PZ材料在invart子程序里求p、q时与常规不太一样
 
             call Get_SandPZ_lamda(matno,steff,theta,smean,stran,lamda)
             element(ielem)%egaus(order_int)%vdval(6,igaus)=lamda
-            element(ielem)%egaus(order_int)%vdval0(6,igaus)=lamda  !vd(6) �涯��ʱ��lamda
+            element(ielem)%egaus(order_int)%vdval0(6,igaus)=lamda  !vd(6) 存动力时的lamda
         endif
 
         !stran=stran0   !20220728
@@ -2345,7 +2345,7 @@
                 else
                     nullify(perme)
                 endif
-                endif
+            endif
 
 10          continue
         end if        !! for appear group
@@ -2457,7 +2457,7 @@
 
         endif
 
-        if (index/=20.and.index/=21.and.index/=22.and.index/=26)then  !! 2000  20230910(��Ĥ��Ԫ��������������)
+        if (index/=20.and.index/=21.and.index/=22.and.index/=26)then  !! 2000  20230910(薄膜单元不考虑质量矩阵)
             nnode = elkn(index)%el_field(ifield)%nnode_f
             ndofn=  group(igroup)%dof(ifield)%nfdof
             nevab=    nnode*ndofn
@@ -2506,13 +2506,13 @@
                     shape = elkn(index)%ggaus(order_intx)%shape(:,igaus)
 
                     if (fieldid(1:2)=='UW'.and.UPW=='W') then
-                        if (material(1:6)=='NSSoil') then !�˴�material-->name
+                        if (material(1:6)=='NSSoil') then !此处material-->name
                             pwatr=element(ielem)%egaus(order_int)%pwatr(igaus)
                             csmos=element(ielem)%egaus(order_int)%csmos(igaus)
                             poros=element(ielem)%egaus(order_int)%poros(igaus)
                             satur=element(ielem)%egaus(order_int)%satur(igaus)
 
-                            if (material=='NSSoilPZ') then  !�˴�material-->name
+                            if (material=='NSSoilPZ') then  !此处material-->name
                                 if (.not.allocated(value)) then
                                     ppp=element(ielem)%egaus(order_int)%vdval(5,igaus)
                                 else
@@ -3536,11 +3536,11 @@
                         if (ikh==2)coef=-omega*cmplx(omega,group(igroup)%alfa)
                     elseif(fieldid(ifield:ifield)=='W') then
                         if (nrfields==2)then
-                            if (ikh==1)coef=-1./cmplx(0.,omega)  !�Գ���ϵ���������˻�
-                            if (ikh==2)coef=cmplx(1.,0.)  !�Գ���ϵ���������˻�
+                            if (ikh==1)coef=-1./cmplx(0.,omega)  !对称性系数与自身乘积
+                            if (ikh==2)coef=cmplx(1.,0.)  !对称性系数与自身乘积
                         elseif(nrfields==1)then
-                            if (ikh==1)coef=-1./cmplx(omega**2,0.)/theta1/ditime   !�Գ���ϵ���������˻�   ! /theta1/ditime zhao 060530
-                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !�Գ���ϵ���������˻�
+                            if (ikh==1)coef=-1./cmplx(omega**2,0.)/theta1/ditime   !对称性系数与自身乘积   ! /theta1/ditime zhao 060530
+                            if (ikh==2)coef=cmplx(1.,0.)/theta1/ditime   !对称性系数与自身乘积
                             if (ifsnedge/=0)then !ifs2006
                                 if (ikh==1)coef=cmplx(-1./omega**2,0.)/beeta2/ditime**2
                                 if (ikh==2)coef=cmplx(1.,0.)/beeta2/ditime**2
@@ -4574,7 +4574,7 @@
     deallocate(dmatxl,rr,rr0,tt)
     end subroutine change1_dmatx
 
-    subroutine dmatxf_change(e,dmatx,rotation) !����ԭ���ĳ����ƺ��е����⣬��Ҫ������tti������2.0ϵ��Ҳ����
+    subroutine dmatxf_change(e,dmatx,rotation) !这是原来的程序，似乎有点问题，主要是少了tti，并且2.0系数也不对
     integer(ink) idimn,jdimn
     real   (irk) e,dmatx(:,:),rotation(:,:)
     real   (irk),allocatable:: rr(:,:),rr0(:,:),tt(:,:),dmatxl(:,:),rot(:)
@@ -5183,7 +5183,7 @@
         rott(1:3,1:3)=rotation; rott(4:6,4:6)=rotation
         if(alfa_p4>0.)then
             ipoin=element(ielem)%field(1)%lnods_f(inode) !20221124
-            if(local_p4(ipoin)==1)then  !�ڵ�ľֲ����귽���뵥Ԫ�ľֲ����귽����ܲ���ȫһ�£��ֲ��������ʱ���õ��ǽڵ�ľֲ�����
+            if(local_p4(ipoin)==1)then  !节点的局部坐标方向与单元的局部坐标方向可能不完全一致，局部坐标求解时，用的是节点的局部坐标
                 allocate(rotstar(ndimn,ndimn),unitx(ndimn,ndimn))
                 rotstar=prot(:,:,ipoin)
                 unitx=matmul(rotation,transpose(rotstar))
@@ -5481,7 +5481,7 @@
         endif
     endif
 
-    if(varj2<1.e-25)varj2=1.e-25   !20230907 �ر�ע�⣬��Ӧ��ռ�Ļ���������ģ�ͣ�varj2���ò�̫��
+    if(varj2<1.e-25)varj2=1.e-25   !20230907 特别注意，对应变空间的混凝土损伤模型，varj2设置不太大
     !if(varj2<.001)varj2=.001    !20220721
 
     varj3=0.0
@@ -5848,53 +5848,45 @@
     SUBROUTINE PKPN(matno,EVK,ps,first)
     integer(ink) matno,first
     real   (irk) evk(:),ps(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
-        r(3),cohes,ft,gamaw_local
-    !write(7,*) 'ps=',ps
-    
-    ! 简化PKPN逻辑，恢复接近原始设计
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
+    r(3),cohes,ft
+   !write(7,*) 'ps=',ps
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw
-    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
+    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
-    Ft   =props(matno)%mechanical%solid%Goodman%Ft
-    
-    ! 初始刚度计算
+    Ft    =props(matno)%mechanical%solid%Goodman%Ft
+
     if (first==1)then
-        evk(ndimn)=kzz
-        evk(1)=K1*gamaw_local
-        if (ndimn==3)evk(2)=K1*gamaw_local
-        return
+       evk(ndimn)=kzz
+       evk(1)=K1*gamaw
+       if (ndimn==3)evk(2)=K1*gamaw
+       return
     endif
-    
-    ! 标准摩擦-黏聚模型计算，保持接近原始设计
+    if (PS(ndimn)>=ft.or.abs(ps(ndimn))<.01)then
+       EVK(ndimn)=pa
+       EVK(1:ndimn-1)=pa
+       GOTO 1
+    endif
     n    =props(matno)%mechanical%solid%Goodman%n
     Rf   =props(matno)%mechanical%solid%Goodman%Rf
     phi  =props(matno)%mechanical%solid%Goodman%phi
     cohes=props(matno)%mechanical%solid%Goodman%cohes
     EVK(ndimn)=Kzz
-
-    TF=-ps(ndimn)*tand(phi)+cohes
     
-    ! 计算切向刚度
-    if (TF <= 0.0) then
-        EVK(1:ndimn-1)=K1*gamaw_local*0.01
-    else
-        R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-        R(1:ndimn-1)=max(0.01, min(1.0, R(1:ndimn-1)))
-        
-        EVK(1)=Kzx*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1)**2
-        if(ndimn==3) EVK(2)=Kzy*gamaw_local*(abs(PS(ndimn))/pa)**n*R(2)**2
-    endif
+    TF=-ps(ndimn)*tand(phi)+cohes
+    R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
+    EVK(1)=Kzx*gamaw*(abs(PS(ndimn))/pa)**n*R(1)**2
+    if(ndimn==3)EVK(2)=Kzy*gamaw*(abs(PS(ndimn))/pa)**n*R(2)**2
+    1     CONTINUE
     END SUBROUTINE PKPN
-
-
-    !20231125YL
-    SUBROUTINE PKPN_watertight(matno,relat_dis_gaus,EVK) !20231007 ֹˮ
+    
+    
+ !20231125YL  
+    SUBROUTINE PKPN_watertight(matno,relat_dis_gaus,EVK) !20231007 止水
     integer(ink) matno,iwj,fill
     real   (irk) evk(:),relat_dis_gaus(:),gdelta
     real   (irk) para_a(17)
@@ -5928,7 +5920,7 @@
             if(abs(gdelta)> para_a(14))evk(ndimn)=para_a(3)/(1-para_a(4)*abs(gdelta))**2+para_a(8)
         endif
     endif
-    
+
 10  continue
     if(ndimn==3) then
         gdelta=abs(relat_dis_gaus(1))
@@ -6124,7 +6116,7 @@
         endif
     elseif(xlwmodel==3)then !Bilinear sofening , from Petersson
         sigmanc=(((1.+(wx/w0)**3)*exp(-5.64*wx/w0))-(wx/w0)*7.105773e-3)*ft
-    elseif(xlwmodel==4)then !cornelissen ���������ģ�������ѧѧ����
+    elseif(xlwmodel==4)then !cornelissen 颜天佑论文（固体力学学报）
         sigmanc=((1+(c1*wx/w0)**3)*exp(-c2*wx/w0)-wx/w0*(1+c1**3)*exp(-c2))*ft
     elseif(xlwmodel==5)then ! Jiaji Du,Albert S. Kobayashi and Neil M. Hawkins, FEM DYNAMIC FRACTURE ANALYSIS OF CONCRETE BEAMS
         ! Journal of Engineering Mechanics, Vol. 115, No. 10, October, 1989
@@ -6153,14 +6145,13 @@
     SUBROUTINE PKPNs(matno,EVK,ps,first,stran,ps0)
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
-        r(3),cohes,ft,gamaw_local
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw 20230402
+    r(3),cohes,ft
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw  !�޸�gamaw����
-    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
+    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
     n    =props(matno)%mechanical%solid%Goodman%n
@@ -6171,10 +6162,10 @@
 
 
     if (first==1)then
-        evk(ndimn)=kzz
-        evk(1)=k1*gamaw_local
-        if (ndimn==3)evk(2)=k1*gamaw_local
-        goto 300
+       evk(ndimn)=kzz
+       evk(1)=k1*gamaw
+       if (ndimn==3)evk(2)=k1*gamaw
+       goto 300
     endif
 
     if (ps(ndimn)>=ft) then
@@ -6192,34 +6183,33 @@
     TF=-ps(ndimn)*tand(phi)+cohes
 
     R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    STIF=K1*gamaw_local
-    EVK(1:ndimn-1)=K1*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
-300 if(first==1) then
-        ps=evk*stran
-    else
-        ps=ps0+evk*stran
-    endif
-    !if (ps(ndimn)>=ft) then
-    !   ps=ft*.1
-    !   ps(ndimn)=ft
-    !elseif(t>tf)then
-    !   ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
-    !endif
-
-1   CONTINUE
-    END SUBROUTINE PKPNs
-
-    SUBROUTINE PKPNs0(matno,EVK,ps,first,stran,ps0)
+    STIF=K1*gamaw
+    EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
+    300     if(first==1) then
+            ps=evk*stran
+            else                                                                                                                                                                             
+            ps=ps0+evk*stran
+            endif                                                                                                                                                                            
+ !if (ps(ndimn)>=ft) then                                                                                                                                                          
+ !   ps=ft*.1
+ !   ps(ndimn)=ft
+ !elseif(t>tf)then                                                                                                                                                                 
+ !   ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
+ !endif                                                                                                                                                                            
+                                                                                                                                                                                  
+ 1     CONTINUE                                                                                                                                                                   
+    END SUBROUTINE PKPNs   
+    
+  SUBROUTINE PKPNs0(matno,EVK,ps,first,stran,ps0)
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
-    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &
-        r(3),cohes,ft,gamaw_local
+    real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
+    r(3),cohes,ft
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
-    gamaw_local=props(matno)%mechanical%solid%Goodman%gamaw  !�޸�gamaw����
-    if (abs(gamaw_local) < 1.0e-6) gamaw_local = gamaw
+    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+    !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
     n    =props(matno)%mechanical%solid%Goodman%n
@@ -6227,13 +6217,13 @@
     phi  =props(matno)%mechanical%solid%Goodman%phi
     cohes=props(matno)%mechanical%solid%Goodman%cohes
     Ft    =props(matno)%mechanical%solid%Goodman%Ft
-
-
+    
+    
     if (first==1)then
-        evk(ndimn)=kzz
-        evk(1)=k1*gamaw_local
-        if (ndimn==3)evk(2)=k1*gamaw_local
-        goto 300
+       evk(ndimn)=kzz
+       evk(1)=k1*gamaw
+       if (ndimn==3)evk(2)=k1*gamaw
+       goto 300
     endif
 
     EVK(ndimn)=Kzz
@@ -6248,25 +6238,25 @@
         EVK(1:ndimn-1)=10.
         GOTO 300
     endif
-200 R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    STIF=K1*gamaw_local
-    EVK(1:ndimn-1)=K1*gamaw_local*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
-300 if(first==1) then
-        ps=evk*stran
-    else
-        ps=ps0+evk*stran
-    endif
-    if (ps(ndimn)>=ft) then
-        ps=ft*.1
-        ps(ndimn)=ft
-    elseif(t>tf)then
-        ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
-    endif
-
-1   CONTINUE
-    END SUBROUTINE PKPNs0
-
-
+    200   R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
+    STIF=K1*gamaw
+    EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
+    300     if(first==1) then
+    ps=evk*stran
+ else                                                                                                                                                                             
+    ps=ps0+evk*stran
+ endif                                                                                                                                                                            
+ if (ps(ndimn)>=ft) then                                                                                                                                                          
+    ps=ft*.1
+    ps(ndimn)=ft
+ elseif(t>tf)then                                                                                                                                                                 
+    ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
+ endif                                                                                                                                                                            
+                                                                                                                                                                                  
+ 1     CONTINUE                                                                                                                                                                   
+ END SUBROUTINE PKPNs0                  
+    
+                                                                                                                                                                                  
     SUBROUTINE DUNE0(matno,smean,steff,theta,smax,Qmax,s,e,p3)
     character(2) model
     integer(ink) matno
@@ -6341,7 +6331,7 @@
         if(Smax<S)Smax=S  !20220409
         if(Qmax<Q)Qmax=Q  !20220409
         E=K*Pa*(P3/Pa)**N*(1.0-RF*S)**2
-        endif
+    endif
     !  write(chkunit,*)'q=',q,'qf=',qf,'s=',s,'ps=',ps
     !     IF(E.LT.100.*pa) E=100.*pa
     END SUBROUTINE
@@ -6557,16 +6547,16 @@
     stemp=stran
     stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     call main_stran_r( stemp, stmin)
-    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !����Ӧ��(2D) !zhao
-    !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !����Ӧ��(3D)
-    if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !��󶯼�Ӧ�� yuanli
+    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !最大剪应变(2D) !zhao
+    !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !最大剪应变(3D)
+    if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !最大动剪应变 yuanli
     if(gamamax/=0)strain_s=element(ielem)%field(1)%gamamax_ini(igaus)
     strain_s=strain_s*100 !yuanli
     gamba=0.65*strain_s*(p/pa)**(nd-1)
-    lamda=k1*gamba*lamdaMax/(1+k1*gamba)     !��Чճ����ģ�� 20190225
+    lamda=k1*gamba*lamdaMax/(1+k1*gamba)     !等效粘弹性模型 20190225
     p=-smean
     if(p<p0)p=p0     !psy  2019.04.26
-    Gmoud=k2/(1+k1*gamba)*Pa*(P/Pa)**Nd     !��Чճ����ģ�� Ӧ���ù�һ����Ӧ��gamaba ������
+    Gmoud=k2/(1+k1*gamba)*Pa*(P/Pa)**Nd     !等效粘弹性模型 应该用归一化剪应变gamaba 已修正
     e=Gmoud*2*(1.+v)
     END SUBROUTINE
     !20231215YL
@@ -8665,7 +8655,7 @@
     !	XMFC=D(5)*XMGC
     ETAF=(1.0+1.0/D(6))*XMFC
 
-    !goto 222   ��20220728
+    !goto 222   ！20220728
     if(eta>etaf) then  !1111
         !       if(ielem==1) &
         !write(7,*)'ie=',ielem,'eta=',eta,'etaf=',etaf
@@ -9031,7 +9021,7 @@
         model=props(matno)%mechanical%solid%DuncanChang%model
 
         !    CALL invart (matno,nstre,devia,sig,theta,steff,smean,vj2,vj3,sint3)
-        steff=steff/sqrt(3.d0);smean=-smean   !��PZ������invart�ӳ�������p��qʱ�볣�治̫һ��
+        steff=steff/sqrt(3.d0);smean=-smean   !因PZ材料在invart子程序里求p、q时与常规不太一样
 
         smax=0.0;qmax=0.0;ps=0.
         if(model=='EV'.or.model=='CR') then
@@ -9091,7 +9081,7 @@
     END IF
 
 
-    !������nzw PHD Thesis,P79, (3.8.27)�е�eatmax
+    !以下求nzw PHD Thesis,P79, (3.8.27)中的eatmax
     tt=1.-d(4)*eta/d(3)/(1.+d(4))
     if(tt.le.0.) then
         tt=0.
@@ -9126,14 +9116,14 @@
 
         FACTV=1.0-ETA/XMGC                  ! nzw PHD Thesis P79, (3.8.28b)
 
-        EQP=VD(1)			!�ۻ�ƫӦ��
+        EQP=VD(1)			!累积偏应变
         IF(EQP.EQ.0.0) THEN
             FACTS=d(9)*d(10)
         ELSE
             FACTS=d(9)*d(10)*EXP(-d(9)*ABS(EQP))    ! nzw PHD Thesis P79, (3.8.28c)
         END IF
 
-        ETAMAX=VD(3)		!��ʷ�ϵ����ƫӦ��
+        ETAMAX=VD(3)		!历史上的最大偏应变
         tt=1.-d(4)*eta/d(3)/(1.+d(4))
         if(tt.le.0.) then
             tt=0.
@@ -9291,7 +9281,7 @@
         elcod0(:,:),cnd(:),normal(:),rotation(:,:),ax(:),xxxx(:,:),xjaci(:,:),     &
         l(:,:),matrix(:,:)
 
-    !Icaddmass=1:�����Ӷ�ˮѹ������������Icaddmass=2: �ɲ۶�ˮѹ����������+��ˮѹ��
+    !Icaddmass=1:重力坝动水压力附加质量；Icaddmass=2: 渡槽动水压力附加质量+动水压力
     if(Icaddmass/=0)then
         allocate(addmp(ndimn,npoin),icmp(npoin))
         addmp=0.
@@ -9488,7 +9478,7 @@
 
 
     !write(7,*)'addtional mass matrix'   !2017/04/16
-    if(Icaddmass>=1) then  !�����ӡ������ӡ����ӹ淶�㷨��!20220330
+    if(Icaddmass>=1) then  !（面板坝、重力坝、拱坝规范算法）!20220330
         allocate(ax(npoin),norp(ndimn,npoin),xxxx(ndimn,ndimn),l(ndimn,1))
         ax=0. ; norp=0. ;  xxxx=0. ; l=0.
         do iedge=1,ifsnedge !iedge
@@ -9660,7 +9650,7 @@
                             enddo
                         endif
                     else
-                        write(*,*)'***********����assemble_stiff_ifs2006������û������ⷽʽ************'
+                        write(*,*)'***********集成assemble_stiff_ifs2006出错，没有种求解方式************'
                         stop
                     endif
 
@@ -9710,7 +9700,7 @@
                             endif
                         enddo
                     else
-                        write(*,*)'***********����assemble_stiff_ifs2006������û������ⷽʽ************'
+                        write(*,*)'***********集成assemble_stiff_ifs2006出错，没有种求解方式************'
                         stop
                     endif
                 enddo
@@ -9741,7 +9731,7 @@
                         endif
                     enddo
                 else
-                    write(*,*)'***********����assemble_stiff_ifs2006������û������ⷽʽ************'
+                    write(*,*)'***********集成assemble_stiff_ifs2006出错，没有种求解方式************'
                     stop
                 endif
 
@@ -10247,8 +10237,8 @@
             speed(ndimn)=sqrt(alfa/density)
             speed(1:(ndimn-1))=sqrt(g/density)
             if(tedge==1)write(7,*)'speed=',speed
-            spring(ndimn)=e !alfa*.5  !.25 ����ѡ�Ĳ��� zhao 05/08/18
-            spring(1:(ndimn-1))=G !*.5  !!.25 ����ѡ�Ĳ��� zhao 05/08/18
+            spring(ndimn)=e !alfa*.5  !.25 是任选的参数 zhao 05/08/18
+            spring(1:(ndimn-1))=G !*.5  !!.25 是任选的参数 zhao 05/08/18
 
             lnode=tabss(tedge)%lnods
 
@@ -10293,7 +10283,7 @@
                 do inode=1,nnode
                     rrb((inode-1)*ndimn+1:inode*ndimn,(inode-1)*ndimn+1:inode*ndimn)=rr
                 end do
-                tabss(tedge)%rr=rr  !��ʵ���������һ����˹�����ֵ
+                tabss(tedge)%rr=rr  !事实上是用最后一个高斯点的数值
 
                 estif_mid1=speedb.x.shapeb
                 estif_mid2=transpose(shapeb).x.estif_mid1
@@ -10463,7 +10453,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********����������Ͼ���ʱ������û������ⷽʽ************'
+                            write(*,*)'***********集成流固耦合矩阵时出错，没有种求解方式************'
                             stop
                         endif
                         !                   if (ieq/=0.and.ieq<=jeq) then
@@ -10621,7 +10611,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********�����������վ���ʱ������û������ⷽʽ************'
+                            write(*,*)'***********集成流体吸收矩阵时出错，没有种求解方式************'
                             stop
                         endif
 
@@ -10731,7 +10721,7 @@
                                 enddo
                             endif
                         else
-                            write(*,*)'***********���ɹ������վ���ʱ������û������ⷽʽ************'
+                            write(*,*)'***********集成固体吸收矩阵时出错，没有种求解方式************'
                             stop
                         endif
                         !                   if (ieq/=0.and.ieq<=jeq) then
@@ -10945,8 +10935,8 @@
     stran(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
     call main_stran_r( stemp, stmin)
 
-    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !����Ӧ��(2D) !zhao
-    if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !����Ӧ��(3D)
+    if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))   !*0.5  !最大剪应变(2D) !zhao
+    if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !最大剪应变(3D)
 
     sigmad1=props(matno)%mechanical%solid%SandPZ%sigmad(1)
     sigmad2=props(matno)%mechanical%solid%SandPZ%sigmad(2)
@@ -11024,7 +11014,7 @@
     np=props(matno)%mechanical%solid%STEEL_EP%np
     sig=>props(matno)%mechanical%solid%STEEL_EP%sig
     es=>props(matno)%mechanical%solid%STEEL_EP%es
-    if(sigeffect>sig(1).and.sigeffect<sig0)then  !��Ӧ���������ж��״̬
+    if(sigeffect>sig(1).and.sigeffect<sig0)then  !对应于屈服后的卸载状态
         ep=es(1)
         goto 10
     endif
@@ -11090,9 +11080,9 @@
 
                 force_e=element(ielem)%field(1)%tload
                 force_i=element(ielem)%field(1)%gpvar(1:6*(ndimn-1),1)  !20200116
-                force_i=force_i-force_e !����Ҫ��trot.x.force_e��%tload��%gpvar������������ϵ�ڵ�
+                force_i=force_i-force_e !不需要用trot.x.force_e，%tload和%gpvar都是整体坐标系内的
                 force_e=force_i
-                force_i=trot.x.force_e  !ת�ɾֲ�����ϵ�µ�����
+                force_i=trot.x.force_e  !转成局部坐标系下的内力
             endif
             sig(1:ndimn)=force_i(1:ndimn)/aera
             sigeffect=0.
@@ -11169,9 +11159,9 @@
 
                 force_e=element(ielem)%field(1)%tload
                 force_i=element(ielem)%field(1)%gpvar(1:6*(ndimn-1),1)  !20200116
-                force_i=force_i-force_e !����Ҫ��trot.x.force_e��%tload��%gpvar������������ϵ�ڵ�
+                force_i=force_i-force_e !不需要用trot.x.force_e，%tload和%gpvar都是整体坐标系内的
                 force_e=force_i
-                force_i=trot.x.force_e  !ת�ɾֲ�����ϵ�µ�����
+                force_i=trot.x.force_e  !转成局部坐标系下的内力
             endif
 
             !element(ielem)%field(1)%kdiag(1:ndimn)=0.

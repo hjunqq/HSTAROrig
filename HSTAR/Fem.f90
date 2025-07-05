@@ -374,7 +374,7 @@
 
         if(submodel==-1)then
             print *,'input total groups or elements for submodel analysis: ngroup_sub,nel_sub'
-            !输入总模型分析子模型组或元素数：ngroup_sub,nel_sub
+            !输入子模型分析的组数或单元数：ngroup_sub,nel_sub
             read *, ngroup_sub,nel_sub
             if(ngroup_sub==0.and.nel_sub==0) goto 11
 
@@ -662,7 +662,7 @@
 
 
     subroutine parameter_back_analysis(N,M) !20190810
-    !N为参数个数,M为观测数
+    !N随机变量数,M测点数
     implicit none
 
     INTEGER  i,j, N, M,ivalue,inode,idofn,jnode,jtotv,iobstimes,  &
@@ -1150,7 +1150,7 @@
     endif
     !write(7,*)'dkstar=',dkstar,'dkpre=',dkpre,'rk=',rk,'eta1=',eta1,'eta2=',eta2
 
-    !!!校核参数调整
+    !!!校正信赖区间
     if(rk<eta1)then
         deltak=.5*(0+gama1*deltak)
     elseif(rk>=eta1.and.rk<=eta2)then
@@ -1328,7 +1328,7 @@
 
     end subroutine solve_dx
 
-    subroutine update_bk(N,yk,sk,bk0,bk)  !BFGS公式(来源：最优化方法.ppt)
+    subroutine update_bk(N,yk,sk,bk0,bk)  !BFGS公式(来源于最优化方法.ppt)
     integer(ink) i,j,N
     real(irk) yk(:),sk(:),bk0(:,:),bk(:,:),BS(N),BS1(N),x1
 
@@ -1378,7 +1378,7 @@
 
             do igdis_bk=1,ngdis_bk
                 write(7,*)'iblks=',iblks,'iincs=',iincs,'igdis_bk=',igdis_bk
-                write(7,*)'      istep                 最大位移'
+                write(7,*)'      istep                 刚体位移'
 
                 backrdisp=0
                 backrdisp(rigid_bk(igdis_bk)%node_bk)=1
@@ -1424,7 +1424,7 @@
 
 
                     write(7,20)istep,rgdis(:,1)
-                    write(7,*)'    步数        计算位移      测量位移'
+                    write(7,*)'    观测点号    刚体位移      弹性位移'
                     nmbpoint=0
                     do i=1,mvalue
                         if(iblks/=Value_observ(i)%iblks)cycle
@@ -1582,7 +1582,7 @@
 
 
 
-    !write(observ_unit,*)'information for given points，Npoints_pb'
+    !write(observ_unit,*)'information for given points：Npoints_pb'
     !write(observ_unit,10) nback_point
     !write(observ_unit,*)'1:Npoints_pb/i0,ndofn,imdofn,nintf'
     ! k0=0 ; nintf=1
@@ -1707,7 +1707,7 @@
 
         !20231215YL
         if(restart==0) then !20231008
-            if(gamamax/=0) then !yuanli20230926 有效应力分析非线性迭代校核
+            if(gamamax/=0) then !yuanli20230926 等效线性化土体动力本构
                 open(gamamaxunit,file=probn(1:len1)//'.gamax')
                 call readgamamax
             endif
@@ -1980,7 +1980,7 @@
     end do    !iblks
 
     !20231215YL
-    !&  有效应力分析非线性应力状态 yuanli20230926 !20231008
+    !&  等效线性动剪应力输出 yuanli20230926 !20231008
     if (restart==0.and.gamamax/=0) then
         call writegamamax
     endif
@@ -2015,7 +2015,7 @@
     enddo
     read(back_ctl_unit,*)text
     read(back_ctl_unit,*)eps,iter1,iter2,rs,jac_eps
-    read(back_ctl_unit,*)text  !读取参数初始值
+    read(back_ctl_unit,*)text  !待反演参数初始值
     read(back_ctl_unit,*)Xvalue
 
     write(7,*)'xvalue=',xvalue
@@ -2052,7 +2052,7 @@
         trustp(1)%gama1,trustp(1)%gama2,trustp(1)%eps,  &
         trustp(1)%eta01,trustp(1)%eta02,trustp(1)%delta0, &
         trustp(1)%deltab,trustp(1)%mtter
-    read(back_ctl_unit,*)text  !读取参数初始值
+    read(back_ctl_unit,*)text  !待反演参数初始值
     read(back_ctl_unit,*)Xvalue
 
 
@@ -2070,7 +2070,7 @@
     open(back_ctl_unit,file=probn(1:len1)//'.btl')
     open(observ_unit,file=probn(1:len1)//'.obsc')
 
-    read(back_ctl_unit,*)text  !读取当Bparamete不为0时，进行反分析，这里是为了实现随机变量输入、随机值分析的功能
+    read(back_ctl_unit,*)text  !输入与Bparamete为负时的相关内容（给定随机变量参数，进行正分析计算，输出相关结果用于反演分析方法验证）
 
     read(back_ctl_unit,*)Npara,nback_point,nstoch
     print *,'Npara,nback_point,nstoch=',Npara,nback_point,nstoch
@@ -2108,8 +2108,8 @@
     enddo
 
     read(back_ctl_unit,*)text
-    read(back_ctl_unit,*)mean_value  !读取参数均值
-    read(back_ctl_unit,*)sigma_value !读取参数标准差系数
+    read(back_ctl_unit,*)mean_value  !随机变量均值
+    read(back_ctl_unit,*)sigma_value !随机变量离散系数
     do i=1,Npara
         sigma_value(i)=sigma_value(i)*mean_value(i)
     end do
@@ -2159,11 +2159,11 @@
     endif !20210805
 
 
-    write(7,*)'模型参数均值对比：输入均值vs计算均值'
-    write(7,11)mean_value  !输入参数均值
+    write(7,*)'模拟数据均值与与给定值比较'
+    write(7,11)mean_value  !随机变量均值
     write(7,11)xvalue
-    write(7,*)'模型参数方差对比：输入方差vs计算方差'
-    write(7,11)sigma_value  !输入参数方差
+    write(7,*)'模拟数据方差与与给定值比较'
+    write(7,11)sigma_value  !随机变量均值
     write(7,11)sigma_t
     write(7,*)'相关系数'
     do i=1,npara
@@ -2204,9 +2204,10 @@
     DOUBLE PRECISION    value
 
     real(irk),allocatable::obs_value(:)
-    ! ttime_pb,dtime_pb的单位为天，进行实际观测时间分析的时间处理功能
+    ! ttime_pb,dtime_pb的单位为天，所以实际工程反分析时将这两个变量按整数处理。
 
     !open(observ_unit,file=probn(1:len1)//'.obs')
+    !read(back_ctl_unit,*)text  !输入与Bparameter/=0时的相关内容（不为零时，执行参数优化反演）
     tbstep=0
     ttime_pb=0.
     mobstimes=0
@@ -2265,7 +2266,7 @@
         !begin_day_obs=para_points(j)%begin_day_obs
 
         do j0=1,observ_pb
-            read(observ_unit,*)ix,i1,j1,begin_day_obs    !对应观测点编号
+            read(observ_unit,*)ix,i1,j1,begin_day_obs    !对应测点点号，方向号
             !print *,'j=','j0=',j0,'i1=',i1,'j1=',j1
             read(observ_unit,*)obs_value
 
@@ -2685,7 +2686,7 @@
 
 
                             end do  !igapb
-                            call forAdirect_back_analysis !fzx !正向分析
+                            call forAdirect_back_analysis !fzx !形成A矩阵
 
 
                             do igapb=1,ngapb
@@ -2701,7 +2702,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect_back_analysis !fzx 
+                            call forAdirect_back_analysis !fzx !形成A矩阵
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -3288,7 +3289,7 @@
 
 
                             end do  !igapb
-                            !call forAdirect_back_analysis !fzx !
+                            !call forAdirect_back_analysis !fzx !形成A矩阵
 
 
                             do igapb=1,ngapb
@@ -3304,7 +3305,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect_back_analysis !fzx !
+                            call forAdirect_back_analysis !fzx !形成A矩阵
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -3697,7 +3698,7 @@
 
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
 
-                    call stran0_creep4   !20180630  
+                    call stran0_creep4   !20180630  (博格斯模型蠕变初应变增量，因为应力增量在变化，所以每一迭代步求解，只适用于NSOLN=5）
                     if(iiter==1)   call effect_stres_modul_for_steel_beam !20211125
                     if(iiter==1)   call stiffness_for_bolt_spring  !20211125
 
@@ -3893,7 +3894,7 @@
                                     deallocate(cmatrixl)
                                 end do
                             end do  !igapb
-                            call forAdirect !fzx 
+                            call forAdirect !fzx !形成A矩阵
 
                             do igapb=1,ngapb
                                 !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -3908,7 +3909,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx 
+                            call forAdirect !fzx !形成A矩阵
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -4356,6 +4357,7 @@
             !!
             operation='SOLVE'
             call solve
+            !! 找出观测点处的du/dx
 
             do ivalue=1,mvalue
                 if(Value_observ(ivalue)%ic==0)cycle
@@ -4986,7 +4988,7 @@
                         else
                             if(iiter==1.and.allocated(torel))tofor=tofor+torel
                         endif
-                        write(*,*)'   ' !在这里，如果有基础回调系统和参数回调系统两种回调基础SOLVE：allocate(resultm(ntotv))只调用一次
+                        write(*,*)'   ' !很奇怪，有这一行的话，就不出错，没有的话，SOLVE中allocate(resultm(ntotv))这一行出错！
 
 
                         if(ngaps/=0.and.iblks>=iblks_bt.and.iiter==1.and.mdiv==1)call ctfor_to_tofor(tofor0,tofor)  !!ctt2005
@@ -5098,7 +5100,7 @@
                                         deallocate(cmatrixl)
                                     end do
                                 end do  !igapb
-                                call forAdirect !fzx !
+                                call forAdirect !fzx !形成A矩阵
 
                                 do igapb=1,ngapb
                                     !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -5113,7 +5115,7 @@
                                 deallocate(rot)
 
                             elseif(restart_ctt==1)then !restart_ctt
-                                call forAdirect !fzx !
+                                call forAdirect !fzx !形成A矩阵
                                 rewind(recttunit)
                                 do igapb=1,ngapb
                                     npgblock=gapb(igapb)%npgblock
@@ -5514,7 +5516,7 @@
             zmult(i)=zmult(i)*real(j)
         end do
     end do
-    !!!!for 可靠性系统
+    !!!!for 串并联系统
     relat_ave=0.
     do i=1,ntmod
         do j=1,ntmod
@@ -5533,19 +5535,19 @@
 
     call aft_gauss(beta_ave,relat_ave,aft,ntmod,ymult,zmult)
     !call aft_gauss(4.23_irk,0.57_irk,aft,10,ymult,zmult)
-    print*,'可靠性系统失效概率=',aft
-    write(7,*)'可靠性系统失效概率=',aft
+    print*,'串联系统失效概率=',aft
+    write(7,*)'串联系统失效概率=',aft
 
     call af_beta(1-aft,betax,ymult,zmult)
-    print*,'可靠性系统安全指标=',betax
-    write(7,*)'可靠性系统安全指标=',betax
+    print*,'串联系统可靠指标=',betax
+    write(7,*)'串联系统可靠指标=',betax
 
     betax=beta_ave*sqrt(ntmod/(1+relat_ave*(ntmod-1)))
     !betax=4.23*sqrt(10/(1+0.57*(10-1)))
-    print*,'可靠性系统安全指标=',betax
-    write(7,*)'可靠性系统安全指标=',betax
+    print*,'并联系统可靠指标=',betax
+    write(7,*)'并联系统可靠指标=',betax
     !stop
-    !!!!end for 可靠性系统
+    !!!!end for 串并联系统
 
     allocate(rep(ntmod))
     rep=0
@@ -6104,7 +6106,7 @@
                                     gapb(igapb)%cmatrix=0.
                                 end do
 
-                                call forAdirect !fzx 
+                                call forAdirect !fzx !形成A矩阵
                                 do igapb=1,ngapb
                                     do itotvbt=1,gapb(igapb)%ntotv_bt
                                         do jtotvbt=1,gapb(igapb)%ntotv_bt
@@ -6114,7 +6116,7 @@
                                 enddo  !igapb
 
                             elseif(restart_ctt==1)then !restart_ctt
-                                call forAdirect !fzx 
+                                call forAdirect !fzx !形成A矩阵
                                 rewind(recttunit)
                                 do igapb=1,ngapb
                                     npgblock=gapb(igapb)%npgblock
@@ -6331,7 +6333,7 @@
                                 gapb(igapb)%cmatrix=0.
                             end do
 
-                            call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                            call forAdirect !fzx !形成A矩阵
                             do igapb=1,ngapb
                                 do itotvbt=1,gapb(igapb)%ntotv_bt
                                     do jtotvbt=1,gapb(igapb)%ntotv_bt
@@ -6341,7 +6343,7 @@
                             enddo  !igapb
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                            call forAdirect !fzx !形成A矩阵
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -6542,12 +6544,12 @@
 
             do idimn=1,gapb(igapb)%nrdof
                 do jdimn=1,ndimn
-                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !锟斤拷每锟斤拷锟斤拷锟轿伙拷疲锟轿拷锟斤拷锟紸(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !存每个点的位移，为计算A(T)F
                 enddo
             end do
             if(block_stab==1)then
                 do jdimn=ndimn+1,3*(ndimn-1)
-                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !锟斤拷每锟斤拷锟斤拷锟轿伙拷疲锟轿拷锟斤拷锟紸(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !存每个点的位移，为计算A(T)F
                 enddo
             endif
         enddo
@@ -6618,7 +6620,7 @@
 
 
         do kpoin=1,npgblock
-            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !前锟侥革拷锟姐还锟角猴拷锟侥革拷锟姐，也锟斤拷锟角碉拷一锟姐还锟角第讹拷锟斤拷
+            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !前四个点还是后四个点，也就是第一点还是第二点
             if(onetwo==1)coef=1.
             if(onetwo==2)coef=-1.
             igaps=gapb(igapb)%nodegblock_igaps(kpoin)
@@ -6714,7 +6716,7 @@
     end subroutine forAdirect_back_analysis   !20150925
 
 
-    subroutine forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷  2010/7/13
+    subroutine forAdirect !fzx !形成A矩阵  2010/7/13
 
     integer(ink) igapb,npgblock,onetwo,ipoin,jpoin,ipair,idimn,itotvbt,itotv,ielem, &
         kpoin,lpoin,jdimn,jtotv,jtotvbt,nevab,ieqx,ievab,igaps,nnode,ii,matno,index,order_int,ngaus, &
@@ -6844,12 +6846,12 @@
 
             do idimn=1,gapb(igapb)%nrdof
                 do jdimn=1,ndimn
-                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !锟斤拷每锟斤拷锟斤拷锟轿伙拷疲锟轿拷锟斤拷锟紸(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !存每个点的位移，为计算A(T)F
                 enddo
             end do
             if(block_stab==1)then
                 do jdimn=ndimn+1,3*(ndimn-1)
-                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !锟斤拷每锟斤拷锟斤拷锟轿伙拷疲锟轿拷锟斤拷锟紸(T)F
+                    gapb(igapb)%npdisp(jdimn,jpoin,jdimn)=1. !存每个点的位移，为计算A(T)F
                 enddo
             endif
             !		  write(7,*)jpoin,ipoin,gapb(igapb)%npdisp(:,jpoin,:)
@@ -6870,7 +6872,7 @@
         if (restart_ctt/=0) cycle
 
         do kpoin=1,npgblock
-            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !前锟侥革拷锟姐还锟角猴拷锟侥革拷锟姐，也锟斤拷锟角碉拷一锟姐还锟角第讹拷锟斤拷
+            onetwo=gapb(igapb)%nodegblock_onetwo(kpoin) !前四个点还是后四个点，也就是第一点还是第二点
             if(onetwo==1)coef=1.
             if(onetwo==2)coef=-1.
             igaps=gapb(igapb)%nodegblock_igaps(kpoin)
@@ -7002,7 +7004,7 @@
         read(back_ctl_unit,*)npoin_bk
         rigid_bk(igdis_bk)%npoin_bk=npoin_bk
         allocate(rigid_bk(igdis_bk)%node_bk(npoin_bk))
-        read(back_ctl_unit,*)rigid_bk(igdis_bk)%node_bk  !锟斤拷应锟斤拷锟斤拷para_points(1:npoints_pb)锟斤拷锟斤拷锟?
+        read(back_ctl_unit,*)rigid_bk(igdis_bk)%node_bk  !对应的是para_points(1:npoints_pb)的序号
         ngroup_bk=sum(appear_gdis_bk)
         print *,'ngroup_bk=',ngroup_bk
         rigid_bk(igdis_bk)%ngroup_bk=ngroup_bk
@@ -7092,7 +7094,7 @@
 
             do idimn=1,3*(ndimn-1)
                 do jdimn=1,ndimn
-                    rigid_bk(igdis_bk)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !锟斤拷每锟斤拷锟斤拷锟轿伙拷疲锟轿拷锟斤拷锟紸(T)F
+                    rigid_bk(igdis_bk)%npdisp(jdimn,jpoin,idimn)=disgi(jdimn,idimn) !存每个点的位移，为计算A(T)F
                 enddo
             end do
             !		  write(7,*)jpoin,ipoin,gapb(igapb)%npdisp(:,jpoin,:)
@@ -7708,7 +7710,7 @@
 
                     if(ikindks/=0) call strain_for_steel_bar !steel 2008
 
-                    call stran0_creep4   !20180630  (锟斤拷锟斤拷斯模锟斤拷锟斤拷锟斤拷应锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷为应锟斤拷锟斤拷锟斤拷锟节变化锟斤拷锟斤拷锟斤拷每一锟斤拷锟斤拷锟斤拷锟斤拷猓伙拷锟斤拷锟斤拷锟絅SOLN=5锟斤拷
+                    call stran0_creep4   !20180630  (博格斯模型蠕变初应变增量，因为应力增量在变化，所以每一迭代步求解，只适用于NSOLN=5）
                     if(iiter==1)   call effect_stres_modul_for_steel_beam !20211125
                     if(iiter==1)   call stiffness_for_bolt_spring  !20211125
 
@@ -7791,7 +7793,7 @@
                         operation='FACTORIZE'
                         call solve
 
-                        !20230216 锟轿成凤拷锟捷边斤拷锟铰讹拷锟斤拷要锟斤拷C锟斤拷锟斤拷
+                        !20230216 形成反演边界温度需要的C矩阵
                         if(nbackdT==2.and.istep==1.and.iiter==1) then
                             if(allocated(cmatrix_dtv))deallocate(cmatrix_dtv)
                             if(allocated(inv_cmatrix_dtv2))deallocate(inv_cmatrix_dtv2)
@@ -7892,7 +7894,7 @@
                                     deallocate(cmatrixl)
                                 end do
                             end do  !igapb
-                            call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                            call forAdirect !fzx !形成A矩阵
 
                             do igapb=1,ngapb
                                 !write(7,*)'igapb=',igapb,'ntotv_bt=',gapb(igapb)%ntotv_bt,'camatrix='
@@ -7907,7 +7909,7 @@
                             deallocate(rot)
 
                         elseif(restart_ctt==1)then !restart_ctt
-                            call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                            call forAdirect !fzx !形成A矩阵
                             rewind(recttunit)
                             do igapb=1,ngapb
                                 npgblock=gapb(igapb)%npgblock
@@ -8035,7 +8037,7 @@
 
                     call varupdate
 
-                    !20230216 锟斤拷锟捷边斤拷锟铰讹拷
+                    !20230216 反演边界温度
                     if(nbackdT==2.and.iiter==1) then
                         allocate(observstar(Npoints_pbx),dtv(nfixsets),dtvi(nfixsets))
                         observstar=0.
@@ -8134,7 +8136,7 @@
                 call outputres !for output
             endif
 
-            if(outinp<0)then  !锟饺讹拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷时锟斤拷oip锟侥硷拷锟斤拷锟斤拷锟斤拷压锟斤拷 20220623
+            if(outinp<0)then  !稳定渗流场分析时向oip文件输出结点压力 20220623
                 !write(outinpunit,'(a)')'ipoin    pore_pressure'
                 !idofn=lmdofn(8)
                 !do ipoin=1,npoin
@@ -8219,7 +8221,7 @@
             endif  !20200812
             if((bparameter>=1.and.bparameter<=2).and.balgor>=1) call dudx
 
-            if(upliftin<0)then  !锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷影锟斤拷锟斤拷锟绞憋拷锟絬pf锟侥硷拷锟斤拷锟斤拷锟斤拷压锟斤拷 20220623
+            if(upliftin<0)then  !考虑渗流场影响分析时向upf文件输出结点压力 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -8695,13 +8697,13 @@
             allocate(inpru(ntotv),inpzi(ntotv))     !sanshe  hxl !hxl2006 MIF
             inpru=0.0 ; inpzi=0.0
             if(type_abc=='MIF')call modf_inpwav     !hxl2006 MIF
-            !modf_inpwav锟斤拷锟矫碉拷锟斤拷锟戒波锟斤拷inpru锟斤拷锟斤拷锟缴筹拷inpzi
+            !modf_inpwav：得到入射波场inpru及自由场inpzi
 
             deltafi=0.0
             call modf_var_prescribed
             if(submodel==1)call value_submodel_boundary  !20210321
-            !modf_var_prescribed锟斤拷锟斤拷锟斤拷锟斤拷映锟斤拷锟斤拷锟绞碉拷植锟街碉拷锟斤拷锟角帮拷锟斤拷锟斤拷斯锟斤拷呓锟斤拷锟斤拷锟斤拷位锟斤拷值锟矫碉拷锟斤拷前锟斤拷锟剿癸拷锟竭斤拷锟斤拷值锟斤拷
-            !锟斤拷锟斤拷为约锟斤拷值锟斤拷锟斤拷锟斤拷fixed锟叫ｏ拷锟斤拷锟斤拷说锟斤拷锟斤拷fixed
+            !modf_var_prescribed：在这个子程序里实现插值，由前几步人工边界区点的位移值得到当前步人工边界点的值，
+            !以作为约束值，存在fixed中，或者说更新fixed
             !write(7,*)'result_zero(1:10)1=',result_zero(1:10)
 
             call heat_internal1
@@ -8834,7 +8836,7 @@
 
                     operation='FACTORIZE'
                     call solve
-                    !20230216 锟轿成凤拷锟捷边斤拷锟铰讹拷锟斤拷要锟斤拷C锟斤拷锟斤拷
+                    !20230216 形成反演边界温度需要的C矩阵
                     if(nbackdT==2.and.istep==1) then
                         if(allocated(cmatrix_dtv))deallocate(cmatrix_dtv)
                         if(allocated(inv_cmatrix_dtv2))deallocate(inv_cmatrix_dtv2)
@@ -8850,7 +8852,7 @@
 2               continue
                 if (ngaps/=0.and.(iiter==1.and.istep==inc_step).and.iblks==iblks_bt)then   !!ctt2005
                     if (restart_ctt==0)then !restart_ctt
-                        call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                        call forAdirect !fzx !形成A矩阵
                         kdimn=ndimn
                         if(block_stab==1)kdimn=3*(ndimn-1) !2015/11/17
                         allocate(rot(kdimn,kdimn))
@@ -8888,9 +8890,9 @@
                                     call solve
 
                                     do kpoin=1,npgblock
-                                        jgaps=gapb(igapb)%nodegblock_igaps(kpoin)   !锟斤拷为锟斤拷锟斤拷锟斤拷idimn循锟斤拷锟斤拷锟斤拷锟斤不锟斤拷锟斤拷igaps锟斤拷锟斤拷
+                                        jgaps=gapb(igapb)%nodegblock_igaps(kpoin)   !因为上面有idimn循环，这里不能用igaps变量
                                         jpair=gapb(igapb)%nodegblock_ipairs(kpoin)
-                                        ij0=gapb(igapb)%nodegblock_onetwo(kpoin)    !锟斤拷为锟斤拷锟斤拷锟斤拷idimn循锟斤拷锟斤拷锟斤拷锟斤不锟斤拷锟斤拷ij锟斤拷锟斤拷      !锟斤拷2017/04/03
+                                        ij0=gapb(igapb)%nodegblock_onetwo(kpoin)    !因为上面有idimn循环，这里不能用ij变量      !！2017/04/03
                                         call result_node_to_center(kdimn,ij0,jgaps,jpair,result,unitg)
 
                                         do jdimn=1,kdimn
@@ -8981,7 +8983,7 @@
                         deallocate(rot)
                     elseif(restart_ctt==1)then !restart_ctt
                         write(7,*)'read_cmatrix'
-                        call forAdirect !fzx !锟轿筹拷A锟斤拷锟斤拷
+                        call forAdirect !fzx !形成A矩阵
                         rewind(recttunit)
                         do igapb=1,ngapb
                             if(block_appear_process(igapb,iblks)==0)cycle  !20200331
@@ -9080,7 +9082,7 @@
 
                 call varupdate !20230216
 
-                !20230216 锟斤拷锟捷边斤拷锟铰讹拷锟斤拷锟斤拷锟斤拷锟斤拷
+                !20230216 反演边界温度增量速率
                 if(nbackdT==2.and.iiter==1) then
                     allocate(observstar(Npoints_pbx),dtv(nfixsets),dtvi(nfixsets))
                     observstar=0.
@@ -9204,7 +9206,7 @@
             call gpvarupdate
             !write(7,*)'af gpvarupdate','stres0=',element(1)%field(1)%gpvar(1:3,1) !,'stres=',element(1)%field(1)%gpvar(1:3,1)
 
-            if(gamamax/=0)call gamamaxupdate !20231125YL 锟斤拷锟铰碉拷锟斤拷锟斤拷锟斤拷锟斤拷锟襟动硷拷应锟斤拷
+            if(gamamax/=0)call gamamaxupdate !20231125YL 更新地震过程中最大动剪应变
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
                 call out_record
@@ -9264,9 +9266,12 @@
                         !dissanru(istep,ldofixb(i))=result_zero(ldofixb(i))-inpru(ldofixb(i))
                         !dissanzi(istep,ldofixb(i))=result_zero(ldofixb(i))-inpzi(ldofixb(i))
                         disA(ldofixb(ilaymif))=result_zero(ldofixb(ilaymif))-inpru(ldofixb(ilaymif))
+                        !对底边界，将总波场分解为入射波场与散射波场，disA即为散射波
                         disB(ldofixb(ilaymif))=result_zero(ldofixb(ilaymif))-inpzi(ldofixb(ilaymif))
+                        !对侧边界，将总波场分解为自由波场与散射波场，disB即为散射波
 
-                        !锟绞斤拷锟叫诧拷锟斤拷锟斤拷锟诫。
+                        !原因在于透射边界仅对散射波场，保证散射波场能够穿过人工边界而透向无限远处，但同时与要允许入射波场能够向上传播
+                        !故进行波场分离。
                     end do
                     nullify(ldofixb)
                 end do
@@ -9355,7 +9360,7 @@
                 end do
             endif  !20200812
 
-            if(outinp<0)then  !锟斤拷锟饺讹拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷时锟斤拷oip锟侥硷拷锟斤拷锟斤拷锟斤拷压锟斤拷 20220623
+            if(outinp<0)then  !非稳定渗流场分析时向oip文件输出结点压力 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -9370,7 +9375,7 @@
 
             endif
 
-            if(upliftin<0)then  !锟斤拷锟饺讹拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷时锟斤拷upf锟侥硷拷锟斤拷锟斤拷锟斤拷压锟斤拷 20220623
+            if(upliftin<0)then  !非稳定渗流场分析时向upf文件输出结点压力 20220623
                 allocate(midt(npoin))  !20220626
                 icdofn=lmdofn(8)
                 midt=0.
@@ -9665,7 +9670,7 @@
     do jpoin=1,gapb(igapb)%npblock
         ipoin=gapb(igapb)%nodeblock(jpoin)
         df=0.
-        do jdimn=1,kdimn !锟较革拷锟剿碉拷锟接︼拷锟斤拷锟絚dofn,ndof
+        do jdimn=1,kdimn !严格的说，应该用cdofn,ndof
             itotv=nodfn(jdimn,ipoin)
             if(itotv/=0) &
                 df(jdimn)=-stfor_inc(itotv)-force_rigid(itotv)
@@ -9769,7 +9774,7 @@
     do jpoin=1,gapb(igapb)%npblock
         ipoin=gapb(igapb)%nodeblock(jpoin)
         df=0.
-        do jdimn=1,kdimn !锟较革拷锟剿碉拷锟接︼拷锟斤拷锟絚dofn,ndof
+        do jdimn=1,kdimn !严格的说，应该用cdofn,ndof
             itotv=nodfn(jdimn,ipoin)
             if(itotv/=0) &
                 df(jdimn)=stfor_inc(itotv)
@@ -10816,7 +10821,7 @@
             !
             !
             !allocate(disl(gapb(igapb)%nrdof)) !20171130
-            !disl=ditime*gapb(igapb)%rdisp_first+.5*ditime**2*gapb(igapb)%rdisp_second !锟剿达拷为锟斤拷锟斤拷转锟斤拷锟斤拷锟劫讹拷锟斤拷锟斤拷
+            !disl=ditime*gapb(igapb)%rdisp_first+.5*ditime**2*gapb(igapb)%rdisp_second !此处为刚体转动加速度增量
             !   call dis_modify(igapb,disl)
             !disl=.5*ditime*gapb(igapb)%rdisp_second
             !   call vel_modify(igapb,disl)
@@ -10928,7 +10933,7 @@
             if(gapb(igapb)%nrdof==0)cycle   !20231026
             allocate(disl(gapb(igapb)%nrdof))
 
-            disl=gapb(igapb)%rdisp_inc !锟剿达拷为锟斤拷锟斤拷转锟斤拷锟斤拷锟劫讹拷锟斤拷锟斤拷
+            disl=gapb(igapb)%rdisp_inc !此处为刚体转动加速度增量
             write(7,*)'igapb=',igapb,'disl=',disl
             if(type_problem=='Q')then !!20121001
                 gapb(igapb)%rdisp_delitfi=disl
@@ -11666,7 +11671,7 @@
     real(irk) djacb,weigp,dis,thickness
     ! define gpvar
     write(7,*)'in modf_element_lib'
-    if(type_problem=='WT')then !20220409 锟斤拷锟节憋拷雪锟斤拷锟斤拷
+    if(type_problem=='WT')then !20220409 用于冰雪冻融
         DO jgroup =1,ngroup
             index = group(jgroup)%index
             ngaus =elkn(index)%ggaus(1)%ngaus
@@ -11824,7 +11829,7 @@
 
                 allocate(element(ielem)%field(1)%gpvar0(ngvar,ngaus))  !20210125
                 allocate(element(ielem)%field(1)%gpvar(ngvar,ngaus),element(ielem)%field(1)%sigz(ngaus))
-                allocate(element(ielem)%field(1)%bmatx(nstre,nevab,ngaus)) !20231215YL 锟芥储锟斤拷元B锟斤拷锟斤拷
+                allocate(element(ielem)%field(1)%bmatx(nstre,nevab,ngaus)) !20231215YL 存储单元B矩阵
 
                 !if(material=='DUNCANCHANG'.and.uplift_ic/=0)then !20220409
                 !if(material=='DUNCANCHANG')then !20220607
@@ -12108,7 +12113,7 @@
         endif !for field(1:1)='U'
 
         !! end for Simo & Rifai element
-        !! 11/6/04   ! 锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟角非憋拷锟斤拷
+        !! 11/6/04   ! 单纯渗流场考虑非饱和
         if (field1(1:1)=='W'.and.name(1:6)=='NSSoil') then
 
             order_int=elkn(index)%el_field(1)%order_intrules(1)
@@ -12300,8 +12305,8 @@
 
         else if(ifixvar==10.and.jfixvar/=0)then  !20230402
 
-            !锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟轿凤拷为锟斤拷同锟斤拷锟斤拷jfixvar=0时锟斤拷锟斤拷通锟斤拷锟斤拷锟斤拷锟斤拷同锟斤拷锟斤拷*.loa锟叫碉拷锟斤拷锟竭ｏ拷锟斤拷锟斤拷时锟斤拷锟斤拷确锟斤拷锟铰讹拷值锟斤拷
-            !jfixvar/=0时锟斤拷jfixvar为指锟斤拷锟斤拷锟斤拷锟截诧拷同锟斤拷锟斤拷锟绞憋拷锟戒化锟斤拷锟竭ｏ拷锟斤拷锟皆凤拷为锟斤拷锟轿猴拷锟斤拷锟轿★拷
+            !将坝体上下游分为不同区，jfixvar=0时，与通常方法相同，由*.loa中的曲线，根据时间来确定温度值；
+            !jfixvar/=0时，jfixvar为指定区域沿不同深度随时间变化曲线，可以分为上游和下游。
             inode=prescrib(idofix)%nodfix
             vertical_direction=temp_surface(jfixvar)%vertical_direction
             corz=coord(vertical_direction,inode)
@@ -12712,7 +12717,7 @@
     real    (irk):: old_gap
 
 
-    eps = 1.e-4  ! 增大eps提高数值稳定性
+    eps = 1.e-5  ! 增大eps提高数值稳定性
 
 
     write(7,*)'contact_state********************'
@@ -12886,12 +12891,21 @@
                                 ft0=0.01
                             endif
 
+
                             ! 获取间隙变化量（相对于初始状态的变化）
                             current_gap = element(ielem)%field(1)%gapg(igaus)  ! 总间隙（用于显示）
                             gap_change = current_gap-element(ielem)%field(1)%gapg0(igaus)  ! 间隙变化量
 
 
                             previous_state = element(ielem)%field(1)%state1(igaus)
+
+                            !if (element(ielem)%field(1)%gapg(igaus)>eps.and.smean>ft0) then !ooo
+                            !    element(ielem)%field(1)%icftcontact(igaus)=1
+                            !    element(ielem)%field(1)%state(igaus)='open'
+                            !    !                        write(7,*)'ielem=',ielem,'igaus=',igaus,'gapg=',element(ielem)%field(1)%gapg(igaus),'smean=',smean
+                            !endif
+                            !cycle
+
 
                             if (previous_state == 'contact') then
                                 ! contact → open 判断：基于位移增量和真实应力
@@ -12912,7 +12926,7 @@
                                 ! open → contact 的核心：间隙足够小，接近真正接触
                                 ! 判断依据：当前间隙接近接触阈值
 
-                                if (current_gap < element(ielem)%field(1)%gapg0(igaus)) then
+                                if (current_gap < eps) then
                                     element(ielem)%field(1)%state(igaus) = 'contact'
                                 else
                                     element(ielem)%field(1)%state(igaus) = 'open'
@@ -13463,7 +13477,7 @@
     if (type_problem=='F')then
 
 
-        ic_inertia=0    !ic_inertia,ic_inertia_group 锟斤拷要锟斤拷锟斤拷识锟金当接达拷锟斤拷锟斤拷锟斤拷全锟脚匡拷锟襟，诧拷锟斤拷施锟接碉拷锟斤拷锟斤拷锟斤拷锟?
+        ic_inertia=0    !ic_inertia,ic_inertia_group 主要用来识别当接触块体完全张开后，不在施加地震惯性力
         allocate(ic_inertia_group(ngroup))
         ic_inertia_group=1
 
@@ -13569,9 +13583,9 @@
                 if(SPtype=='PS')alfa=e/(1.0-nu**2)
                 if(SPtype=='PS')beta=alfa*nu
                 G= e/(2.*(1.+nu))
-                speed(ndimn)=sqrt(alfa/density) !P锟斤拷锟斤拷锟斤拷
-                speed(1:(ndimn-1))=sqrt(g/density) !S锟斤拷锟斤拷锟斤拷
-                if (cdbound==2)then           !锟阶边斤拷
+                speed(ndimn)=sqrt(alfa/density) !P波波速
+                speed(1:(ndimn-1))=sqrt(g/density) !S波波速
+                if (cdbound==2)then           !底边界
                     if(hwdirec==0) then !20220105
 
                         call dfact_time_curve(ttime)
@@ -13580,8 +13594,8 @@
                             itdis=earthquake_curve_d(idimn)     !!hxl_l
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
                             if(itdis>0) &
-                                dfact1(idimn)=tcurves(itdis)%dfact     !锟斤拷锟斤拷位锟狡诧拷
-                            if(itveloc>0)dfact2(idimn)=2.*tcurves(itveloc)%dfact    !锟斤拷锟斤拷锟劫度诧拷 *2锟斤拷
+                                dfact1(idimn)=tcurves(itdis)%dfact     !入射位移波
+                            if(itveloc>0)dfact2(idimn)=2.*tcurves(itveloc)%dfact    !入射速度波 *2？
                         end do
                         do inode=1,nnode
                             do idimn=1,ndimn
@@ -13600,7 +13614,7 @@
                             else if(hwdirec<0)then !20220105
                                 timer0=(hcoord-coord(hwdirec,lnods(inode)))/speed(-hwdirec) !20220105
                             endif  !20220105
-                            timer0=ttime-timer0 !锟斤拷锟斤拷时锟斤拷锟斤拷锟斤拷锟诫波锟斤拷锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟街拷睿拷锟斤拷汛锟斤拷锟斤拷锟斤拷锟角帮拷锟斤拷时锟斤拷
+                            timer0=ttime-timer0 !计算时间与输入波传播至当前点的时间之差，即已传播至当前点的时间
                             dfact1=0.;dfact2=0.;  sxyz=0.
                             if (timer0>0.)then
                                 call dfact_time_curve(timer0)
@@ -13622,7 +13636,7 @@
                     endif !20220105
 
 
-                elseif(cdbound==1)then       !锟斤拷呓锟?
+                elseif(cdbound==1)then       !侧边界
                     dfact1=0.;dfact2=0.;  sxyz=0.
                     do inode=1,nnode
                         timer0=0.  !20220105
@@ -13635,24 +13649,24 @@
                         do idimn=1,ndimn
                             itdis=earthquake_curve_d(idimn)     !!hxl_l
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
-                            timer1=(coordzi-inpcord)/speed(idimn) !锟斤拷锟诫波锟斤拷锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟?
+                            timer1=(coordzi-inpcord)/speed(idimn) !输入波传播至当前点的时间
                             timer1=timer1+timer0 !20220105
-                            timer1=ttime-timer1 !锟斤拷锟斤拷时锟斤拷锟斤拷锟斤拷锟诫波锟斤拷锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟街拷睿拷锟斤拷汛锟斤拷锟斤拷锟斤拷锟角帮拷锟斤拷时锟斤拷
+                            timer1=ttime-timer1 !计算时间与输入波传播至当前点的时间之差，即已传播至当前点的时间
                             if (timer1>0.)then
                                 call dfact_time_curve(timer1)
                                 if(itdis>0)  dfact1(idimn)=tcurves(itdis)%dfact
                                 if(itveloc>0)dfact2(idimn)=tcurves(itveloc)%dfact
                                 if(itveloc>0)sxyz(idimn)=-speed(idimn)*density*tcurves(itveloc)%dfact
-                                ! sxyz 锟斤拷锟斤拷锟劫度诧拷锟斤拷锟斤拷锟斤拷应锟斤拷锟斤拷=-锟斤拷*Cs*V
+                                ! sxyz 入射速度波产生的应力г=-ρ*Cs*V
                             endif
                         end do
 
-                        if (ndimn==2)then ! 锟斤拷1:nidmn-1锟斤拷锟斤拷应锟斤拷锟斤拷ndimn锟斤拷锟斤拷应锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟劫度诧拷锟斤拷锟斤拷应锟斤拷锟斤拷锟斤拷dsxyz
+                        if (ndimn==2)then ! 由1:nidmn-1个切应力及ndimn法向应力推求入射速度波产生应力张量dsxyz
                             dsxyz(1,1)=beta/alfa*sxyz(2)
                             dsxyz(2,2)=sxyz(2)
                             dsxyz(1,2)=sxyz(1)
                             dsxyz(2,1)=sxyz(1)
-                        elseif(ndimn==3)then ! 锟斤拷1:nidmn-1锟斤拷锟斤拷应锟斤拷锟斤拷ndimn锟斤拷锟斤拷应锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟劫度诧拷锟斤拷锟斤拷应锟斤拷锟斤拷锟斤拷dsxyz
+                        elseif(ndimn==3)then ! 由1:nidmn-1个切应力及ndimn法向应力推求入射速度波产生应力张量dsxyz
                             dsxyz(1,1)=beta/alfa*sxyz(3)
                             dsxyz(2,2)=dsxyz(1,1)
                             dsxyz(3,3)=sxyz(3)
@@ -13663,8 +13677,8 @@
                             dsxyz(3,1)=sxyz(1)
                             dsxyz(3,2)=sxyz(2)
                         endif
-                        xyz1=dsxyz.x.tabss(ielem)%rr(ndimn,:) !转锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷系
-                        ! xyz1:锟斤拷锟斤拷锟斤拷锟斤拷系锟斤拷锟斤拷锟叫诧拷锟斤拷锟斤拷锟斤拷应锟斤拷
+                        xyz1=dsxyz.x.tabss(ielem)%rr(ndimn,:) !转换至整体坐标系
+                        ! xyz1:整体坐标系下上行波产生的应力
 
                         dfact3=0.
                         dfact4=0.
@@ -13674,14 +13688,14 @@
                             itveloc=earthquake_curve_v(idimn)   !!hxl_l
                             timer2=(cordzfree(inode)-inpcord)/speed(idimn)+(cordzfree(inode)-coordzi)/speed(idimn)
                             timer2=timer2+timer0 !20220105
-                            !timer2:锟斤拷锟戒波锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟绞憋拷锟?+锟接讹拷锟斤拷锟劫达拷锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟?
-                            timer2=ttime-timer2 !锟斤拷锟斤拷时锟斤拷锟斤拷锟斤拷锟戒波锟接讹拷锟芥反锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟街拷锟?
+                            !timer2:入射波传播至顶面的时间+从顶面再传播至当前点的时间
+                            timer2=ttime-timer2 !计算时间与入射波从顶面反射至当前点的时间之差
                             if (timer2>0.) then
                                 call dfact_time_curve(timer2)
                                 if(itdis>0)dfact3(idimn)=tcurves(itdis)%dfact
                                 if(itveloc>0)dfact4(idimn)=tcurves(itveloc)%dfact
                                 if(itveloc>0)sxyz(idimn)=speed(idimn)*density*tcurves(itveloc)%dfact
-                                ! sxyz 锟斤拷锟斤拷锟劫度诧拷锟斤拷锟斤拷锟斤拷应锟斤拷锟斤拷=锟斤拷*Cs*V
+                                ! sxyz 入射速度波产生的应力г=ρ*Cs*V
                             endif
                         end do
 
@@ -13704,21 +13718,21 @@
                             dsxyz(3,2)=sxyz(2)
                         endif
                         xyz2=dsxyz.x.tabss(ielem)%rr(ndimn,:)
-                        ! xyz1:锟斤拷锟斤拷锟斤拷锟斤拷系锟斤拷锟斤拷锟叫诧拷锟斤拷锟斤拷锟斤拷应锟斤拷
+                        ! xyz1:整体坐标系下下行波产生的应力
                         do idimn=1,ndimn
-                            value_d((inode-1)*ndimn+idimn)=(dfact1(idimn)+dfact3(idimn)) !锟斤拷锟缴筹拷位锟狡诧拷
-                            value_v((inode-1)*ndimn+idimn)=(dfact2(idimn)+dfact4(idimn)) !锟斤拷锟缴筹拷锟劫度诧拷
-                            value_s((inode-1)*ndimn+idimn)=xyz1(idimn)+xyz2(idimn)       !锟斤拷锟缴筹拷应锟斤拷锟斤拷
-                            !实锟斤拷锟较斤拷锟斤拷锟缴筹拷锟斤拷为锟斤拷锟斤拷锟街ｏ拷锟斤拷锟叫诧拷锟斤拷锟斤拷锟斤拷锟诫波锟斤拷锟斤拷锟斤拷锟叫诧拷锟斤拷锟斤拷锟斤拷锟戒波锟斤拷
+                            value_d((inode-1)*ndimn+idimn)=(dfact1(idimn)+dfact3(idimn)) !自由场位移波
+                            value_v((inode-1)*ndimn+idimn)=(dfact2(idimn)+dfact4(idimn)) !自由场速度波
+                            value_s((inode-1)*ndimn+idimn)=xyz1(idimn)+xyz2(idimn)       !自由场应力波
+                            !实际上将自由场分为两部分：上行波（即输入波）与下行波（即反射波）
                         end do
                     end do
                 endif
 
-                !estif  =Int. (RT NT 锟斤拷*Cs N R)
+                !estif  =Int. (RT NT ρ*Cs N R)
                 !estif0 =Int. (RT NT k/(2*rb) N R)
                 !eload_s=Int. (NT N)
 
-                !锟斤拷锟斤拷锟缴筹拷应锟斤拷转锟斤拷为锟斤拷锟斤拷锟斤拷锟桔硷拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟絫ofor
+                !将自由场应力转换为结点荷载累加至总体荷载列阵tofor
                 ldofs=>tabss(ielem)%ldofs
                 allocate(eload(size(ldofs)))
                 estif=>tabss(ielem)%estif
@@ -13827,7 +13841,7 @@
         enddo
     endif
 
-    if(alfa_p4>0)then  !20221124 锟斤拷应锟节局诧拷锟斤拷锟斤拷锟斤拷未知锟斤拷锟侥节点，锟斤拷锟斤拷锟截斤拷锟斤拷转锟斤拷
+    if(alfa_p4>0)then  !20221124 对应于局部坐标作未知量的节点，将外载进行转换
         allocate(value(ndimn))
         do ipoin=1,npoin
             if (local_p4(ipoin)==0)cycle
@@ -14044,7 +14058,7 @@
     real   (irk),allocatable::value(:),values(:),valuef(:)
     real   (irk) coef,accx,accz
 
-    if(Icaddmass==3)then  !锟斤拷锟斤拷刹鄄鄣锟斤拷锟斤拷锟斤拷锟斤拷锟剿斤拷锟斤拷俣锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷压锟斤拷锟斤拷锟皆硷拷锟桔碉拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷俣锟斤拷锟斤拷锟侥诧拷锟斤拷压锟斤拷
+    if(Icaddmass==3)then  !计算渡槽槽底中心线上水平加速度引起的竖向压力，以及槽底中心线上竖向加速度引起的侧向压力
         !20220330
         igroup=dwpre_aqu%aqu_group
         if(appear(igroup)==0) goto 10
@@ -14586,7 +14600,7 @@
     !!ifs2000
 
     !ifs2006 zhao, 06/03/29
-    if(icaddmass==0)then    !20231215YL 锟皆革拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷要锟斤拷锟铰硷拷锟斤拷
+    if(icaddmass==0)then    !20231215YL 对附加质量法不需要以下集成
         do iedge=1,ifsnedge
             felem=ifsedges(iedge)%felem
             igroup=element(felem)%group
@@ -15159,8 +15173,8 @@
                         !write(7,*)'ipairs=',ipairs,'ctforce=', gaps(igaps)%ctforce(1:ndimn,ipairs),'state=',gaps(igaps)%state(ipairs)
                         if(kinit==2)gaps(igaps)%ctforce_stres0(1:ndimn,ipairs)=gaps(igaps)%ctforce0(1:ndimn,ipairs) !2019/03/19
                         !if(gaps(igaps)%state(ipairs)==2.and.xlwsol==1)then
-                        ! gaps(igaps)%kxyz(1,1,ipairs)=gaps(igaps)%kgroup1(1,1)  !锟斤拷锟较碉拷锟饺★拷锟街的ｏ拷锟斤拷锟斤拷苫锟斤拷锟?
-                        !if(ndimn==3)gaps(igaps)%kxyz(2,2,ipairs)=gaps(igaps)%kgroup1(2,2)  !锟斤拷锟较碉拷锟饺★拷锟街的ｏ拷锟斤拷锟斤拷苫锟斤拷锟?
+                        ! gaps(igaps)%kxyz(1,1,ipairs)=gaps(igaps)%kgroup1(1,1)  !柔度系数取大值模拟自由滑动
+                        !if(ndimn==3)gaps(igaps)%kxyz(2,2,ipairs)=gaps(igaps)%kgroup1(2,2)  !柔度系数取大值模拟自由滑动
                         !end if
                     enddo
                 enddo
@@ -15270,7 +15284,7 @@
                         ldofs => element(ielem)%field(ifield)%ldofs_f
                         result_zero(ldofs)=temperature
 
-                        !do idofn=1,size(ldofs)     !锟睫改斤拷锟斤拷锟斤拷锟斤拷锟斤拷露锟?
+                        !do idofn=1,size(ldofs)     !修改浇筑层界面温度
                         !	if(abs(result_zero(ldofs(idofn)))<.0001) then
                         !		result_zero(ldofs(idofn))=temperature
                         !	else
@@ -15278,12 +15292,12 @@
                         !	endif
                         !            enddo
 
-                        do idofn=1,size(ldofs)     !cj042@126.com  20191120锟睫改斤拷锟斤拷锟斤拷锟斤拷锟斤拷露锟?
+                        do idofn=1,size(ldofs)     !cj042@126.com  20191120修改浇筑层界面温度
                             if(abs(result0(ldofs(idofn)))<.0001) then
                                 result_zero(ldofs(idofn))=temperature
-                                result1(ldofs(idofn))=temperature  !20191127锟睫改斤拷锟斤拷锟斤拷锟斤拷哟锟斤拷锟斤拷锟斤拷锟侥节碉拷幕锟阶硷拷露锟?
+                                result1(ldofs(idofn))=temperature  !20191127修改浇筑层除接触面意外的节点的基准温度
                             else
-                                result_zero(ldofs(idofn))=(result0(ldofs(idofn))+temperature)*.5  !锟斤拷准值result0锟斤拷锟戒【锟斤拷锟铰诧拷为准锟斤拷
+                                result_zero(ldofs(idofn))=(result0(ldofs(idofn))+temperature)*.5  !基准值result0不变【以下层为准】
                             endif
                         enddo
 
@@ -15312,7 +15326,7 @@
     result0=result1
     deallocate(result1)
 
-    !! 锟皆从节碉拷锟斤拷值锟斤拷锟斤拷锟睫改ｏ拷锟皆憋拷证水锟杰碉拷元锟斤拷始锟铰讹拷锟斤拷锟斤拷锟斤拷锟侥伙拷锟斤拷锟斤拷锟节碉拷锟铰讹拷锟斤拷同(20210417)
+    !! 对从节点数值进行修改，以保证水管单元初始温度与依赖的混凝土节点温度相同(20210417)
     do itotv=1,ntotv
         nintf=trans(itotv)%nintf
         if (nintf==0) cycle
@@ -15343,7 +15357,7 @@
             nullify(pairnode_wc)
         end do
     end do
-    !!end 锟皆从节碉拷锟斤拷值锟睫改ｏ拷锟皆憋拷证水锟杰碉拷元锟斤拷始锟铰讹拷锟斤拷锟斤拷锟斤拷锟侥伙拷锟斤拷锟斤拷锟节碉拷锟铰讹拷锟斤拷同(20210417)
+    !!end 对从节点数值修改，以保证水管单元初始温度与依赖的混凝土节点温度相同(20210417)
 
 
 
@@ -15708,7 +15722,7 @@
     !!ifs2000
 
     !ifs2006 zhao, 06/03/29
-    if(icaddmass==0)then    !20231215YL 锟皆革拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷要锟斤拷锟铰硷拷锟斤拷
+    if(icaddmass==0)then    !20231215YL 对附加质量法不需要以下集成
         do iedge=1,ifsnedge
             felem=ifsedges(iedge)%felem
             igroup=element(felem)%group
@@ -15870,7 +15884,7 @@
                 ipair=gapb(igapb)%nodegblock_ipairs(i0)
                 ij=gapb(igapb)%nodegblock_onetwo(i0)
                 ipoin=gaps(igaps)%pairnode(ij,ipair)
-                gapb(igapb)%force_ct(1:kkdimn,i0)=-refor(nodfn(1:kkdimn,ipoin))  !锟接和地伙拷锟斤拷锟斤拷愦ξ伙拷锟?
+                gapb(igapb)%force_ct(1:kkdimn,i0)=-refor(nodfn(1:kkdimn,ipoin))  !坝和地基交界点处位移
             end do
         end do
     endif
@@ -17159,22 +17173,22 @@
         lnofixb=>prescrib(idofix)%lnofixb
         ldofixb=>prescrib(idofix)%ldofixb
         inpvar=abs(ifixvar0_inpb)
-        if (ifixvar0_inpb==ifixvar0)then !锟阶边斤拷
+        if (ifixvar0_inpb==ifixvar0)then !底边界
             do ilaymif=1,nlaymif
-                tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif !锟斤拷锟斤拷位锟狡诧拷锟斤拷锟斤拷锟斤拷锟斤拷前锟斤拷锟绞憋拷锟?
+                tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif !入射位移波传播至当前层的时间
                 call dfact_time_curve(ttime)
-                inpru(ldofixb(ilaymif))=tcurves(iwavcurve)%dfact !锟斤拷前锟斤拷锟斤拷锟斤拷锟轿伙拷撇锟?
+                inpru(ldofixb(ilaymif))=tcurves(iwavcurve)%dfact !当前层的入射位移波
                 tcurves(iwavcurve)%dtbegin=0.0
             enddo
         else
             do ilaymif=1,nlaymif
                 tcurves(iwavcurve)%dtbegin=abs(coord(inpvar,lnofixb(ilaymif))-inpcord)/camif
                 call dfact_time_curve(ttime)
-                dfact1=tcurves(iwavcurve)%dfact !锟斤拷锟戒波
+                dfact1=tcurves(iwavcurve)%dfact !入射波
                 tcurves(iwavcurve)%dtbegin=abs((bfrecoord-inpcord)/camif)+abs(coord(inpvar,lnofixb(ilaymif))-bfrecoord)/camif
                 call dfact_time_curve(ttime)
-                dfact2=tcurves(iwavcurve)%dfact !锟斤拷锟戒波锟斤拷锟斤拷锟斤拷锟斤拷锟缴憋拷锟斤拷锟斤拷锟斤拷蟹锟斤拷洳?
-                inpzi(ldofixb(ilaymif))=dfact1+dfact2 !锟斤拷锟竭的碉拷锟接撅拷锟斤拷锟斤拷锟缴筹拷
+                dfact2=tcurves(iwavcurve)%dfact !入射波传播至自由表面后下行反射波
+                inpzi(ldofixb(ilaymif))=dfact1+dfact2 !二者的迭加就是自由场
                 tcurves(iwavcurve)%dtbegin=0.0
             enddo
         endif
@@ -17220,7 +17234,7 @@
             endif
         end do
     end do
-    !!!!!!锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟?
+    !!!!!!分组计算周数
 
     DO igroup =1,ngroup
         liquj=  group(igroup)%liquj
@@ -17248,7 +17262,7 @@
                 ielem = group(igroup)%list(ielgroup)
 
                 npeak=0
-                !!锟斤拷锟斤拷锟街碉拷锟斤拷锟斤拷
+                !!计算峰值点个数
                 do i0=2,nliqu-1
                     bi=shear(igroup)%stres(i0-1,ielgroup)
                     bj=shear(igroup)%stres(i0,ielgroup)
@@ -17264,8 +17278,8 @@
                     endif
                 end do
                 !        write(7,*)'ig=',igroup,'ie=',ielgroup,'npeak=',npeak,'speak=',speak(1:npeak)
-                !!end锟斤拷锟斤拷锟街碉拷锟斤拷锟斤拷
-                !!锟斤拷锟斤拷锟叫э拷锟斤拷锟?
+                !!end计算峰值点个数
+                !!计算等效周数
                 neqcy=0
                 if(npeak>0)then
                     !write(7,*)'*******************************npeak=*********************',npeak
@@ -17283,7 +17297,7 @@
                 end if
                 !	print *,'neqcy=',neqcy
                 element(ielem)%neqcy=neqcy
-                !!end锟斤拷锟斤拷锟叫э拷锟斤拷锟?
+                !!end计算等效周数
                 !! take out the initial vertical normal stress and the horizontal shear stress
                 !sigma0=sum(element(ielem)%field(1)%STRES0(ndimn,:))/ngaus
                 sigma0=sum(element(ielem)%STRES0(ndimn,:))/ngaus
@@ -17460,11 +17474,11 @@
                 stemp=stran
                 stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
                 call main_stran_r( stemp, stmin)
-                ! if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))*0.5  !锟斤拷锟斤拷应锟斤拷(2D) !zhao
-                ! if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))*0.5  !锟斤拷锟斤拷应锟斤拷(3D)
-                if(ndimn==2)strain_s=(stmin(1)-stmin(2))!*0.5  !锟斤拷锟斤拷应锟斤拷(2D) !zhao
-                !if(ndimn==3)strain_s=(stmin(1)-stmin(3))!*0.5  !锟斤拷锟斤拷应锟斤拷(3D)
-                if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !锟斤拷蠖锟接︼拷锟? yuanli
+                ! if(ndimn==2)strain_s=abs((stmin(1)-stmin(2)))*0.5  !最大剪应变(2D) !zhao
+                ! if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))*0.5  !最大剪应变(3D)
+                if(ndimn==2)strain_s=(stmin(1)-stmin(2))!*0.5  !最大剪应变(2D) !zhao
+                !if(ndimn==3)strain_s=(stmin(1)-stmin(3))!*0.5  !最大剪应变(3D)
+                if(ndimn==3)strain_s=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !最大动剪应变 yuanli
                 !			 if (strain_s<=0) stop
                 !			 print *,'srain_s0'
                 allocate(sigx(nstre))
@@ -17516,13 +17530,13 @@
                     do igaus = 1,ngaus
                         bmatx = element(ielem)%field(1)%bmatx(:,:,igaus)
                         stran = matmul(bmatx,eldis)
-                        !未锟斤拷锟斤拷平锟斤拷应锟斤拷锟斤拷锟?
+                        !未处理平面应力情况
                         stemp=stran
                         stemp(ndimn+1:3*(ndimn-1))=.5*stran(ndimn+1:3*(ndimn-1))
                         call main_stran_r( stemp, stmin)
-                        if(ndimn==2)gamad=abs((stmin(1)-stmin(2)))   !*0.5  !锟斤拷锟斤拷应锟斤拷(2D) !zhao
-                        !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !锟斤拷锟斤拷应锟斤拷(3D)
-                        if(ndimn==3)gamad=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !锟斤拷蠖锟接︼拷锟? yuanli
+                        if(ndimn==2)gamad=abs((stmin(1)-stmin(2)))   !*0.5  !最大剪应变(2D) !zhao
+                        !if(ndimn==3)strain_s=abs((stmin(1)-stmin(3)))   !*0.5  !最大剪应变(3D)
+                        if(ndimn==3)gamad=sqrt(((stmin(1)-stmin(2))**2+(stmin(2)-stmin(3))**2+(stmin(3)-stmin(1))**2)*2)/3 !最大动剪应变 yuanli
                         gamad0 = element(ielem)%field(1)%gamamax0(igaus)
                         if(gamad>=gamad0)then
                             element(ielem)%field(1)%gamamax(igaus) = gamad
@@ -17603,7 +17617,7 @@
         endif
     enddo
     gamamax_ratio=abs(Tgamamax-Tgamamax0)/Tgamamax
-    write(gamamaxunit,*) '锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷',gamamax_error_max,'锟斤拷锟斤拷锟?',Tgamamax,'锟斤拷锟斤拷锟斤拷锟斤拷',gamamax_ratio
+    write(gamamaxunit,*) '结点最大相对误差',gamamax_error_max,'总误差',Tgamamax,'总相对误差',gamamax_ratio
     close(gamamaxunit)
     end subroutine writegamamax
 
@@ -17738,9 +17752,9 @@
     ipi(listnode)=1
     select case(index)
     case(5,22)
-        if(sum(ipi)==3)call change4(listnode)   !
+        if(sum(ipi)==3)call change4(listnode)   !对退化的四边形处理
     case(9)
-        if(sum(ipi)==6)then  !
+        if(sum(ipi)==6)then  !对退化的六面体处理
             ipi=0
             ipi(listnode(1:4))=1
 
@@ -17893,10 +17907,10 @@
                 elseif(criteria(1:2)=='DP')then
                     frict_angle=props(imat)%mechanical%solid%ClassicalEP%frict_angle
                     sigma0=props(imat)%mechanical%solid%ClassicalEP%sigma0
-                    !if(criteria=='DP1')then 
+                    !if(criteria=='DP1')then !外顶点
                     !    dp_alfa=2.0*sind(frict_angle)/(sqrt(3.0)*(3.0-sind(frict_angle)))
                     !    dp_k=   6.0*sigma0*cosd(frict_angle)/(sqrt(3.0)*(3.0-sind(frict_angle)))
-                    !elseif(criteria=='DP2')then 
+                    !elseif(criteria=='DP2')then !内顶点  DP3内切
                     dp_alfa=2.0*sind(frict_angle)/(sqrt(3.0)*(3.0+sind(frict_angle)))
                     dp_k=   6.0*sigma0*cosd(frict_angle)/(sqrt(3.0)*(3.0+sind(frict_angle)))
                     !else
