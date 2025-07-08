@@ -763,6 +763,7 @@
     real(irk) smax,qmax,phi,density,snorm,ratio,px,p0,lamda
     real(irk),allocatable::evk(:),stran0(:)
     real(irk) Emoduls,mu !20231215YL
+    real(irk) normal_gap
 
 
     !initial all varibales !20220713
@@ -872,8 +873,15 @@
                     .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1
 10              continue
                 call PKPN(matno,evk,sgtot,first)
+
+                normal_gap = element(ielem)%field(1)%gapg(igaus)-element(ielem)%field(1)%natural_thickness(igaus)
+
+                ! 增加罚函数
+                evk(ndimn) = evk(ndimn)/element(ielem)%field(1)%natural_thickness(igaus) + &
+                    evk(ndimn)*normal_gap**2*1e3
+
                 element(ielem)%evk(:,igaus)=evk
-                !write(7,*)'ie=',ielem,'igaus=',igaus,'evk=',evk
+                write(7,'(A10,I10,A10,I10,A10,2E15.7)')'ie=',ielem,'igaus=',igaus,'evk=',evk
                 !write(7,*)'first=',first,'sgtot=',sgtot
 
                 dmatx=0.
@@ -5849,43 +5857,46 @@
     integer(ink) matno,first
     real   (irk) evk(:),ps(:)
     real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
-    r(3),cohes,ft
-   !write(7,*) 'ps=',ps
+        r(3),cohes,ft, max_tan_stiff
+    !write(7,*) 'ps=',ps
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
     !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
     Ft    =props(matno)%mechanical%solid%Goodman%Ft
 
     if (first==1)then
-       evk(ndimn)=kzz
-       evk(1)=K1*gamaw
-       if (ndimn==3)evk(2)=K1*gamaw
-       return
+        evk(ndimn)=kzz
+        evk(1)=K1*gamaw
+        if (ndimn==3)evk(2)=K1*gamaw
+        return
     endif
     if (PS(ndimn)>=ft.or.abs(ps(ndimn))<.01)then
-       EVK(ndimn)=pa
-       EVK(1:ndimn-1)=pa
-       GOTO 1
+        EVK(ndimn)=pa
+        EVK(1:ndimn-1)=pa
+        GOTO 1
     endif
     n    =props(matno)%mechanical%solid%Goodman%n
     Rf   =props(matno)%mechanical%solid%Goodman%Rf
     phi  =props(matno)%mechanical%solid%Goodman%phi
     cohes=props(matno)%mechanical%solid%Goodman%cohes
     EVK(ndimn)=Kzz
-    
+
     TF=-ps(ndimn)*tand(phi)+cohes
     R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
-    EVK(1)=Kzx*gamaw*(abs(PS(ndimn))/pa)**n*R(1)**2
-    if(ndimn==3)EVK(2)=Kzy*gamaw*(abs(PS(ndimn))/pa)**n*R(2)**2
-    1     CONTINUE
+    
+    max_tan_stiff = evk(1)
+    
+    EVK(1)=max(Kzx*gamaw*(abs(PS(ndimn))/pa)**n*R(1)**2,max_tan_stiff)
+    if(ndimn==3)EVK(2)=max(Kzy*gamaw*(abs(PS(ndimn))/pa)**n*R(2)**2,max_tan_stiff)
+1   CONTINUE
     END SUBROUTINE PKPN
-    
-    
- !20231125YL  
+
+
+    !20231125YL
     SUBROUTINE PKPN_watertight(matno,relat_dis_gaus,EVK) !20231007 止水
     integer(ink) matno,iwj,fill
     real   (irk) evk(:),relat_dis_gaus(:),gdelta
@@ -6146,11 +6157,11 @@
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
     real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw 20230402
-    r(3),cohes,ft
+        r(3),cohes,ft
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
     !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
@@ -6162,10 +6173,10 @@
 
 
     if (first==1)then
-       evk(ndimn)=kzz
-       evk(1)=k1*gamaw
-       if (ndimn==3)evk(2)=k1*gamaw
-       goto 300
+        evk(ndimn)=kzz
+        evk(1)=k1*gamaw
+        if (ndimn==3)evk(2)=k1*gamaw
+        goto 300
     endif
 
     if (ps(ndimn)>=ft) then
@@ -6185,30 +6196,30 @@
     R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
     STIF=K1*gamaw
     EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
-    300     if(first==1) then
-            ps=evk*stran
-            else                                                                                                                                                                             
-            ps=ps0+evk*stran
-            endif                                                                                                                                                                            
- !if (ps(ndimn)>=ft) then                                                                                                                                                          
- !   ps=ft*.1
- !   ps(ndimn)=ft
- !elseif(t>tf)then                                                                                                                                                                 
- !   ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
- !endif                                                                                                                                                                            
-                                                                                                                                                                                  
- 1     CONTINUE                                                                                                                                                                   
-    END SUBROUTINE PKPNs   
-    
-  SUBROUTINE PKPNs0(matno,EVK,ps,first,stran,ps0)
+300 if(first==1) then
+        ps=evk*stran
+    else
+        ps=ps0+evk*stran
+    endif
+    !if (ps(ndimn)>=ft) then
+    !   ps=ft*.1
+    !   ps(ndimn)=ft
+    !elseif(t>tf)then
+    !   ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
+    !endif
+
+1   CONTINUE
+    END SUBROUTINE PKPNs
+
+    SUBROUTINE PKPNs0(matno,EVK,ps,first,stran,ps0)
     integer(ink) matno,first,ic
     real   (irk) evk(:),ps(:),stran(:),ps0(:)
     real   (irk) phi,kzz,kzy,kzx,k1,n,rf,pa,t,tf,stif, &   !,gamaw  20230402
-    r(3),cohes,ft
+        r(3),cohes,ft
     Kzz  =props(matno)%mechanical%solid%Goodman%Kzz
     Kzx  =props(matno)%mechanical%solid%Goodman%Kzx
     if (ndimn==3) &
-    Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
+        Kzy  =props(matno)%mechanical%solid%Goodman%Kzy
     !gamaw=props(matno)%mechanical%solid%Goodman%gamaw  20230402
     pa   =props(matno)%mechanical%solid%Goodman%pa
     K1   =props(matno)%mechanical%solid%Goodman%K1
@@ -6217,13 +6228,13 @@
     phi  =props(matno)%mechanical%solid%Goodman%phi
     cohes=props(matno)%mechanical%solid%Goodman%cohes
     Ft    =props(matno)%mechanical%solid%Goodman%Ft
-    
-    
+
+
     if (first==1)then
-       evk(ndimn)=kzz
-       evk(1)=k1*gamaw
-       if (ndimn==3)evk(2)=k1*gamaw
-       goto 300
+        evk(ndimn)=kzz
+        evk(1)=k1*gamaw
+        if (ndimn==3)evk(2)=k1*gamaw
+        goto 300
     endif
 
     EVK(ndimn)=Kzz
@@ -6238,25 +6249,25 @@
         EVK(1:ndimn-1)=10.
         GOTO 300
     endif
-    200   R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
+200 R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
     STIF=K1*gamaw
     EVK(1:ndimn-1)=K1*gamaw*(abs(PS(ndimn))/pa)**n*R(1:ndimn-1)**2
-    300     if(first==1) then
-    ps=evk*stran
- else                                                                                                                                                                             
-    ps=ps0+evk*stran
- endif                                                                                                                                                                            
- if (ps(ndimn)>=ft) then                                                                                                                                                          
-    ps=ft*.1
-    ps(ndimn)=ft
- elseif(t>tf)then                                                                                                                                                                 
-    ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
- endif                                                                                                                                                                            
-                                                                                                                                                                                  
- 1     CONTINUE                                                                                                                                                                   
- END SUBROUTINE PKPNs0                  
-    
-                                                                                                                                                                                  
+300 if(first==1) then
+        ps=evk*stran
+    else
+        ps=ps0+evk*stran
+    endif
+    if (ps(ndimn)>=ft) then
+        ps=ft*.1
+        ps(ndimn)=ft
+    elseif(t>tf)then
+        ps(1:ndimn-1)=tf*ps(1:ndimn-1)/t
+    endif
+
+1   CONTINUE
+    END SUBROUTINE PKPNs0
+
+
     SUBROUTINE DUNE0(matno,smean,steff,theta,smax,Qmax,s,e,p3)
     character(2) model
     integer(ink) matno

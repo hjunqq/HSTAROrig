@@ -11975,7 +11975,8 @@
                     element(ielem)%field(1)%state0(ngaus),         &
                     element(ielem)%field(1)%state(ngaus),          &
                     element(ielem)%field(1)%state1(ngaus),         &  !zhao 05/07/22
-                    element(ielem)%field(1)%icftcontact(ngaus))
+                    element(ielem)%field(1)%icftcontact(ngaus),    &
+                    element(ielem)%field(1)%natural_thickness(ngaus))
                 if(name=='CONTACT')element(ielem)%field(1)%icftcontact=0
                 !! end contact
 
@@ -12712,7 +12713,7 @@
     integer (ink),pointer::ldofs(:)
     real    (irk),allocatable::rot(:),eldis(:),nordis(:),shape(:,:),gapnod(:),gapgaus(:)
     real    (irk),allocatable::centerx(:),gapx(:),gapalfax(:)  !20231006
-    real    (irk):: current_gap, gap_change,natural_thickness
+    real    (irk):: current_gap, gap_change, natural_gap
     character(20):: previous_state, current_state
     real    (irk):: old_gap
 
@@ -12844,6 +12845,9 @@
                                 element(ielem)%field(1)%gapg0=gapgaus
                                 element(ielem)%field(1)%gapg=element(ielem)%field(1)%gapg0
                                 element(ielem)%field(1)%gapn=element(ielem)%field(1)%gapn0
+                                if(istep.eq.1.and.iincs==1) then
+                                    element(ielem)%field(1)%natural_thickness = element(ielem)%field(1)%gapg
+                                endif
                             endif  !igap0=1
                         else  !for ic==1
                             do inode=1,nnode
@@ -12895,6 +12899,7 @@
                             ! 获取间隙变化量（相对于初始状态的变化）
                             current_gap = element(ielem)%field(1)%gapg(igaus)  ! 总间隙（用于显示）
                             gap_change = current_gap-element(ielem)%field(1)%gapg0(igaus)  ! 间隙变化量
+                            natural_gap = element(ielem)%field(1)%natural_thickness(igaus)  ! 初始间隙
 
 
                             previous_state = element(ielem)%field(1)%state1(igaus)
@@ -12915,6 +12920,7 @@
                                 ! 2. 应力超过拉伸极限（这里smean还是真实应力）
                                 if (smean > ft0) then
                                     element(ielem)%field(1)%state(igaus) = 'open'
+                                    element(ielem)%evk = 0.02
                                 else
                                     element(ielem)%field(1)%state(igaus) = 'contact'
                                 endif
@@ -12926,7 +12932,7 @@
                                 ! open → contact 的核心：间隙足够小，接近真正接触
                                 ! 判断依据：当前间隙接近接触阈值
 
-                                if (current_gap < eps) then
+                                if (gap_change < eps .and. current_gap<natural_gap) then
                                     element(ielem)%field(1)%state(igaus) = 'contact'
                                 else
                                     element(ielem)%field(1)%state(igaus) = 'open'
@@ -16512,7 +16518,7 @@
 
 
     subroutine safety_factor
-    character(20)material,criteria
+    character(20)material,criteria,name
     integer(ink) ielem,igroup,iforce,jgroup,matno,ielgroup
     integer(ink) index,ngaus,igaus,order_int,nstre,npairs,igaps,ipairs,isafety,istate
     integer(ink),allocatable::iii(:)
@@ -16536,7 +16542,7 @@
             index = group(igroup)%index
             nstre =group(igroup)%nstre
             matno =group(igroup)%matno
-
+            name=props(matno)%name
             select case(trim(props(matno)%mechanical%solid%material))
             case('CLASSICALEP')
                 order_int=elkn(index)%el_field(1)%order_intrules(1)
@@ -16566,23 +16572,44 @@
                 elcod_local=group(igroup)%elcod_local
                 frict = props(matno)%mechanical%solid%Goodman%frict_angle
                 uniax = props(matno)%mechanical%solid%Goodman%uniax_cohes
-                do ielgroup = 1, group(igroup)%nelgroup
-                    ielem = group(igroup)%list(ielgroup)
-                    do igaus =1, ngaus
-                        ps = element(ielem)%field(1)%gpvar(1:ndimn,igaus)
-                        if (ps(2)<1e-10) then
-                            aera=element(ielem)%aera_local(igaus)
-                            areat = areat + aera
+                if (name=="CONTACT")then
+                    do ielgroup = 1, group(igroup)%nelgroup
+                        ielem = group(igroup)%list(ielgroup)
+                        do igaus = 1, ngaus
+                            ps = element(ielem)%field(1)%gpvar(1:ndimn,igaus)
+                            ps = element(ielem)%field(1)%gpvar(1:ndimn,igaus)
                             fn = ps(2)
                             ft = ps(1)
-                            fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)+uniax*aera
+                            if (element(ielem)%field(1)%state(igaus)=='contact') then
+                                aera=element(ielem)%aera_local(igaus)
+                                areat = areat + aera
+                                fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)+uniax*aera
+                            else
+                                fn = ps(2)
+                                fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)
+                            endif
                             ftang(iforce)=ftang(iforce)+ft*aera
-                        else
-                            fn = ps(2)
-                            fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)
-                        endif
+                        enddo
                     enddo
-                enddo
+                else
+                    do ielgroup = 1, group(igroup)%nelgroup
+                        ielem = group(igroup)%list(ielgroup)
+                        do igaus =1, ngaus
+                            ps = element(ielem)%field(1)%gpvar(1:ndimn,igaus)
+                            fn = ps(2)
+                            ft = ps(1)
+                            if (ps(2)<1e-10) then
+                                aera=element(ielem)%aera_local(igaus)
+                                areat = areat + aera
+                                fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)+uniax*aera
+                            else
+                                fn = ps(2)
+                                fresi(iforce)=fresi(iforce)-fn*aera*tand(frict)
+                            endif
+                            ftang(iforce)=ftang(iforce)+ft*aera
+                        enddo
+                    enddo
+                endif
 
             end select
 

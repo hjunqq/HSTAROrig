@@ -1091,6 +1091,9 @@
     real(irk),allocatable::stran(:),dd(:),sigma(:),vdval(:),strsg(:)
     real(irk) smax,qmax,phi,density,snorm
     real(irk),allocatable::evk(:)
+    
+    real(irk) normal_gap 
+    
     material_select: select case(material)
     case('DUNCANCHANG')
         select case(type_stiff)
@@ -1150,6 +1153,13 @@
                     .and.iincs==1.and.istep==inc_step.and.iiter==1.and.idiv==1) first=1
                 !write(chkunit,*)'ie stif=',ielem,'first=',first
 10              call PKPN(matno,evk,sgtot,first)
+                
+                normal_gap = element(ielem)%field(1)%gapg(igaus)-element(ielem)%field(1)%natural_thickness(igaus)
+
+                ! 增加罚函数
+                evk(ndimn) = evk(ndimn)/element(ielem)%field(1)%natural_thickness(igaus) + &
+                    evk(ndimn)*normal_gap**2*1e3
+                
                 !write(chkunit,*)'evk=',evk
                 dmatx=0.
                 do idm=1,ndimn

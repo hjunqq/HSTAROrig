@@ -77,6 +77,7 @@ module   elements
        real(irk),   pointer::vkstrain0(:,:),vkstrain(:,:) !20160630 对icreep=4(burgersx徐变模型，记录开尔文粘性应变）
        real(irk),pointer::gapg0(:),gapg(:) ! contact
        real(irk),pointer::gapn0(:),gapn(:),ntstress(:,:) ! contact
+       real(irk),pointer::natural_thickness(:) !contact
 	   character(10),pointer::state(:),state0(:),state1(:) !zhao 25/07/22	        ! contact
 	   !for creep
 	   real(irk),pointer::omega(:,:,:),dsig(:,:)
