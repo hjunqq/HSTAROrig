@@ -12920,7 +12920,7 @@
                                 ! 2. 应力超过拉伸极限（这里smean还是真实应力）
                                 if (smean > ft0) then
                                     element(ielem)%field(1)%state(igaus) = 'open'
-                                    element(ielem)%evk = 0.02
+                                    element(ielem)%evk = 1.00E5
                                 else
                                     element(ielem)%field(1)%state(igaus) = 'contact'
                                 endif
