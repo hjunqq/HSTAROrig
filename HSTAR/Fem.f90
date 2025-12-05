@@ -11118,7 +11118,7 @@
     if(iblks>1) then
         hh= hdam(iblks)-hdam(iblks-1)
     else
-        hh=hdam(iblks)
+        hh= hdam(iblks)
     endif
 
     !if(iblks==12)write(7,*)'hh=',hh
@@ -12877,9 +12877,9 @@
                             endif
                             element(ielem)%field(1)%gapg=gapgaus+element(ielem)%field(1)%gapg0
                         endif
-                        write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapg=   ',element(ielem)%field(1)%gapg
-                        write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapg0=  ',element(ielem)%field(1)%gapg0
-                        write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapgaus=',gapgaus
+                        !write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapg=   ',element(ielem)%field(1)%gapg
+                        !write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapg0=  ',element(ielem)%field(1)%gapg0
+                        !write(7,"(A15,I10,5(A10,3E15.7))")'当前间隙为：ie=',ielem,'gapgaus=',gapgaus
                         do igaus=1,ngaus
                             icftg=element(ielem)%field(1)%icftcontact(igaus)
                             if (material=='GOODMAN') then
@@ -12920,7 +12920,7 @@
                                 ! 2. 应力超过拉伸极限（这里smean还是真实应力）
                                 if (smean > ft0) then
                                     element(ielem)%field(1)%state(igaus) = 'open'
-                                    element(ielem)%evk = 1.00E5
+                                    element(ielem)%evk(:,igaus) = 0.02
                                 else
                                     element(ielem)%field(1)%state(igaus) = 'contact'
                                 endif
@@ -15063,13 +15063,14 @@
 
                         if (model(1:3)=='FCM')then
                             read(unitread,*)i0,element(ielem)%field(1)%strain
+                            element(ielem)%field(1)%strain0=element(ielem)%field(1)%strain
                         endif
 
                         element(ielem)%field(1)%gapn0=element(ielem)%field(1)%gapn
                         element(ielem)%field(1)%gapg0=element(ielem)%field(1)%gapg
                         element(ielem)%field(1)%state0=element(ielem)%field(1)%state
                         element(ielem)%field(1)%state1=element(ielem)%field(1)%state
-                        element(ielem)%field(1)%strain0=element(ielem)%field(1)%strain
+
 
                         !write(chkunit,'(i10,30e14.5)')ielem,element(ielem)%field(1)%gapn
                         !write(chkunit,'(i10,30e14.5)')ielem,element(ielem)%field(1)%gapg

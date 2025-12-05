@@ -763,7 +763,7 @@
     real(irk) smax,qmax,phi,density,snorm,ratio,px,p0,lamda
     real(irk),allocatable::evk(:),stran0(:)
     real(irk) Emoduls,mu !20231215YL
-    real(irk) normal_gap
+    real(irk) normal_gap,scaling_factor
 
 
     !initial all varibales !20220713
@@ -877,11 +877,15 @@
                 normal_gap = element(ielem)%field(1)%gapg(igaus)-element(ielem)%field(1)%natural_thickness(igaus)
 
                 ! 增加罚函数
-                evk(ndimn) = evk(ndimn)/element(ielem)%field(1)%natural_thickness(igaus) + &
-                    evk(ndimn)*normal_gap**2*1e3
-
+                if(normal_gap<0)then
+                    !scaling_factor = 1.0d0 + abs(normal_gap/element(ielem)%field(1)%natural_thickness(igaus)) * 10.0d0
+                    !evk(ndimn) = (evk(ndimn)/element(ielem)%field(1)%natural_thickness(igaus))*scaling_factor
+                    evk(ndimn)=evk(ndimn)*100.0d0
+                endif
+                where(evk>1.0d9)evk=1.0d9
+                
                 element(ielem)%evk(:,igaus)=evk
-                write(7,'(A10,I10,A10,I10,A10,2E15.7)')'ie=',ielem,'igaus=',igaus,'evk=',evk
+                write(7,*)'ie=',ielem,'igaus=',igaus,'evk=',evk,element(ielem)%field(1)%gapg(igaus),normal_gap
                 !write(7,*)'first=',first,'sgtot=',sgtot
 
                 dmatx=0.
@@ -3300,11 +3304,14 @@
     real   (irk), allocatable::fstif(:,:)
     real   (irk), pointer::fstif0(:,:)
     integer(ink), pointer::ldofs(:)
+    logical :: is_pardiso, use_duncanchang
+    integer, parameter :: mesh_main=0, mesh_first=1, mesh_second=2
 
     integer(ink)  nstre !20231215YL
     real   (irk)  alfa,beta,lamda !20231215YL
 
     if (outintr/=0.and.type_solver=='JPCG')return
+    is_pardiso = (type_solver=='PARDISO')
     DO igroup =1,ngroup
         if  (appear(igroup)>0)  then
             nrfields=group(igroup)%nrfields
@@ -3324,10 +3331,10 @@
             do ifield=1,nrfields
                 nnode_f = elkn(index)%el_field(ifield)%nnode_f
                 nevab_f = nnode_f*group(igroup)%dof(ifield)%nfdof
-                allocate(fstif(nevab_f,nevab_f))
+                if (.not. is_pardiso) allocate(fstif(nevab_f,nevab_f))
                 anevab  =bnevab+nevab_f
                 ! loop for k(h) and m(c)
-                do ikh=1,2
+                ikh_loop: do ikh=1,2
                     if (type_problem/='F'.and.fieldid(ifield:ifield)=='U'.and.ikh==2)    goto 10  !20221013
                     if (name=='NSTOKS'.and.fieldid(ifield:ifield)=='W'.and.ikh==1)       goto 10  !!nstoks
                     if (type_problem=='Q'.and.fieldid(ifield:ifield)=='P'.and.ikh==1)    goto 10
@@ -3352,6 +3359,21 @@
                         elseif(fieldid(ifield:ifield)=='T') then
                             if (order_time==0)coef=theta1*ditime
                         endif
+                    endif
+                    use_duncanchang = (fieldid(ifield:ifield)=='U'.and.props(matno)%mechanical%solid%material=='DUNCANCHANG'.and.type_problem=='F')
+
+                    if (is_pardiso) then
+                        call assemble_pardiso_mesh(group(igroup)%nelgroup,group(igroup)%list,mesh_main, &
+                            bnevab,anevab,nevab_f,coef,use_duncanchang,ifield,ikh,nstre)
+                        if (rmesh>0.and.nelem1>0) then
+                            call assemble_pardiso_mesh(group1(igroup)%nelgroup,group1(igroup)%list,mesh_first, &
+                                bnevab,anevab,nevab_f,coef,use_duncanchang,ifield,ikh,nstre)
+                        endif
+                        if (rmesh>1.and.nelem2>0) then
+                            call assemble_pardiso_mesh(group2(igroup)%nelgroup,group2(igroup)%list,mesh_second, &
+                                bnevab,anevab,nevab_f,coef,use_duncanchang,ifield,ikh,nstre)
+                        endif
+                        cycle ikh_loop
                     endif
                     DO ielgroup = 1,group(igroup)%nelgroup
                         ielem = group(igroup)%list(ielgroup)
@@ -3486,13 +3508,107 @@
                     endif
                     !!!!!!!!!!!!!!!!!!!!!!!!!!!
 10                  continue
-                end do        !!end do ikh
-                deallocate(fstif)
+                end do ikh_loop       !!end do ikh
+                if (allocated(fstif)) deallocate(fstif)
                 bnevab=anevab
             end do     !! end do ifield
 1           continue
         end if    !! for do while
     end do     !!  for igroup
+
+    contains
+
+        SUBROUTINE assemble_pardiso_mesh(nelgroup,list_array,mesh_kind,bnevab_l,anevab_l,nevab_field, &
+            coef_base,use_duncanchang_local,ifield_idx,ikh_idx,nstre_local)
+        integer(ink), intent(in) :: nelgroup,bnevab_l,anevab_l,nevab_field,ifield_idx,ikh_idx,nstre_local
+        integer(ink), intent(in) :: mesh_kind
+        integer(ink), intent(in) :: list_array(:)
+        real   (irk), intent(in) :: coef_base
+        logical, intent(in) :: use_duncanchang_local
+
+        integer(ink) :: ielgroup, ielem, ic, ievab, ie0_local
+        real   (irk) :: coef_local, lamda_local
+        real   (irk), pointer :: fstif0_local(:,:)
+        integer(ink), pointer :: ldofs_local(:)
+        real   (irk), allocatable :: work_fstif(:,:)
+
+        if (nelgroup<=0) return
+        if (nevab_field<=0) return
+
+!$omp parallel default(shared) private(ielgroup,ielem,fstif0_local,ldofs_local,ic,ievab,work_fstif,coef_local,lamda_local,ie0_local)
+        allocate(work_fstif(nevab_field,nevab_field))
+!$omp do schedule(dynamic)
+        do ielgroup=1,nelgroup
+            ielem=list_array(ielgroup)
+            select case(mesh_kind)
+            case(mesh_main)
+                if (ice0(ielem)==1) cycle
+                if (.not.associated(element(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif)) cycle
+                ldofs_local=>element(ielem)%ldofs
+                fstif0_local=>element(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif
+            case(mesh_first)
+                if (jce1(ielem)==1) cycle
+                if (.not.associated(element1(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif)) cycle
+                ldofs_local=>element1(ielem)%ldofs
+                fstif0_local=>element1(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif
+            case(mesh_second)
+                if (.not.associated(element2(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif)) cycle
+                ldofs_local=>element2(ielem)%ldofs
+                fstif0_local=>element2(ielem)%field(ifield_idx)%khandmc(ikh_idx)%fstif
+            case default
+                cycle
+            end select
+
+            ic=size(fstif0_local,dim=2)
+            if (ikh_idx==2.and.ic==1) then
+                work_fstif=0.0
+                do ievab=1,nevab_field
+                    work_fstif(ievab,ievab)=fstif0_local(ievab,1)
+                end do
+            else
+                work_fstif=fstif0_local
+            endif
+
+            coef_local=coef_base
+            if (use_duncanchang_local) then
+                select case(mesh_kind)
+                case(mesh_main)
+                    lamda_local=sum(element(ielem)%field(1)%gpvar(nstre_local+1,:))/size(element(ielem)%field(1)%gpvar,dim=2)
+                case(mesh_first)
+                    lamda_local=sum(element1(ielem)%field(1)%gpvar(nstre_local+1,:))/size(element1(ielem)%field(1)%gpvar,dim=2)
+                case(mesh_second)
+                    lamda_local=sum(element2(ielem)%field(1)%gpvar(nstre_local+1,:))/size(element2(ielem)%field(1)%gpvar,dim=2)
+                case default
+                    lamda_local=0.0
+                end select
+                if (ikh_idx==1) then
+                    coef_local=beeta2*ditime**2+(lamda_local/base_freq)*beeta1*ditime
+                else
+                    coef_local=1.0+lamda_local*base_freq*beeta1*ditime
+                endif
+            endif
+
+            if (iblks==1.and.ielgroup==1.and.istep==inc_step.and.iiter==1) then
+!$omp critical(estif_chk)
+                write(chkunit,'(a,i5,2(a,i1),a,i6,a,i1,a,f8.5)') &
+                    'igroup=',igroup,' ifield=',ifield_idx,' ikh=',ikh_idx,' ielem=',ielem, &
+                    ' order_time=',order_time,'  coef=',coef_local
+                do ie0_local=1,size(work_fstif,dim=1)
+                    write(chkunit,'(30e16.5)')work_fstif(ie0_local,:)
+                end do
+!$omp end critical(estif_chk)
+            endif
+
+            work_fstif=coef_local*work_fstif
+            call global_stif_pardiso(bnevab_l,anevab_l,bnevab_l,anevab_l,ldofs_local,work_fstif)
+
+            nullify(fstif0_local)
+            nullify(ldofs_local)
+        end do
+!$omp end do
+        deallocate(work_fstif)
+!$omp end parallel
+        END SUBROUTINE assemble_pardiso_mesh
 
     END SUBROUTINE ESTIF_ASSEMBLE
 
@@ -4459,6 +4575,7 @@
                 if(nonsym==0.and.ieq>jeq)cycle !20240312 YL
                 do k=iseq(ieq),iseq(ieq+1)-1
                     if(jeq==nndex(k))then
+!$omp atomic update
                         global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)
                         !if(ieq==jeq.and.(global_stiff1(k).le.1.e-5))then
                         !    print *,'1'
@@ -4476,6 +4593,7 @@
                     if(jeq==0.or.(nonsym==0.and.ieq>jeq))cycle !20240312 YL
                     do k=iseq(ieq),iseq(ieq+1)-1
                         if(jeq==nndex(k))then
+!$omp atomic update
                             global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*factj
                             goto 10
                         endif
@@ -4493,6 +4611,7 @@
 
                     do k=iseq(ieq),iseq(ieq+1)-1
                         if(jeq==nndex(k))then
+!$omp atomic update
                             global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti
                             goto 20
                         endif
@@ -4512,6 +4631,7 @@
                         if(nonsym==0.and.ieq>jeq)cycle !20240312 YL
                         do k=iseq(ieq),iseq(ieq+1)-1
                             if(jeq==nndex(k))then
+!$omp atomic update
                                 global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti*factj
                                 goto 30
                             endif
@@ -5887,6 +6007,8 @@
 
     TF=-ps(ndimn)*tand(phi)+cohes
     R(1:ndimn-1)=1.0-Rf*abs(PS(1:ndimn-1))/TF
+    where(r<0.0)r=0.0
+    where(r>1.0)r=1.0
     
     max_tan_stiff = evk(1)
     
