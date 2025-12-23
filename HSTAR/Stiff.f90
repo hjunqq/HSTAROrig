@@ -3520,6 +3520,7 @@
 
         SUBROUTINE assemble_pardiso_mesh(nelgroup,list_array,mesh_kind,bnevab_l,anevab_l,nevab_field, &
             coef_base,use_duncanchang_local,ifield_idx,ikh_idx,nstre_local)
+        use omp_lib
         integer(ink), intent(in) :: nelgroup,bnevab_l,anevab_l,nevab_field,ifield_idx,ikh_idx,nstre_local
         integer(ink), intent(in) :: mesh_kind
         integer(ink), intent(in) :: list_array(:)
@@ -3531,13 +3532,38 @@
         real   (irk), pointer :: fstif0_local(:,:)
         integer(ink), pointer :: ldofs_local(:)
         real   (irk), allocatable :: work_fstif(:,:)
+        real   (irk), allocatable, target :: local_stiff_all(:,:)
+        real   (irk), pointer :: local_stiff(:)
+        integer(ink), allocatable, target :: local_mark_all(:,:), touched_all(:,:)
+        integer(ink), allocatable :: touch_count(:)
+        integer(ink), pointer :: local_mark(:), touched_row(:)
+        integer(ink) :: local_touch_count
+        integer(ink) :: nthreads, tid, nnz, k, tag
 
         if (nelgroup<=0) return
         if (nevab_field<=0) return
 
-!$omp parallel default(shared) private(ielgroup,ielem,fstif0_local,ldofs_local,ic,ievab,work_fstif,coef_local,lamda_local,ie0_local)
+        nnz=size(global_stiff1)
+        nthreads=omp_get_max_threads()
+        allocate(local_stiff_all(nthreads,nnz))
+        allocate(local_mark_all(nthreads,nnz))
+        allocate(touched_all(nthreads,nnz))
+        allocate(touch_count(nthreads))
+        local_stiff_all=0.0_irk
+        local_mark_all=0
+        touch_count=0
+        tag=1
+
+!$omp parallel default(shared) private(ielgroup,ielem,fstif0_local,ldofs_local,ic,ievab,work_fstif,coef_local,lamda_local,ie0_local,tid,local_stiff,local_mark,touched_row,local_touch_count)
+        tid=omp_get_thread_num()+1
+        local_stiff=>local_stiff_all(tid,:)
+        local_stiff=0.0_irk
+        local_mark=>local_mark_all(tid,:)
+        touched_row=>touched_all(tid,:)
+        local_touch_count=0
+
         allocate(work_fstif(nevab_field,nevab_field))
-!$omp do schedule(dynamic)
+!$omp do schedule(static)
         do ielgroup=1,nelgroup
             ielem=list_array(ielgroup)
             select case(mesh_kind)
@@ -3600,14 +3626,27 @@
             endif
 
             work_fstif=coef_local*work_fstif
-            call global_stif_pardiso(bnevab_l,anevab_l,bnevab_l,anevab_l,ldofs_local,work_fstif)
+            call global_stif_pardiso(bnevab_l,anevab_l,bnevab_l,anevab_l,ldofs_local,work_fstif, &
+                local_stiff,local_mark,touched_row,local_touch_count,tag)
 
             nullify(fstif0_local)
             nullify(ldofs_local)
         end do
 !$omp end do
         deallocate(work_fstif)
+        touch_count(tid)=local_touch_count
 !$omp end parallel
+
+        do tid=1,nthreads
+            do k=1,touch_count(tid)
+                global_stiff1(touched_all(tid,k))=global_stiff1(touched_all(tid,k))+ &
+                    local_stiff_all(tid,touched_all(tid,k))
+            end do
+        end do
+        deallocate(local_stiff_all)
+        deallocate(local_mark_all)
+        deallocate(touched_all)
+        deallocate(touch_count)
         END SUBROUTINE assemble_pardiso_mesh
 
     END SUBROUTINE ESTIF_ASSEMBLE
@@ -4555,10 +4594,27 @@
     enddo
 
     END SUBROUTINE global_stif_ssorpbcg
-    SUBROUTINE global_stif_pardiso(bnevab1,anevab1,bnevab2,anevab2,ldofs,estif) !pardiso
+    SUBROUTINE global_stif_pardiso(bnevab1,anevab1,bnevab2,anevab2,ldofs,estif,local_stiff,local_mark,touched,local_count,tag_in) !pardiso
     integer(ink) bnevab1,anevab1,bnevab2,anevab2,ldofs(:)
     integer(ink) i,j, k,idofn,jdofn, ieq,jeq,nintf,njntf,iintf,jintf
     real   (irk) facti,factj,estif(:,:)
+    real   (irk), intent(inout), optional, target :: local_stiff(:)
+    integer(ink), intent(inout), optional, target :: local_mark(:), touched(:)
+    integer(ink), intent(inout), optional :: local_count
+    integer(ink), intent(in), optional :: tag_in
+    real   (irk), pointer :: target_stiff(:)
+    integer(ink), pointer :: target_mark(:), target_touched(:)
+    integer(ink) :: lc, tag
+    logical :: use_local
+
+    use_local=present(local_stiff)
+    if (use_local) then
+        target_stiff=>local_stiff
+        target_mark=>local_mark
+        target_touched=>touched
+        lc=local_count
+        tag=tag_in
+    endif
 
     do i= bnevab1+1,anevab1
         idofn=ldofs(i)
@@ -4567,23 +4623,32 @@
             jdofn=ldofs(j)
             njntf=trans(jdofn)%nintf
             !		 print *,'nintf=',nintf,'njntf=',njntf
-            if(njntf==0.and.nintf==0) then !!1
-                jeq  =totveq(jdofn)
-                ieq  =totveq(idofn)
-                if(ieq==0.or.jeq==0)cycle
-                !if(ieq>jeq)cycle
-                if(nonsym==0.and.ieq>jeq)cycle !20240312 YL
-                do k=iseq(ieq),iseq(ieq+1)-1
-                    if(jeq==nndex(k))then
+                if(njntf==0.and.nintf==0) then !!1
+                    jeq  =totveq(jdofn)
+                    ieq  =totveq(idofn)
+                    if(ieq==0.or.jeq==0)cycle
+                    !if(ieq>jeq)cycle
+                    if(nonsym==0.and.ieq>jeq)cycle !20240312 YL
+                    do k=iseq(ieq),iseq(ieq+1)-1
+                        if(jeq==nndex(k))then
+                        if (use_local) then
+                            if (target_mark(k)/=tag) then
+                                target_mark(k)=tag
+                                lc=lc+1
+                                target_touched(lc)=k
+                            endif
+                            target_stiff(k)=target_stiff(k)+estif(i-bnevab1,j-bnevab2)
+                        else
 !$omp atomic update
-                        global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)
+                            global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)
+                        endif
                         !if(ieq==jeq.and.(global_stiff1(k).le.1.e-5))then
                         !    print *,'1'
                         !endif
                         exit
                     endif
                 enddo
-            elseif(njntf/=0.and.nintf==0) then !!2
+                elseif(njntf/=0.and.nintf==0) then !!2
                 ieq  =totveq(idofn)
                 if(ieq==0) cycle
                 do jintf=1,njntf
@@ -4593,8 +4658,17 @@
                     if(jeq==0.or.(nonsym==0.and.ieq>jeq))cycle !20240312 YL
                     do k=iseq(ieq),iseq(ieq+1)-1
                         if(jeq==nndex(k))then
+                            if (use_local) then
+                                if (target_mark(k)/=tag) then
+                                    target_mark(k)=tag
+                                    lc=lc+1
+                                    target_touched(lc)=k
+                                endif
+                                target_stiff(k)=target_stiff(k)+estif(i-bnevab1,j-bnevab2)*factj
+                            else
 !$omp atomic update
-                            global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*factj
+                                global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*factj
+                            endif
                             goto 10
                         endif
                     enddo
@@ -4611,8 +4685,17 @@
 
                     do k=iseq(ieq),iseq(ieq+1)-1
                         if(jeq==nndex(k))then
+                            if (use_local) then
+                                if (target_mark(k)/=tag) then
+                                    target_mark(k)=tag
+                                    lc=lc+1
+                                    target_touched(lc)=k
+                                endif
+                                target_stiff(k)=target_stiff(k)+estif(i-bnevab1,j-bnevab2)*facti
+                            else
 !$omp atomic update
-                            global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti
+                                global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti
+                            endif
                             goto 20
                         endif
                     enddo
@@ -4631,8 +4714,17 @@
                         if(nonsym==0.and.ieq>jeq)cycle !20240312 YL
                         do k=iseq(ieq),iseq(ieq+1)-1
                             if(jeq==nndex(k))then
+                                if (use_local) then
+                                    if (target_mark(k)/=tag) then
+                                        target_mark(k)=tag
+                                        lc=lc+1
+                                        target_touched(lc)=k
+                                    endif
+                                    target_stiff(k)=target_stiff(k)+estif(i-bnevab1,j-bnevab2)*facti*factj
+                                else
 !$omp atomic update
-                                global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti*factj
+                                    global_stiff1(k)=global_stiff1(k)+estif(i-bnevab1,j-bnevab2)*facti*factj
+                                endif
                                 goto 30
                             endif
                         enddo
@@ -4643,6 +4735,7 @@
 
         enddo
     enddo
+    if (use_local) local_count=lc
     END SUBROUTINE global_stif_pardiso
 
     subroutine change1_dmatx(dmatx,yld,rot)

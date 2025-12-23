@@ -14,6 +14,8 @@
         pcg_stiff1(:)
     complex(irk),allocatable::global_stiff1w(:),global_stiff2w(:),rvectorw(:),resultw(:) !freq2006
     real(irk)  tolcg
+    logical pardiso_symbolic_done
+    integer(ink) pardiso_analyzed_neq
     integer(ink) iparm(64),maxfct, mnum, mtype, phase_pardiso,msglvl,error,idum   !PARDISO  2008-11-05
     integer(ink) iparm_ctt(64),maxfct_ctt,mnum_ctt,mtype_ctt,phase_pardiso_ctt,msglvl_ctt,error_ctt,idum_ctt
     real   (irk) ddum
@@ -7828,6 +7830,8 @@
         maxfct=1
         mnum=1
 
+        pardiso_symbolic_done=.false.
+        pardiso_analyzed_neq=-1
         call totv_to_eq
 
         if(neq==0) return   !2017/11/19
@@ -8234,35 +8238,39 @@
     case ('FACTORIZE')
 
         if(neq==0) return   !2017/11/19
-        phase_pardiso = -1 ! release internal memory
-        CALL pardiso (pt, maxfct, mnum, mtype, phase_pardiso, neq, ddum, idum, idum,    &
-            idum, 1, iparm, msglvl, ddum, ddum, error)
+        if(.not.pardiso_symbolic_done .or. pardiso_analyzed_neq /= neq) then
+            phase_pardiso = -1 ! release internal memory
+            CALL pardiso (pt, maxfct, mnum, mtype, phase_pardiso, neq, ddum, idum, idum,    &
+                idum, 1, iparm, msglvl, ddum, ddum, error)
 
-        pt=0
-        phase_pardiso = 11 ! only reordering and symbolic factorization
-        CALL pardiso (pt, maxfct, mnum, mtype, phase_pardiso, neq, global_stiff1, iseq, nndex,   &
-            idum, 1, iparm, msglvl, ddum, ddum, error)
-        WRITE(*,*) 'Reordering completed ... '
-        IF (error .NE. 0) THEN
-            write(chkunit,*)'系数矩阵重新排序时出错，错误代码:', error
-            write(*,*)'系数矩阵重新排序时出错，错误代码:', error
-            call pardiso_error(error)
-            STOP
-        END IF
+            pt=0
+            phase_pardiso = 11 ! only reordering and symbolic factorization
+            CALL pardiso (pt, maxfct, mnum, mtype, phase_pardiso, neq, global_stiff1, iseq, nndex,   &
+                idum, 1, iparm, msglvl, ddum, ddum, error)
+            WRITE(*,*) 'Reordering completed ... ' 
+            IF (error .NE. 0) THEN
+                write(chkunit,*)'????????????????:', error
+                write(*,*)'????????????????:', error
+                call pardiso_error(error)
+                STOP
+            END IF
+            pardiso_symbolic_done=.true.
+            pardiso_analyzed_neq=neq
+        endif
         !    WRITE(chkunit,'(a40,i12)') ' Number of nonzeros in factors:',iparm(18)
         !    WRITE(chkunit,'(a40,i12)') ' Number of factorization MFLOPS:',iparm(19)
 
         phase_pardiso = 22 ! only factorization
         CALL pardiso (pt, maxfct, mnum, mtype, phase_pardiso, neq, global_stiff1, iseq, nndex,   &
             idum, 1, iparm, msglvl, ddum, ddum, error)
-        WRITE(*,*) 'Factorization completed ... '
+        WRITE(*,*) 'Factorization completed ... ' 
         IF (error .NE. 0) THEN
-            WRITE(chkunit,*) '矩阵分解时出错，错误代码: ', error
-            WRITE(*,*) '矩阵分解时出错，错误代码: ', error
+            WRITE(chkunit,*) '????????????: ', error
+            WRITE(*,*) '????????????: ', error
             call pardiso_error(error)
             STOP
         ENDIF
-    case ('SOLVE')
+case ('SOLVE')
         !write(7,*)'solve  in main_pardiso='
         if(neq==0) goto 11  !2017/11/19
         if(allocated(result))deallocate(result)
