@@ -532,6 +532,10 @@
 1992 format(i10,10i10)
 992 format(20i5)
 
+    if(outplot=='GIDL')then
+        call GID_CLOSEPOSTRESULTFILE
+    endif
+
     call TIME(char_time)
     print *, 'time: ', char_time
     write(chkunit,*)'time: ', char_time
@@ -1670,6 +1674,7 @@
         write(7,*)'iblks=',iblks,'runblks=',runblks
         if(allocated(torel))               torel=0.0  !20201121
 
+        if(outplot=='GIDL')call OUT_GID_BIN_MESH
 
         !if(iblks==uwcpl.or.iblks==nblks)
         ! call gpvar_change  !zhao 2007.04.10  !2016/04/25

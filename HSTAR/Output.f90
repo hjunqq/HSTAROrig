@@ -944,6 +944,12 @@
 
     integer(ink) ielem,ielgroup,ie
 
+    if(outplot(1:3)/='GID') return
+    if(outplot=='GIDL') then
+        call OUT_GID_WRITE_BIN
+        return
+    endif
+
     !20231215YL
     if(type_problem=='F'.and.(.not.allocated(maxdisp)))then !20231009
         allocate(maxdisp(ndimn,npoin));maxdisp=0.0
@@ -2112,6 +2118,1005 @@
 
 
     END SUBROUTINE OUT_GID_WRITE
+
+    SUBROUTINE OUT_GID_WRITE_BIN
+
+    character(10)fieldid,class,material,name
+    integer(ink) igroup,index,nnode,tnegid,matno,ngaus,igaus
+    integer(ink) ipoin,idofn,len,nstre,ilink,node1,node2,kdimn
+    integer(ink) npoin_igroup,jelem  !20200311
+    real   (irk),allocatable::value(:),stres(:),valun(:,:),rr(:,:),smain(:)
+    real   (irk) delta,sx,sy,sxy,zz,hh,factor,thick
+    real   (irk),allocatable::resultm(:),vvv(:),trot(:,:),force_e(:),force_i(:),trotx(:,:)
+    real   (irk),pointer::rotation(:,:),perme(:)
+    integer(ink),pointer::lnods(:)
+    integer(ink),allocatable::npbeam(:),listp_bem(:),listp_bem_new(:), & !20200311
+        listp_mxy(:),listp_mxy_new(:)
+    real   (irk),allocatable::coord_bem(:,:),coord_mxy(:,:),  & !20200311
+        cartd(:,:),veloc(:,:),veloc_H(:,:),aera(:)
+
+    real*8 total_step,x,y,z
+    real*8,allocatable::GIDB_value(:),GIDB_stres(:),GIDB_valun(:,:)
+    CHARACTER*4 NULL
+
+
+    integer(ink) ielem,ielgroup
+
+
+    NULL = CHAR(0)//CHAR(0)//CHAR(0)//CHAR(0)
+
+    if (meshc==1.or.rmesh/=0) then
+        rewind(out_gid_msh)
+        write(out_gid_msh,*)'mesh dimension = 3 elemtype quadrilateral nnode = 4'
+        write(out_gid_msh,*)'coordinates'
+        do ipoin=1,npoin
+            write(out_gid_msh,991)ipoin,coord(:,ipoin)
+        end do
+        write(out_gid_msh,*)'end coordinates'
+        write(out_gid_msh,*)'elements'
+        tnegid=0
+        if (meshc==1)then
+            do igroup=1,ngroup
+                if (appear(igroup)==1)then
+                    DO ielgroup = 1,group(igroup)%nelgroup
+                        ielem = group(igroup)%list(ielgroup)
+                        tnegid=tnegid+1
+                        write(out_gid_msh,992)tnegid,element(ielem)%field(1)%lnods_f,igroup
+                    end do
+                endif
+            end do
+        else if(rmesh/=0)then
+            do igroup=1,ngroup
+                if (appear(igroup)==1)then
+                    DO ielgroup = 1,group(igroup)%nelgroup
+                        ielem = group(igroup)%list(ielgroup)
+                        if (ice0(ielem)==0)then
+                            tnegid=tnegid+1
+                            write(out_gid_msh,992)tnegid,element(ielem)%field(1)%lnods_f,igroup
+                        endif
+                    end do
+                endif
+            end do
+            !!!!
+            if (nelem1>0)then
+                do igroup=1,ngroup
+                    if (appear(igroup)==1)then
+                        DO ielgroup = 1,group1(igroup)%nelgroup
+                            ielem = group1(igroup)%list(ielgroup)
+                            if (jce1(ielem)==0)then
+                                tnegid=tnegid+1
+                                write(out_gid_msh,992)tnegid,element1(ielem)%field(1)%lnods_f,igroup+ngroup
+                            endif
+                        end do
+                    endif
+                end do
+            endif
+            !!!!!!!!!!!!!!
+            if (nelem2>0)then
+                do igroup=1,ngroup
+                    if (appear(igroup)==1)then
+                        DO ielgroup = 1,group2(igroup)%nelgroup
+                            ielem = group2(igroup)%list(ielgroup)
+                            tnegid=tnegid+1
+                            write(out_gid_msh,992)tnegid,element2(ielem)%field(1)%lnods_f,igroup+2*ngroup
+                        end do
+                    endif
+                end do
+            endif
+            !!!!!!!!!!!!!!!!
+        endif
+        write(out_gid_msh,*)'end elements'
+    endif
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!gid_Mxy
+    if (gid_mxy==1.and.iblks==lblks+1.and.iincs==1.and.istep/noutf==1) then  !20200311
+
+        npoin_mxy=0
+        nelem_mxy=0
+        allocate(listp_mxy(npoin))
+        DO igroup =1,ngroup
+            listp_mxy=0
+            field1= group(igroup)%fieldid(1:1)
+            if (appear(igroup)>0.and.field1=='U')then
+                index = group(igroup)%index
+                if (index/=22)cycle
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    listp_mxy(lnods)=1
+                    nullify(lnods)
+                end do
+                npoin_igroup=sum(listp_mxy)
+                nelem_mxy=nelem_mxy+group(igroup)%nelgroup
+                npoin_mxy=npoin_mxy+npoin_igroup
+            endif
+        end do
+
+        allocate(coord_mxy(3,npoin_mxy),ien_mxy(5,nelem_mxy),listp_mxy_new(npoin),  &
+            liste_mxy_new(nelem))
+        coord_mxy=0.;ien_mxy=0;listp_mxy_new=0;liste_mxy_new=0
+
+        npoin_mxy=0;  nelem_mxy=0
+        DO igroup =1,ngroup
+            listp_mxy=0
+            field1= group(igroup)%fieldid(1:1)
+            if (appear(igroup)>0.and.field1=='U')then
+                index = group(igroup)%index
+                if (index/=22)cycle
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    listp_mxy(lnods)=1
+                    nullify(lnods)
+                end do
+
+                do ipoin=1,npoin
+                    if(listp_mxy(ipoin)==0) cycle
+                    npoin_mxy=npoin_mxy+1
+                    listp_mxy_new(ipoin)=npoin_mxy
+                    coord_mxy(1:ndimn,npoin_mxy)=coord(1:ndimn,ipoin)
+                end do
+
+
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    nelem_mxy=nelem_mxy+1
+                    ien_mxy(1:4,nelem_mxy)=listp_mxy_new(lnods(1:4))
+                    ien_mxy(5,nelem_mxy)=igroup
+                    liste_mxy_new(ielem)=nelem_mxy
+                    nullify(lnods)
+                end do
+
+            endif
+        end do
+
+
+        rewind(mxy_msh_unit)
+        write(mxy_msh_unit,*)'mesh dimension = 3 elemtype quadrilateral nnode = 4'
+        write(mxy_msh_unit,*)'coordinates'
+        do ipoin=1,npoin_Mxy
+            write(mxy_msh_unit,991)ipoin,coord_mxy(:,ipoin)
+        end do
+        write(mxy_msh_unit,*)'end coordinates'
+        write(mxy_msh_unit,*)'elements'
+
+        do ielem=1,nelem_Mxy
+            write(mxy_msh_unit,992)ielem,ien_mxy(:,ielem)
+        end do
+        write(mxy_msh_unit,*)'end elements'
+
+        deallocate(coord_mxy,listp_mxy_new)
+    endif
+
+    !!!!!!gid_bem/=0
+
+    if (gid_bem==1.and.iblks==lblks+1.and.iincs==1.and.istep/noutf==1) then  !20200311
+        npoin_bem=0
+        nelem_bem=0
+        allocate(listp_bem(npoin))
+        DO igroup =1,ngroup
+            listp_bem=0
+            field1= group(igroup)%fieldid(1:1)
+            !if (appear(igroup)>0.and.field1=='U')then  !20200724
+            if (field1=='U')then
+                index = group(igroup)%index
+                if (index/=20.and.index/=21)cycle
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    listp_bem(lnods)=1
+                    nullify(lnods)
+                end do
+                npoin_igroup=sum(listp_bem)
+                nelem_bem=nelem_bem+group(igroup)%nelgroup
+                npoin_bem=npoin_bem+npoin_igroup
+            endif
+        end do
+
+        allocate(coord_bem(3,npoin_bem),ien_bem(3,nelem_bem),listp_bem_new(npoin),  &
+            liste_bem_new(nelem))
+        coord_bem=0.;ien_bem=0;listp_bem_new=0;liste_bem_new=0
+
+        npoin_bem=0;  nelem_bem=0
+        DO igroup =1,ngroup
+            listp_bem=0
+            field1= group(igroup)%fieldid(1:1)
+            !if (appear(igroup)>0.and.field1=='U')then
+            if (field1=='U')then  !20200724
+                index = group(igroup)%index
+                if (index/=20.and.index/=21)cycle
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    listp_bem(lnods)=1
+                    nullify(lnods)
+                end do
+
+                do ipoin=1,npoin
+                    if(listp_bem(ipoin)==0) cycle
+                    npoin_bem=npoin_bem+1
+                    listp_bem_new(ipoin)=npoin_bem
+                    coord_bem(1:ndimn,npoin_bem)=coord(1:ndimn,ipoin)
+                end do
+
+
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods=>element(ielem)%field(1)%lnods_f
+                    nelem_bem=nelem_bem+1
+                    ien_bem(1:2,nelem_bem)=listp_bem_new(lnods(1:2))
+                    ien_bem(3,nelem_bem)=igroup
+                    liste_bem_new(ielem)=nelem_bem
+                    nullify(lnods)
+                end do
+
+            endif
+        end do
+
+
+        rewind(bem_msh_unit)
+        write(bem_msh_unit,*)'mesh dimension  3   elemtype Linear  nnode  2'
+        write(bem_msh_unit,*)'coordinates'
+        do ipoin=1,npoin_bem
+            write(bem_msh_unit,991)ipoin,coord_bem(:,ipoin)
+        end do
+        write(bem_msh_unit,*)'end coordinates'
+        write(bem_msh_unit,*)'elements'
+
+        do ielem=1,nelem_bem
+            write(bem_msh_unit,992)ielem,ien_bem(:,ielem)
+        end do
+        write(bem_msh_unit,*)'end elements'
+
+        deallocate(coord_bem,listp_bem_new)
+    endif
+
+
+991 format(i10,3e18.8)
+992 format(i10,10i10)
+
+
+    total_step=ttime
+    if (outintw/=0) then
+        allocate(resultm(npoin))
+        resultm=0.
+        do ipoin=1,npoin
+            idofn=nodfn(1,ipoin)
+            if (idofn/=0)resultm(ipoin)=result_zero(idofn)
+        end do
+        do ilink=1,ntlink
+            node1=tlink(1,ilink)
+            node2=tlink(2,ilink)
+            resultm(node1)=resultm(node2)
+        end do
+    endif
+
+    ! write displacement vector for gid plot
+
+    if (gid_u==1) then
+
+        CALL GID_BeginVectorResult('DISPLACEMENT','TimeStep',total_step,GiD_onNodes,NULL,NULL,'DispX','DispY','DispZ',NULL)
+
+        !write(out_gid_dis,101)'DISPLACEMENT',1,total_step,2,1,0
+
+        do ipoin=1,npoin
+
+            kdimn=0
+            do idofn=1,ndimn   !cdofn
+                itotv=nodfn(idofn,ipoin)
+                if(itotv/=0)kdimn=kdimn+1
+            end do
+            allocate(value(kdimn))
+            value=0.
+            do idofn=1,kdimn
+                itotv=nodfn(idofn,ipoin)
+                if (itotv/=0)value(idofn)=result_zero(itotv)
+            end do
+
+
+            !steel 2006
+            if (icpnorm(ipoin)/=0)value=transpose(prot(:,:,ipoin)).x.value
+            !if(kdimn/=0) &
+            !    write(out_gid_dis,10)ipoin,value
+            if(kdimn/=0)then
+                x=value(1)
+                y=value(2)
+                z=0.0
+                if(ndimn==3)z=value(3)
+                CALL GID_WriteVector(ipoin,x,y,z)
+            endif
+            deallocate(value)
+        end do
+
+        CALL GID_ENDRESULT
+
+    endif !gid_u
+
+    if(gid_v==1)then
+        CALL GID_BeginVectorResult('Velocity','TimeStep',total_step,GiD_onNodes,NULL,NULL,'VelX','VelY','VelZ',NULL)
+        !write(out_gid_dis,101)'velocity',1,total_step,2,1,0
+        allocate(value(1:ndimn))
+        do ipoin=1,npoin
+            value=0.
+            do idofn=1,ndimn
+                itotv=nodfn(idofn,ipoin)
+                if(itotv/=0)value(idofn)=result_first(itotv)
+            end do
+            x=value(1)
+            y=value(2)
+            z=0.0
+            if(ndimn==3)z=value(3)
+            CALL GID_WriteVector(ipoin,x,y,z)
+        end do
+        deallocate(value)
+        CALL GID_ENDRESULT
+    endif !gid_v
+
+    if(gid_a==1)then
+        CALL GID_BeginVectorResult('Acceleration','TimeStep',total_step,GiD_onNodes,NULL,NULL,'AccX','AccY','AccZ',NULL)
+        !write(out_gid_dis,101)'acceleration',1,total_step,2,1,0
+        allocate(value(1:ndimn))
+        do ipoin=1,npoin
+            value=0.
+            do idofn=1,ndimn
+                itotv=nodfn(idofn,ipoin)
+                if(itotv/=0)value(idofn)=result_second(itotv)
+            end do
+            x=value(1)
+            y=value(2)
+            z=0.0
+            if(ndimn==3)z=value(3)
+            CALL GID_WriteVector(ipoin,x,y,z)
+        end do
+        deallocate(value)
+        CALL GID_ENDRESULT
+    endif !gid_a
+
+    if (gid_rot==1)then
+        CALL GID_BeginVectorResult('Rotation','TimeStep',total_step,GiD_onNodes,NULL,NULL,'RotX','RotY','RotZ',NULL)
+        !write(out_gid_dis,101)'ROTATION',1,total_step,2,1,0
+        allocate(value(1:ndimn))
+        do ipoin=1,npoin
+            value=0.
+            do idofn=4,2*ndimn
+                itotv=nodfn(lmdofn(idofn),ipoin)
+                if (itotv/=0)value(idofn-3)=result_zero(itotv)
+            end do
+            x=value(1)
+            y=value(2)
+            z=0.0
+            if(ndimn==3)z=value(3)
+            CALL GID_WriteVector(ipoin,x,y,z)
+        end do
+        deallocate(value)
+        CALL GID_ENDRESULT
+    endif !gid_rot
+
+
+    if(gid_p==1)then
+        CALL GID_BeginScalarResult('PORE_PRESSURE','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+        allocate(value(1),GIDB_value(1))
+        do ipoin=1,npoin
+            value=0.
+            if (lmdofn(8)/=0)idofn=lmdofn(8)
+            if (lmdofn(7)/=0)idofn=lmdofn(7)
+            itotv=nodfn(idofn,ipoin)
+            if (type_problem=='F')then
+                if (.not.allocated(prstat).and.itotv/=0)value(1)=result_zero(itotv)
+                if (allocated(prstat).and.itotv/=0)value(1)=result_zero(itotv)-prstat(ipoin)
+            else
+                if (itotv/=0)value(1)=result_zero(itotv) !+coord(2,ipoin)
+            endif
+            GIDB_value(1)=value(1)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        deallocate(value,GIDB_value)
+        CALL GID_ENDRESULT
+    endif
+
+    if(gid_wh==1)then !20210324
+        CALL GID_BeginScalarResult('WATER-HEAD','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+
+        allocate(value(1),GIDB_value(1))
+        do ipoin=1,npoin
+            value=0.
+            if (lmdofn(8)/=0)idofn=lmdofn(8)
+            if (lmdofn(7)/=0)idofn=lmdofn(7)
+            itotv=nodfn(idofn,ipoin)
+            if (type_problem=='F')then
+                if (.not.allocated(prstat).and.itotv/=0)value(1)=result_zero(itotv)
+                if (allocated(prstat).and.itotv/=0)value(1)=result_zero(itotv)-prstat(ipoin)
+            else
+                if (itotv/=0)value(1)=result_zero(itotv)/9810.+coord(ndimn,ipoin)
+            endif
+            GIDB_value(1)=value(1)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        deallocate(value,GIDB_value)
+        CALL GID_ENDRESULT
+    end if   !20210324
+
+
+    if(gid_wv==1)then !20210324
+        allocate(veloc_H(ndimn,npoin),aera(npoin))
+        veloc_H=0.
+        aera=0.
+        DO igroup =1,ngroup
+            if (appear(igroup)>0) then
+                fieldid=group(igroup)%fieldid
+                if (fieldid(1:1)/='W')cycle
+                ! get information from the group level
+1               index = group(igroup)%index
+                matno = group(igroup)%matno
+                nnode = elkn(index)%el_field(1)%nnode_f
+                ngaus = elkn(index)%ggaus(1)%ngaus
+                if(Bparameter/=0.and.props(matno)%mechanical%fluid%iperm/=0)then
+                    allocate(perme(ndimn))
+                    perme=xvalue(props(matno)%mechanical%fluid%iperm)
+                else
+                    perme=> props(matno)%mechanical%fluid%permeability
+                endif
+                allocate (value(nnode),cartd(ndimn,nnode),veloc(ndimn,ngaus))
+
+                ! loop for 1:nelgroup
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    lnods =>element(ielem)%field(1)%lnods_f
+                    do inode=1,nnode
+                        ipoin=lnods(inode)
+                        value(inode)=0.
+                        if (lmdofn(8)/=0)idofn=lmdofn(8)
+                        itotv=nodfn(idofn,ipoin)
+                        if(itotv/=0)value(inode)=result_zero(itotv)+coord(ndimn,ipoin)
+                    end do
+                    do igaus=1,ngaus
+                        ! get djacb and cartd in the element level
+                        !djacb=element(ielem)%egaus(order_intx)%djacb(igaus)
+                        cartd=element(ielem)%egaus(1)%cartd(:,:,igaus)
+                        veloc(:,igaus)=cartd.x.value
+                        veloc(:,igaus)=veloc(:,igaus)*perme
+                    end do
+
+                    do inode=1,nnode
+                        ipoin=lnods(inode)
+                        aera(ipoin)=aera(ipoin)+1.
+                        veloc_H(:,ipoin)=veloc_H(:,ipoin)+veloc(:,inode)
+                    end do
+                    nullify(lnods)
+                end do
+                deallocate(value,cartd,veloc)
+
+
+                if(Bparameter/=0.and.props(matno)%mechanical%fluid%iperm/=0)then
+                    deallocate(perme)
+                else
+                    nullify(perme)
+                endif
+
+            endif
+        end do
+        do ipoin=1,npoin
+            if(abs(aera(ipoin)>.001))veloc_H(:,ipoin)=-veloc_H(:,ipoin)/aera(ipoin)
+        end do
+
+        CALL GID_BeginVectorResult('flow_velocity','TimeStep',total_step,GiD_onNodes,NULL,NULL,'flow_vX','flow_vY','flow_vZ',NULL)
+
+        do ipoin=1,npoin
+            x=veloc_H(1,ipoin)
+            y=veloc_H(2,ipoin)
+            z=0.0
+            if(ndimn==3)z=veloc_H(3,ipoin)
+            CALL GID_WriteVector(ipoin,x,y,z)
+            !write(out_gid_dis,10)ipoin,veloc_H(:,ipoin)
+        end do
+        CALL GID_ENDRESULT
+
+        deallocate(veloc_H,aera)
+
+
+    endif !20210324
+
+
+    if (gid_f==1) then
+        CALL GID_BeginVectorResult('tofor','TimeStep',total_step,GiD_onNodes,NULL,NULL,'toforX','toforY','toforZ',NULL)
+        allocate(value(1:ndimn))
+        do ipoin=1,npoin
+            value=0.
+            do idofn=1,ndimn
+                itotv=nodfn(idofn,ipoin)
+                if (itotv/=0)value(idofn)=tofor(itotv)
+            end do
+            x=value(1)
+            y=value(2)
+            z=0.0
+            if(ndimn==3)z=value(3)
+            CALL GID_WriteVector(ipoin,x,y,z)
+        end do
+        deallocate(value)
+        CALL GID_ENDRESULT
+    endif
+    if(gid_pv==1)then !zhao09
+        CALL GID_BeginScalarResult('PRESSURE_V','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+        allocate(value(1),GIDB_value(1))
+        do ipoin=1,npoin
+            value=0.
+            if (lmdofn(8)/=0)idofn=lmdofn(8)
+            if (lmdofn(7)/=0)idofn=lmdofn(7)
+            itotv=nodfn(idofn,ipoin)
+            if (.not.allocated(prstat).and.itotv/=0)value(1)=result_first(itotv)
+            if (allocated(prstat).and.itotv/=0)value(1)=result_first(itotv) !-prstat(ipoin)
+            GIDB_value(1)=value(1)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        deallocate(value,GIDB_value)
+        CALL GID_ENDRESULT
+    endif !zhao09
+
+
+    if(gid_p==1.and.nflow/=0)then
+        allocate(GIDB_value(1))
+        CALL GID_BeginScalarResult('flow_charge','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+        !write(out_gid_dis,101)'flow_charge',1,total_step,1,1,0
+        do ipoin=1,npoin
+            !write(out_gid_dis,10)ipoin,flowrate(ipoin)
+            GIDB_value(1)=flowrate(ipoin)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        CALL GID_ENDRESULT
+        deallocate(GIDB_value)
+    endif
+
+    ! end write pore_pressure scalar for gid plot
+
+    ! write temperature scalar for gid plot
+    if(gid_T==1)then
+        CALL GID_BeginScalarResult('TEMPERATURE','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+        !write(out_gid_dis,101)'TEMPERATURE',1,total_step,1,1,0
+        allocate(value(1),GIDB_value(1))
+        do ipoin=1,npoin
+            value=0.
+            idofn=lmdofn(10)
+            itotv=nodfn(idofn,ipoin)
+            !if (itotv/=0.and.outintw==0)value(1)=result_zero(itotv)
+            if (itotv/=0)value(1)=result_zero(itotv)  !20200220
+            !write(out_gid_dis,10)ipoin,value
+            GIDB_value(1)=value(1)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        deallocate(value,GIDB_value)
+    endif
+    ! end write temperature scalar for gid plot
+
+    if (allocated(resultm))deallocate(resultm)
+
+    !! end of output of nodal values from solver
+
+
+
+    nstre=4
+    if (ndimn==3) nstre=6
+
+    if (gid_s==1) then
+        if(ndimn==2)then
+            if(nstre==4)then
+                call GiD_BeginPDMMatResult('STRESS','TimeStep',total_step,GiD_onNodes,NULL,NULL,'SXX','SYY','SXY','SZZ')
+            else
+                call GiD_Begin2DMatResult('STRESS','TimeStep',total_step,GiD_onNodes,NULL,NULL,'SXX','SYY','SXY')
+            endif
+        else
+            call GiD_Begin3DMatResult('STRESS','TimeStep',total_step,GiD_onNodes,NULL,NULL,'SXX','SYY','SZZ','SXY','SYZ','SZX')
+        endif
+        !write(out_gid_dis,101)'STRESS',1,total_step,3,1,1
+        !
+        !if (ndimn==2) then
+        !    write(out_gid_dis,*)'SIGXX'
+        !    write(out_gid_dis,*)'SIGYY'
+        !    write(out_gid_dis,*)'SIGXY'
+        !    if (nstre==4)write(out_gid_dis,*)'SIGZZ'
+        !else if(ndimn==3) then
+        !    write(out_gid_dis,*)'SIGXX'
+        !    write(out_gid_dis,*)'SIGYY'
+        !    write(out_gid_dis,*)'SIGZZ'
+        !    write(out_gid_dis,*)'SIGXY'
+        !    write(out_gid_dis,*)'SIGYZ'
+        !    write(out_gid_dis,*)'SIGZX'
+        !endif
+
+    endif
+
+    !!!!!!!!!!!!!!!!!!!!output for plate
+    !if (gid_Mxy==1) then
+    !
+    !  write(out_gid_dis,101)'STRESS_Moment',1,total_step,3,1,1
+    !  write(out_gid_dis,*)'SIGXX'
+    !  write(out_gid_dis,*)'SIGYY'
+    !  write(out_gid_dis,*)'SIGXY'
+    !  write(out_gid_dis,*)'Mx'
+    !  write(out_gid_dis,*)'My'
+    !  write(out_gid_dis,*)'Mxy'
+    !
+    !endif
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    len=0
+    do igroup=1,ngroup
+        fieldid=group(igroup)%fieldid
+        class=group(igroup)%class
+        matno = group(igroup)%matno
+        name=props(matno)%name
+        index=group(igroup)%index
+        nnode=elkn(index)%nnode
+        if (fieldid(1:1)=='U')then ! zhao 05/12/26
+            material=props(matno)%mechanical%solid%material
+            if (fieldid(1:1)=='U'.and.class=='CO'.and.material/='GOODMAN'  &
+                .and.name/='CONTACT'.and.nnode/=2.and.index/=22)then  !20200205
+                !.and.name/='CONTACT'.and.nnode/=2)then   !20200205
+                if (group(igroup)%ngvar>len)len=group(igroup)%ngvar
+            endif
+        endif
+    end do
+
+    !if (len/=0.and.(gid_s==1.or.gid_ms==1.or.gid_ep==1.or.gid_Y==1.or.gid_Fc==1.or.gid_Mxy==1)) then  !20200205
+    if (len/=0.and.(gid_s==1.or.gid_ms==1.or.gid_ep==1.or.gid_Y==1.or.gid_Fc==1)) then  !20200205
+        allocate(valun(len,npoin),GIDB_valun(len,npoin)) ; valun=0.
+        !call recovery(valun)
+        call average_aera(valun)
+        !if(gid_s==1.or.gid_Mxy==1)then  !20200205
+        if(gid_s==1)then  !20200205
+            GIDB_valun=valun
+            do ipoin=1,npoin
+                !write(out_gid_dis,10)ipoin,valun(1:nstre,ipoin)
+                if(ndimn==2)then
+                    if(nstre==4)then
+                        call GiD_WritePlainDefMatrix(ipoin,GIDB_valun(1,ipoin),GIDB_valun(2,ipoin),   &
+                            GIDB_valun(3,ipoin),GIDB_valun(4,ipoin))
+                    else
+                        call GiD_Write2DMatrix(ipoin,GIDB_valun(1,ipoin),GIDB_valun(2,ipoin),   &
+                            GIDB_valun(3,ipoin))
+                    endif
+                else
+                    call GiD_Write3DMatrix(ipoin,GIDB_valun(1,ipoin),GIDB_valun(2,ipoin),GIDB_valun(3,ipoin),  &
+                        GIDB_valun(4,ipoin),GIDB_valun(5,ipoin),GIDB_valun(6,ipoin))
+                endif
+            enddo
+            CALL GID_ENDRESULT
+        endif
+
+        if (gid_ms==1)then
+            CALL GID_BeginVectorResult('PRINCIPALSTRESS','TimeStep',total_step,GiD_onNodes,NULL,NULL,'SIGMA-1','SIGMA-2','SIGMA-3',NULL)
+            !write(out_gid_dis,101)'PRINCIPALSTRESS',1,total_step,2,1,1
+            !write(out_gid_dis,*)'SIGMA-1'
+            !write(out_gid_dis,*)'SIGMA-2'
+            !if (ndimn==3)write(out_gid_dis,*)'SIGMA-3'
+
+            allocate(smain(ndimn))
+            if (ndimn==3)allocate(stres(6),rr(3,3))
+            do ipoin=1,npoin
+                if (ndimn==2) then
+                    sx=valun(1,ipoin)
+                    sy=valun(2,ipoin)
+                    sxy=valun(3,ipoin)
+                    delta=sqrt((sx-sy)**2/4+sxy**2)
+                    smain=0.
+                    if (delta.lt.1.e-5) goto 12
+                    smain(1)=(sx+sy)/2.+delta
+                    smain(2)=(sx+sy)/2.-delta
+12                  continue
+                else
+                    stres=valun(:,ipoin)
+                    call stresmr ( stres, smain, rr)
+                endif
+                !write(out_gid_dis,10)ipoin,smain
+                x=smain(1)
+                y=smain(2)
+                z=0.0
+                if(ndimn==3)z=smain(3)
+                CALL GID_WriteVector(ipoin,x,y,z)
+            end do
+            deallocate(smain)
+            if (ndimn==3)deallocate(stres,rr)
+            CALL GID_ENDRESULT
+        endif !gid_ms
+
+        if (gid_ep==1)then
+            CALL GID_BeginScalarResult('PLASTICSTRAIN','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+            !write(out_gid_dis,101)'PLASTICSTRAIN',1,total_step,1,1,0
+            allocate(GIDB_value(1))
+            do ipoin=1,npoin
+                !write(out_gid_dis,10)ipoin,valun(nstre+1,ipoin)
+                GIDB_value(1)=valun(nstre+1,ipoin)
+                call GiD_WriteScalar(ipoin,GIDB_value(1))
+            end do
+            CALL GID_ENDRESULT
+            deallocate(GIDB_value)
+        endif
+        if (gid_Y==1)then
+            allocate(GIDB_value(1))
+            CALL GID_BeginScalarResult('Yield','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+            !write(out_gid_dis,101)'Yield',1,total_step,1,1,0
+            do ipoin=1,npoin
+                !write(out_gid_dis,10)ipoin,valun(nstre+2,ipoin)
+                GIDB_value(1)=valun(nstre+2,ipoin)
+                call GiD_WriteScalar(ipoin,GIDB_value(1))
+            end do
+            CALL GID_ENDRESULT
+            deallocate(GIDB_value)
+        endif
+        if (gid_FC==1)then
+            allocate(GIDB_value(1))
+            CALL GID_BeginScalarResult('FACTOR','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+            !write(out_gid_dis,101)'FACTOR',1,total_step,1,1,0
+            do ipoin=1,npoin
+                !write(out_gid_dis,10)ipoin,valun(nstre+3,ipoin)
+                GIDB_value(1)=valun(nstre+3,ipoin)
+                call GiD_WriteScalar(ipoin,GIDB_value(1))
+            end do
+            CALL GID_ENDRESULT
+            deallocate(GIDB_value)
+        endif
+
+        deallocate(valun,GIDB_valun)
+
+    endif
+    if (rmesh/=0)then
+        allocate(valun(1,npoin))
+        call average_strain(valun)
+        allocate(GIDB_value(1))
+        CALL GID_BeginScalarResult('total_strain','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+
+        !write(out_gid_dis,101)'total strain',1,total_step,1,1,0
+        do ipoin=1,npoin
+            !write(out_gid_dis,10)ipoin,valun(1,ipoin)
+            GIDB_value(1)=valun(1,ipoin)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        deallocate(valun)
+        deallocate(GIDB_value)
+        CALL GID_ENDRESULT
+    endif
+
+
+    !return   !! following is for mcjoint elements
+    if (gid_Ns==1) then
+
+        allocate(valun(2,npoin))
+        call average_mcjoint(valun)
+        allocate(GIDB_value(1))
+        CALL GID_BeginScalarResult('total_strain','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+
+        !write(out_gid_dis,101)'Normal_stress',1,total_step,1,1,0
+        do ipoin=1,npoin
+            write(out_gid_dis,10)ipoin,valun(1,ipoin)
+            GIDB_value(1)=valun(1,ipoin)
+            call GiD_WriteScalar(ipoin,GIDB_value(1))
+        end do
+        CALL GID_ENDRESULT
+        if(gid_ss==1)then
+            CALL GID_BeginScalarResult('Shear_stress','TimeStep',total_step,GiD_onNodes,NULL,NULL,NULL)
+
+            !write(out_gid_dis,101)'Shear_stress',1,total_step,1,1,0
+            do ipoin=1,npoin
+                write(out_gid_dis,10)ipoin,valun(2,ipoin)
+                GIDB_value(1)=valun(2,ipoin)
+                call GiD_WriteScalar(ipoin,GIDB_value(1))
+            end do
+            CALL GID_ENDRESULT
+        endif
+        deallocate(GIDB_value)
+        deallocate(valun)
+
+    endif
+
+    !!!!!!!!!!!!!!!!!!!!output for Beam
+    if (gid_bem==1) then
+
+        write(bem_res_unit,101)'internal_force_beam(Local)',1,total_step,ndimn,1,1
+        if(ndimn==2)then
+            write(bem_res_unit,*)'N'
+            write(bem_res_unit,*)'Q'
+            write(bem_res_unit,*)'M'
+        elseif(ndimn==3)then
+            write(bem_res_unit,*)'N'
+            write(bem_res_unit,*)'Qy'
+            write(bem_res_unit,*)'Qz'
+            write(bem_res_unit,*)'Mx'
+            write(bem_res_unit,*)'My'
+            write(bem_res_unit,*)'Mz'
+        endif
+        allocate(valun(3*(ndimn-1),npoin_bem),npbeam(npoin_bem))
+        valun=0.   !20200310
+        npbeam=0
+
+        DO igroup =1,ngroup
+            field1= group(igroup)%fieldid(1:1)
+            if (appear(igroup)>0.and.field1=='U')then
+                index = group(igroup)%index
+                if (index==20.or.index==21) then
+                    nstre=6*(ndimn-1)
+                    allocate(trot(nstre,nstre),force_e(nstre),force_i(nstre),trotx(nstre,nstre))
+                    trot=0. ; trotx=0.
+                    DO ielgroup = 1,group(igroup)%nelgroup
+
+                        ielem = group(igroup)%list(ielgroup)
+                        jelem=liste_bem_new(ielem)
+
+                        rotation=>element(ielem)%rotation
+
+                        trot=0.
+                        if (ndimn==2)then
+                            trot(1:ndimn,1:ndimn)=rotation
+                            trot(3,3)=1.
+                            trot(4:5,4:5)=rotation
+                            trot(6,6)=1.
+                        else if(ndimn==3) then
+                            trot(1:3,1:3)=rotation; trot(4:6,4:6)=rotation
+                            trot(7:9,7:9)=rotation; trot(10:12,10:12)=rotation
+                        end if
+
+
+                        force_e=element(ielem)%field(1)%tload
+                        force_i=element(ielem)%field(1)%gpvar(1:6*(ndimn-1),1)  !20200116
+                        force_i=force_i-force_e !不需要用trot.x.force_e，%tload和%gpvar都是整体坐标系内的
+                        force_e=force_i
+                        force_i=trot.x.force_e  !转成局部坐标系下的内力
+
+                        do inode=1,2
+                            npbeam(ien_bem(inode,jelem))=npbeam(ien_bem(inode,jelem))+1
+                            if(inode==1)then
+                                valun(:,ien_bem(inode,jelem))=valun(:,ien_bem(inode,jelem))-force_i(1:3*(ndimn-1))
+                            else
+                                valun(:,ien_bem(inode,jelem))=valun(:,ien_bem(inode,jelem))+force_i(3*(ndimn-1)+1:6*(ndimn-1))
+                            endif
+                        end do
+
+                        nullify(rotation)
+                    end do
+                    deallocate(trot,force_e,force_i,trotx)
+                endif
+            endif
+        end do
+
+
+        do ipoin=1,npoin_bem
+            if(npbeam(ipoin)/=0)valun(:,ipoin)=valun(:,ipoin)/npbeam(ipoin)
+            write(bem_res_unit,10)ipoin,valun(:,ipoin)
+        end do
+
+        deallocate(valun,npbeam)
+
+    endif
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    !!!!!!!!!!!!!!!!!!!!output for Plate  20200311
+    if (gid_Mxy==1) then
+
+        write(Mxy_res_unit,101)'STRESS_Moment',1,total_step,3,1,1
+        write(Mxy_res_unit,*)'SIGXX'
+        write(Mxy_res_unit,*)'SIGYY'
+        write(Mxy_res_unit,*)'SIGXY'
+        write(Mxy_res_unit,*)'Mx'
+        write(Mxy_res_unit,*)'My'
+        write(Mxy_res_unit,*)'Mxy'
+
+        allocate(valun(6,npoin_Mxy),npbeam(npoin_Mxy))
+        valun=0.   !20200311
+        npbeam=0
+
+        DO igroup =1,ngroup
+            field1= group(igroup)%fieldid(1:1)
+            if (appear(igroup)>0.and.field1=='U')then
+                index = group(igroup)%index
+                if (index/=22) cycle
+                matno = group(igroup)%matno
+                thick=props(matno)%mechanical%solid%thickness  !202000311
+
+                DO ielgroup = 1,group(igroup)%nelgroup
+
+                    ielem = group(igroup)%list(ielgroup)
+                    jelem=liste_mxy_new(ielem)
+
+
+                    do inode=1,4
+                        npbeam(ien_mxy(inode,jelem))=npbeam(ien_mxy(inode,jelem))+1
+                    enddo
+                    valun(1:6,ien_mxy(1,jelem))=valun(1:6,ien_mxy(1,jelem))+   &
+                        thick*element(ielem)%field(1)%gpvar(1:6,1)
+                    valun(1:6,ien_mxy(2,jelem))=valun(1:6,ien_mxy(2,jelem))+   &
+                        thick*element(ielem)%field(1)%gpvar(1:6,13)
+                    valun(1:6,ien_mxy(3,jelem))=valun(1:6,ien_mxy(3,jelem))+   &
+                        thick*element(ielem)%field(1)%gpvar(1:6,16)
+                    valun(1:6,ien_mxy(4,jelem))=valun(1:6,ien_mxy(4,jelem))+   &
+                        thick*element(ielem)%field(1)%gpvar(1:6,4)
+                end do
+            endif
+        end do
+
+
+        do ipoin=1,npoin_mxy
+            if(npbeam(ipoin)/=0)valun(:,ipoin)=valun(:,ipoin)/npbeam(ipoin)
+            write(mxy_res_unit,10)ipoin,valun(:,ipoin)
+        end do
+
+        deallocate(valun,npbeam)
+
+    endif
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+10  format(i10,10(2x,e20.8))
+101 format(a15,i8,f12.6,5i8)
+
+
+    END SUBROUTINE OUT_GID_WRITE_BIN
+    subroutine OUT_GID_BIN_MESH
+    integer(ink),allocatable::lnods(:)
+    integer(ink) index0,index,nnode,ipoin,igroup,ielgroup,ielem,np,matno
+    character*20 name,text
+    real*8 xyz(3)
+
+    !if(iblks/=runblks)return
+    write(text,'(i5)')iblks
+    text='Block'//trim(adjustl(text))
+    CALL GID_BEGINMESHGROUP(trim(text))
+
+
+    index0=0;xyz=0.
+    do igroup=1,ngroup
+        if(igroup/=1.and.appear_process(igroup,iblks)==0)cycle
+
+        name=group(igroup)%kname
+        index=group(igroup)%index
+        nnode=elkn(index)%nnode
+        if(allocated(lnods))deallocate(lnods)
+        allocate(lnods(nnode+1));lnods=0
+
+        if(index==1.or.index==2.or.index==19.or.index==20.or.index==21)then
+            CALL GID_BeginMesh(trim(adjustl(name)),GiD_Dimension(ndimn),GID_ElementType(2),nnode)
+        elseif(index==3.or.index==4.or.index==11.or.index==15)then
+            CALL GID_BeginMesh(trim(adjustl(name)),GiD_Dimension(ndimn),GID_ElementType(3),nnode)
+        elseif(index==5.or.index==6.or.index==22.or.index==12.or.index==16)then
+            CALL GID_BeginMesh(trim(adjustl(name)),GiD_Dimension(ndimn),GID_ElementType(4),nnode)
+        elseif(index==7.or.index==8.or.index==13.or.index==17)then
+            CALL GID_BeginMesh(trim(adjustl(name)),GiD_Dimension(ndimn),GID_ElementType(5),nnode)
+        elseif(index==9.or.index==10.or.index==14.or.index==18)then
+            CALL GID_BeginMesh(trim(adjustl(name)),GiD_Dimension(ndimn),GID_ElementType(6),nnode)
+        endif
+
+        CALL GID_BEGINCOORDINATES
+        if(igroup==1)then
+            do ipoin=1,npoin
+                xyz(1:ndimn)=coord(1:ndimn,ipoin)
+                if(ndimn==3)then
+                    CALL GID_WRITECOORDINATES(ipoin,xyz(1),xyz(2),xyz(3))
+                else
+                    CALL GID_WRITECOORDINATES2D(ipoin,xyz(1),xyz(2))
+                endif
+            end do
+        end if
+        CALL GID_ENDCOORDINATES
+
+        CALL GID_BEGINELEMENTS
+
+        if(appear_process(igroup,iblks)>0)then
+            matno=matno_process(igroup,iblks)
+
+            DO ielgroup = 1,group(igroup)%nelgroup
+                ielem = group(igroup)%list(ielgroup)
+                lnods(1:nnode)=element(ielem)%field(1)%lnods_f
+                lnods(nnode+1)=matno
+                CALL GiD_WriteElementMat(ielem,lnods)
+            end do !end do ielgroup
+        endif
+
+        CALL GID_ENDELEMENTS
+        CALL GID_ENDMESH
+        deallocate(lnods)
+    end do !end do igroup
+
+    CALL GID_ENDMESHGROUP
+1001 format(10i8)
+    end subroutine OUT_GID_BIN_MESH
+
 
     !20231215YL
     SUBROUTINE OUT_GID_MAX !20231009
