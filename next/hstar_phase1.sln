@@ -1,0 +1,37 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30114.105
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6989167D-11E4-40FE-8C1A-2192A86A7E90}") = "hstar_phase1", "hstar_phase1.vfproj", "{0962B92D-492C-4012-B0A8-6B8B8D3B4990}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Profile|x64 = Profile|x64
+		Profile|x86 = Profile|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Debug|x64.ActiveCfg = Debug|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Debug|x64.Build.0 = Debug|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Debug|x86.ActiveCfg = Debug|Win32
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Debug|x86.Build.0 = Debug|Win32
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Profile|x64.ActiveCfg = Profile|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Profile|x64.Build.0 = Profile|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Profile|x86.ActiveCfg = Profile|Win32
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Profile|x86.Build.0 = Profile|Win32
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Release|x64.ActiveCfg = Release|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Release|x64.Build.0 = Release|x64
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Release|x86.ActiveCfg = Release|Win32
+		{0962B92D-492C-4012-B0A8-6B8B8D3B4990}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BD850A3F-2244-47AF-BE6E-0F91380D14DA}
+	EndGlobalSection
+EndGlobal

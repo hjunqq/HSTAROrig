@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(dir /s /b \"C:\\\\Program Files\\\\CMake\\\\bin\\\\cmake.exe\")",
+      "Bash(dir /s /b \"C:\\\\Program Files \\(x86\\)\\\\CMake\\\\bin\\\\cmake.exe\")",
+      "Bash(build.bat)",
+      "Bash(cmd /c \"cd /d G:\\\\BB\\\\HSTAR-Next && build.bat\")",
+      "Bash(cmd /c \"G:\\\\BB\\\\HSTAR-Next\\\\build.bat\")",
+      "Bash(cmd /c \"cd /d G:\\\\BB\\\\HSTAR-Next && if exist build rmdir /s /q build && mkdir build\")",
+      "Bash(powershell -Command \"cd ''G:\\\\BB\\\\HSTAR-Next''; if \\(Test-Path build\\) { Remove-Item -Recurse -Force build }; New-Item -ItemType Directory -Path build; cd build; cmake .. -G ''NMake Makefiles'' -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_BUILD_TYPE=Release 2>&1\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -NoProfile -Command \"& { $env:Path = ''C:\\\\Program Files\\\\CMake\\\\bin;'' + $env:Path; Set-Location ''G:\\\\BB\\\\HSTAR-Next\\\\build''; & ''C:\\\\Program Files\\\\CMake\\\\bin\\\\cmake.exe'' .. -G ''NMake Makefiles'' -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_BUILD_TYPE=Release 2>&1 }\")",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -Command \"& ''C:\\\\Program Files \\(x86\\)\\\\Intel\\\\oneAPI\\\\setvars.bat'' intel64 2>&1 | Out-Null; Write-Host ''Environment set up''; ''C:\\\\Program Files\\\\CMake\\\\bin\\\\cmake.exe'' --version\")",
+      "Bash(\"C:/Program Files/CMake/bin/cmake.exe\" --version)",
+      "Bash(ifx:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(/mnt/c/Windows/System32/cmd.exe /c \"G:\\\\BB\\\\HSTAR-Next\\\\run_build.bat\")",
+      "Bash(echo:*)",
+      "Bash(/c/Windows/System32/cmd.exe //c \"G:\\\\BB\\\\HSTAR-Next\\\\run_build.bat\")",
+      "Bash(find:*)",
+      "Bash(cmake -B build:*)",
+      "Bash(\"C:/Program Files/CMake/bin/cmake.exe\":*)",
+      "Bash(powershell.exe -Command \"& cmd.exe /c ''G:\\\\BB\\\\hstarYLOrig\\\\next\\\\build_and_test.bat'' 2>&1 | Out-File -FilePath ''G:\\\\BB\\\\hstarYLOrig\\\\next\\\\build_log.txt'' -Encoding UTF8\")",
+      "Bash(python migration/baseline/extract_results.py:*)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(for file in \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Array.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Solver.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Stiff.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Residu.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Prescrib.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Load.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Output.f90\" \"G:\\\\BB\\\\hstarYLOrig\\\\HSTAR\\\\Temper.f90\")",
+      "Bash(done)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(cmd //c build.bat)",
+      "Bash(cmd /c \"cd /d G:\\\\BB\\\\hstarYLOrig\\\\next && build.bat\")",
+      "Bash(cmd /c \"G:\\\\BB\\\\hstarYLOrig\\\\next\\\\build.bat\")",
+      "Bash(ls:*)"
+    ]
+  }
+}

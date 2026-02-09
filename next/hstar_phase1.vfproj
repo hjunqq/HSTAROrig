@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VisualStudioProject ProjectCreator="Intel Fortran" Keyword="Console Application" Version="11.0" ProjectIdGuid="{0962B92D-492C-4012-B0A8-6B8B8D3B4990}">
+	<Platforms>
+		<Platform Name="Win32"/>
+		<Platform Name="x64"/>
+	</Platforms>
+	<Configurations>
+		<Configuration Name="Debug|Win32" UseCompiler="ifortCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" AdditionalIncludeDirectories="." WarnInterfaces="true" Traceback="true" BoundsCheck="true" RuntimeLibrary="rtMultiThreadedDebug" UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies="gidpostd.lib;zlibstaticd.lib"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Release|Win32" UseCompiler="ifortCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" AdditionalIncludeDirectories="." UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" SubSystem="subSystemConsole" AdditionalDependencies="gidpost.lib;zlib.lib"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Debug|x64" UseCompiler="ifxCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" AdditionalIncludeDirectories="." WarnInterfaces="true" Traceback="true" BoundsCheck="true" RuntimeLibrary="rtMultiThreadedDebug" UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" GenerateManifest="false" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies="shlwapi.lib;zlib.lib;libhdf5_hl.lib;libhdf5.lib;gidpost.lib"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Release|x64" UseCompiler="ifxCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" AdditionalIncludeDirectories="." UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" GenerateManifest="false" SubSystem="subSystemConsole" AdditionalDependencies="shlwapi.lib  zlib.lib libhdf5_hl.lib libhdf5.lib gidpost.lib"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Profile|Win32" UseCompiler="ifortCompiler">
+			<Tool Name="VFFortranCompilerTool" AdditionalOptions="/Oy-" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" AdditionalIncludeDirectories="." UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" GenerateDebugInformation="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Profile|x64" UseCompiler="ifxCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" AdditionalIncludeDirectories="." MultiProcessorCompilation="true" UseMkl="mklParallel"/>
+			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="..\\HSTAR\\lib64" IgnoreDefaultLibraryNames="libucrt.lib" GenerateManifest="false" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies=" shlwapi.lib legacy_stdio_definitions.lib advapi32.lib ucrt.lib vcruntime.lib zlib.lib libhdf5_hl.lib libhdf5.lib gidpost.lib"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+	</Configurations>
+	<Files>
+		<Filter Name="Header Files" Filter="fi;fd"/>
+		<Filter Name="Resource Files" Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"/>
+		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
+			<Filter Name="Original Modules">
+				<File RelativePath="..\\HSTAR\\Array.f90"/>
+				<File RelativePath="..\\HSTAR\\Elements.f90"/>
+				<File RelativePath="..\\HSTAR\\gidpost.F90"/>
+				<File RelativePath="..\\HSTAR\\Global.f90"/>
+				<File RelativePath="..\\HSTAR\\Level.f90"/>
+				<File RelativePath="..\\HSTAR\\Load.f90"/>
+				<File RelativePath="..\\HSTAR\\Material.f90"/>
+				<File RelativePath="..\\HSTAR\\meshfine.f90"/>
+				<File RelativePath="..\\HSTAR\\Output.f90"/>
+				<File RelativePath="..\\HSTAR\\Prescrib.f90"/>
+				<File RelativePath="..\\HSTAR\\Residu.f90"/>
+				<File RelativePath="..\\HSTAR\\Solver.f90"/>
+				<File RelativePath="..\\HSTAR\\Stiff.f90"/>
+				<File RelativePath="..\\HSTAR\\Temper.f90"/>
+				<File RelativePath="..\\HSTAR\\Vartype.f90"/>
+				<File RelativePath="..\\HSTAR\\vsl_gauss_module.f90"/>
+			</Filter>
+			<Filter Name="Decomposed FEM">
+				<File RelativePath=".\fem_module.f90"/>
+				<File RelativePath=".\Fem.f90"/>
+			</Filter>
+		</Filter>
+		<Filter Name="Include Files">
+			<File RelativePath=".\fem_process.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_static.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_dynamic.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_frequency.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_rigid.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_reliability.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_backanalysis.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_compliance.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_force.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_nr_update.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_state.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_init.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_contact.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\fem_misc.f90">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|Win32">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+				<FileConfiguration Name="Profile|x64">
+					<Tool Name="VFFortranCompilerTool" ExcludedFromBuild="true"/>
+				</FileConfiguration>
+			</File>
+		</Filter>
+	</Files>
+	<Globals/>
+</VisualStudioProject>
