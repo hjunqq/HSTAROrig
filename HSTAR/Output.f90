@@ -226,6 +226,9 @@
         call recover
         do igroup=1,ngroup
             write(outgpvar,*)'igroup=',igroup
+            if (.not.associated(group(igroup)%valun)) cycle !tfix2026: recover
+            !tfix2026 allocates valun only for U/CO groups - a thermal group
+            !tfix2026 has none to write.
             if (appear(igroup)>0) then
                 do ipoin=1,npoin
                     if (any(group(igroup)%valun(ipoin,:)/=0.0_irk))then
@@ -3879,7 +3882,10 @@
 
             idofn=lmdofn(jdofn)
             if(nintf==0)then !20210803
-                itotv=nodfn(idofn,inode)
+                itotv=0 !tfix2026: lmdofn(jdofn)==0 when the recorded dof type
+                !tfix2026 is absent from this problem's dof map (train_temp_creep
+                !tfix2026 U+T deck) - nodfn(0,:) is out of bounds; record 0 instead.
+                if (idofn>=1) itotv=nodfn(idofn,inode)
                 if ((jdofn/=8.and.jdofn/=10).or.(jdofn==10.and.outintw==0)) then
                     if (itotv/=0)value(iwriten)=result_zero(itotv)
                 else if(jdofn==10.and.outintw/=0) then
@@ -3891,18 +3897,25 @@
             else
                 listn=>out_point_groups(i0)%out_point_group(ioutnode)%listn
                 rintn=>out_point_groups(i0)%out_point_group(ioutnode)%rintn
-                idofn=lcdofn(jdofn)
+                idofn=lmdofn(jdofn) !tfix2026: was lcdofn(jdofn) - the INVERSE
+                !tfix2026 map (condensed->global). nodfn's first index is the
+                !tfix2026 condensed index, so global->condensed lmdofn is correct
+                !tfix2026 (identical on all-dof decks, which is why it never blew
+                !tfix2026 before a single-field thermal deck hit this branch).
+                if (idofn>=1) & !tfix2026: same absent-dof guard as above
                 value(iwriten)=dot_product(rintn,result_zero(nodfn(idofn,listn)))
                 nullify(listn,rintn)
             endif  !20210803
 
             if(jnode/=0)then
                 if(nintf1==0)then!20210803
-                    itotv=nodfn(idofn,jnode)
+                    itotv=0 !tfix2026: absent-dof guard, see above
+                    if (idofn>=1) itotv=nodfn(idofn,jnode)
                     if (itotv/=0)value(iwriten)=value(iwriten)-result_zero(itotv)
                 else
                     listn=>out_point_groups(i0)%out_point_group(ioutnode)%listn1
                     rintn=>out_point_groups(i0)%out_point_group(ioutnode)%rintn1
+                    if (idofn>=1) & !tfix2026: absent-dof guard
                     value(iwriten)=value(iwriten)-dot_product(rintn,result_zero(nodfn(idofn,listn)))
                     nullify(listn,rintn)
                 endif    !20210803
@@ -3943,8 +3956,11 @@
         end if
 
         istre=out_element_group(ioutelement)%istre
+        if (.not.associated(element(ielem)%field(1)%gpvar)) then
+            value(iwriten)=0. !tfix2026: no stress gauss vars on this element
+            !tfix2026 (single-field thermal deck) - record 0, don't dereference
         !if(index.ne.20.and.index.ne.21) then ! not for beam
-        if (index.ne.20.and.index.ne.21.and.index/=25) then ! not for beam !steel 2006
+        elseif (index.ne.20.and.index.ne.21.and.index/=25) then ! not for beam !steel 2006
             value(iwriten)=sum(element(ielem)%field(1)%gpvar(istre,1:ngaus))
             value(iwriten)=value(iwriten)/ngaus
         else
@@ -3977,8 +3993,11 @@
             wtime(1:iwriten-1)  =out_gap_group(ioutgap)%wtime
         end if
 
+        value(iwriten)=0. !tfix2026: gapg absent on non-contact element - record 0
+        if (associated(element(ielem)%field(1)%gapg)) then
         value(iwriten)=sum(element(ielem)%field(1)%gapg(1:ngaus))
         value(iwriten)=value(iwriten)/ngaus
+        endif
         wtime(iwriten)=ttime
 
         if (iwriten>1)then
@@ -4006,9 +4025,12 @@
             wtime(1:iwriten-1)  =out_mcjoint_group(ioutmcjoint)%wtime
         end if
 
+        valuex(:,iwriten)=0. !tfix2026: ntstress absent on non-mcjoint element
+        if (associated(element(ielem)%field(1)%ntstress)) then
         valuex(1,iwriten)=sum(element(ielem)%field(1)%ntstress(1,1:ngaus))
         valuex(2,iwriten)=sum(element(ielem)%field(1)%ntstress(2,1:ngaus))
         valuex(:,iwriten)=valuex(:,iwriten)/ngaus
+        endif
         wtime(iwriten)=ttime
 
         if (iwriten>1)then
@@ -4395,6 +4417,8 @@
             class=group(igroup)%class
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode
@@ -4580,6 +4604,8 @@
 
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode
@@ -4927,6 +4953,8 @@
 
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode
@@ -5003,6 +5031,8 @@
 
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode
@@ -5081,6 +5111,8 @@
 
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode
@@ -5249,6 +5281,8 @@
 
             matno = group(igroup)%matno
             name=props(matno)%name
+            material=' ' !tfix2026: heat-only material has no mechanical section
+            if (associated(props(matno)%mechanical)) &
             material=props(matno)%mechanical%solid%material
             index=group(igroup)%index
             nnode=elkn(index)%nnode

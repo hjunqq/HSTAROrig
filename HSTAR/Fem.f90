@@ -9245,7 +9245,8 @@
             if (nextrf/=0)then  !2004/9/11
                 do idofix=1,ndofix
                     itcurve =prescrib(idofix)%itcurve
-                    type_curve=tcurves(itcurve)%type_curve
+                    type_curve='NONE'   ! fix(R18): itcurve=0 has no curve
+                    if(itcurve/=0)type_curve=tcurves(itcurve)%type_curve
                     if (type_curve=='EXTRAPOLATION')then
                         if (istep>nextrf)then
                             do iextrf=1,nextrf-1
@@ -12285,12 +12286,17 @@
 
     do idofix=1,ndofix
         itcurve =prescrib(idofix)%itcurve
-        dfact   =tcurves(itcurve)%dfact
+        if(itcurve==0)then   ! fix(R18): no curve -> unit factor; never index tcurves(0)
+            dfact=1.0_irk
+            type_curve='NONE'
+        else
+            dfact   =tcurves(itcurve)%dfact
+            type_curve=tcurves(itcurve)%type_curve
+        endif
         ldofix  =prescrib(idofix)%ldofix
         ifixvar =prescrib(idofix)%ifixvar  !20230402
         jfixvar=prescrib(idofix)%jfixvar  !20220304
 
-        type_curve=tcurves(itcurve)%type_curve
 
 
         if(type_curve=='EQUINCRE')then !2007/9/28

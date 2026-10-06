@@ -190,6 +190,7 @@ contains
           elkn(ikind)%ggaus(ikg)%weigp=weigp
     
           do igaus=1,ngaus !igaus
+             t=0.0_irk ; u=0.0_irk   ! fix(R17): 1-D kinds never set t/u before shfunc
              s=posgp(1,igaus)
              if(lnidmn.ge.2)t=posgp(2,igaus)
              if(lnidmn.eq.3)u=posgp(3,igaus)   

@@ -813,6 +813,7 @@
                     qmax=element(ielem)%field(1)%gpvar(nstre+1,igaus)
                     smax=element(ielem)%field(1)%gpvar(nstre+2,igaus)
                 endif
+                kind_wt=props(matno)%mechanical%solid%kind_wt !fix: assigned only in the branch above
                 isat=0
                 if(kind_wt/=0) &
                     isat=element(ielem)%field(1)%isatu(igaus)
@@ -2422,6 +2423,7 @@
         if (UPW=='U') then   !! for mass matrix
             coef=1.0
             fact=0.0_irk
+            factw=0.0_irk  ! must initialize before density loop
             if (material=='NSTOKS')then  !!nstoks
                 coef=2.0
                 facts=props(matno)%mechanical%solid%density
@@ -3360,7 +3362,15 @@
                             if (order_time==0)coef=theta1*ditime
                         endif
                     endif
-                    use_duncanchang = (fieldid(ifield:ifield)=='U'.and.props(matno)%mechanical%solid%material=='DUNCANCHANG'.and.type_problem=='F')
+                    ! tfix2026: Fortran .and. does NOT short-circuit — for a heat-only
+                    ! material (T-field group) props(matno)%mechanical is an unassociated
+                    ! pointer and evaluating it here SIGSEGVed every 3D thermal deck on
+                    ! this line (train_temp_creep, "Begin assemble golbal matrix" crash).
+                    use_duncanchang = .false.
+                    if (fieldid(ifield:ifield)=='U'.and.type_problem=='F') then
+                        if (associated(props(matno)%mechanical)) &
+                            use_duncanchang = (props(matno)%mechanical%solid%material=='DUNCANCHANG')
+                    endif
 
                     if (is_pardiso) then
                         call assemble_pardiso_mesh(group(igroup)%nelgroup,group(igroup)%list,mesh_main, &
