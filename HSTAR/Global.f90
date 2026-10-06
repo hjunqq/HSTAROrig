@@ -538,6 +538,22 @@
 
     contains
 
+    subroutine glb_read_error(ios,msg,section,vars,title)  ! a READ of the .glb failed: say where, then stop
+    integer,intent(in)::ios
+    character(*),intent(in)::msg,section,vars,title
+    integer iu,k
+    do k=1,2
+        iu=6
+        if(k==2)iu=chkunit
+        write(iu,'(a)')' *** ERROR reading '//trim(probn)//'.glb'
+        write(iu,'(a)')'     section     : '//section
+        write(iu,'(a)')'     reading     : '//vars
+        write(iu,'(a)')'     after title : '//trim(title)
+        write(iu,'(a,i0,a)')'     iostat=',ios,' : '//trim(msg)
+    end do
+    stop 2
+    end subroutine glb_read_error
+
 
 
     subroutine global_data
@@ -557,8 +573,11 @@
     real    (irk) tvol,elcod_local,f1,f2,f3,f12(2),f0  !20200112
     real    (irk),allocatable::rotation(:,:),rintf(:)
     integer (ink),pointer::lnods(:)
+    integer glb_ios           ! iostat of the last .glb READ; nonzero stops in glb_read_error
+    character(256) glb_msg
 
 
+    glb_ios=0
     call open_data_files
 
     call read_glb_mesh_header
@@ -786,9 +805,14 @@
     end subroutine open_data_files
 
     subroutine read_glb_mesh_header  ! .glb: npoin..stab_matde, rmesh data, result-file opens; moved verbatim from global_data
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+        'text',text)
     print *,text
-    read(gunit,*)npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+        'npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,m' //&
+        'at_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde',text)
     print *, npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
     allocate(pnorm(ndimn,npoin),prot(ndimn,ndimn,npoin),icpnorm(npoin),lelenrt(nelem),icpspring(npoin)) !steel 2006
     pnorm=0. ; prot=0. ; icpnorm=0 ; lelenrt=0 ; icpspring=0
@@ -801,13 +825,21 @@
         prot(idimn,idimn,:)=1.0
     enddo
 
-    read(gunit,*)text  !2004/7/12
-    if(rmesh/=0)read(gunit,*)valv1,valv2 !2004/7/12
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+        'text',text)
+    if(rmesh/=0)read(gunit,*,iostat=glb_ios,iomsg=glb_msg)valv1,valv2 !2004/7/12
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+        'valv1,valv2',text)
 
-    read(gunit,*)text  !2004/7/12
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+        'text',text)
     if (rmesh/=0)then
         allocate(ndefault(abs(rmesh)))
-        read(gunit,*)ndefault
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ndefault
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
+            'ndefault',text)
     endif              !2004/7/12
 
     if (outplot(1:3)=='GID')then
@@ -839,9 +871,15 @@
 
     subroutine read_glb_solution_flags  ! .glb: ninit..ninistn and the files they switch on; moved verbatim from global_data
     allocate(tlink(2,ntlink))
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_solution_flags', &
+        'text',text)
     print *,text
-    read(gunit,*)ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw,neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outind,nbackdT,ninistn  !20231215YL
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw,neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outind,nbackdT,ninistn  !20231215YL
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_solution_flags', &
+        'ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw' //&
+        ',neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outi' //&
+        'nd,nbackdT,ninistn',text)
     print *,ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw,neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outind,nbackdT,ninistn !20231215YL
     outinpunit=37  !20220626
     outindunit=54  !20220626
@@ -865,9 +903,14 @@
     !   else if(outintw.gt.0) then
     !      open(outint,file=probn(1:len1)//'.oit',FORM='BINARY',ACCESS='append')
     !   endif
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'text',text)
     print *,text
-    read(gunit,*)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kgl' //&
+        'b,state_change,Bparameter,balgor,upliftin',text)
 
     if(Bparameter==-3.or.Bparameter>0.or.nbackf>0.or.nbackdT==2) &  !20231030
         open(back_ctl_unit,file=probn(1:len1)//'.btl')
@@ -884,39 +927,70 @@
         pause
     endif
     print *,type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'text',text)
     print *,text
-    if(nlayer==2)read(gunit,*) type_nl_layer1,type_nl_layer2,solver_iter
-    read(gunit,*)text
+    if(nlayer==2)read(gunit,*,iostat=glb_ios,iomsg=glb_msg) type_nl_layer1,type_nl_layer2,solver_iter
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'type_nl_layer1,type_nl_layer2,solver_iter',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'text',text)
     print *,text
-    read(gunit,*)nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,ECWPIPE  !20200220
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,ECWPIPE  !20200220
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,' //&
+        'ECWPIPE',text)
     print *,nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,ngrav,nflow,ECWPIPE  !20200220
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'text',text)
     print *,text
     if (nflow/=0)then
-        read(gunit,*)nfreeflownode
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfreeflownode
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+            'nfreeflownode',text)
         if(nfreeflownode/=0)then
             allocate(listfreeflownode(nfreeflownode))
-            read(gunit,*)listfreeflownode
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg)listfreeflownode
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+                'listfreeflownode',text)
         endif
     endif
 
     ! temperature
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'text',text)
     print *,text
-    read(gunit,*)ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel  !20210320
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel  !20210320
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
+        'ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel',text)
 
     if(submodel==-1)open(sub_msh_unit,file=probn(1:len1)//'.msh')  !20230407
     end subroutine read_glb_problem_type
 
     subroutine read_glb_dofs_time  ! .glb: mdofn, dof map, time orders, beeta1/2, theta1; moved verbatim from global_data
-    read(gunit,*)text
-    read(gunit,*)mdofn
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'mdofn',text)
     allocate(lmdofn(mdofn),lcdofn(mdofn),order_time_mdofn(mdofn))
-    read(gunit,*)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
-    read(gunit,*)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
-    read(gunit,*)text
-    read(gunit,*)beeta1,beeta2,theta1
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'lmdofn(1:mdofn)',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'order_time_mdofn(1:mdofn)',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)beeta1,beeta2,theta1
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
+        'beeta1,beeta2,theta1',text)
     print *,'beeta1,beeta2,theta1=',beeta1,beeta2,theta1
     end subroutine read_glb_dofs_time
 
@@ -930,52 +1004,91 @@
 
     allocate(equvs_process(ngroup),average_appear(ngroup)) !zhao 05/07/30
 
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
     print *,text
-    read(gunit,*)equvs_process(1:ngroup)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)equvs_process(1:ngroup)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'equvs_process(1:ngroup)',text)
     !levelset
     allocate(appear_level(ngroup))
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
     print *,text
-    read(gunit,*)appear_level(1:ngroup)
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)appear_level(1:ngroup)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'appear_level(1:ngroup)',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
     print *,text
     do iblk=1,nblks
-        read(gunit,*)appear_process(1:ngroup,iblk)
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)appear_process(1:ngroup,iblk)
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+            'appear_process(1:ngroup,iblk)',text)
         print *,'appear_process=',appear_process(1:ngroup,iblk)
     end do
 
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
     print *,text
     do iblk=1,nblks
-        read(gunit,*)matno_process(1:ngroup,iblk)
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)matno_process(1:ngroup,iblk)
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+            'matno_process(1:ngroup,iblk)',text)
         print *,'iblks=',iblks,'ngroup=',ngroup,'matno=',matno_process(1:ngroup,iblk)
     end do
 
     if(state_change==1)then !11/23/2014
-        read(gunit,*)text
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+            'text',text)
         print *,text
         do iblk=1,nblks
-            read(gunit,*)state_change_process(1:ngroup,iblk)
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg)state_change_process(1:ngroup,iblk)
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+                'state_change_process(1:ngroup,iblk)',text)
             print *,'iblks=',iblks,'state_change_process=',state_change_process(1:ngroup,iblk)
         end do
     endif
 
-    read(gunit,*)text               !zhao 05/08/05
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text               !zhao 05/08/05
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
     allocate(force_process(ngroup))
-    read(gunit,*)force_process(1:ngroup)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)force_process(1:ngroup)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'force_process(1:ngroup)',text)
 
     print *,'force_process=',force_process
 
     average_appear=0 !for stress average
-    read(gunit,*)text
-    read(gunit,*)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
-    read(gunit,*)text
-    read(gunit,*)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'average_appear(1:ngroup)',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
-    read(gunit,*)text
-    read(gunit,*)res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,   &
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,gid' //&
+        '_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh' //&
+        ',gid_wv,gid_bcs',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,   &
         res_Pv,res_ep,res_Y,res_FC,res_Ns,res_Ss,res_Tv,res_Pa   !20210324
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
+        'res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,res' //&
+        '_Pv,res_ep,res_Y,res_FC,res_Ns,res_Ss,res_Tv,res_Pa',text)
 
     if (gid_bem==1)then  !20200311
         open(bem_msh_unit,file=probn(1:len1)//'bem.flavia.msh',buffered='YES',blocksize=1048576)
@@ -998,10 +1111,20 @@
 
     allocate(listglocbeam(ngroup))
     listglocbeam=0
-    read(gunit,*)text       !ifs2006 zhao, 06/03/29
-    read(gunit,*)Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4,stiff_p4
-    read(gunit,*)text   !steel 2006
-    read(gunit,*)ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimnrt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text       !ifs2006 zhao, 06/03/29
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4,stiff_p4
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4' //&
+        ',stiff_p4',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text   !steel 2006
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimnrt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimn' //&
+        'rt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)',text)
     !ftcrack-脆性开裂时用，抗拉强度
     !coefMpa-粘结滑移时的系数，10^6/E的单位，比如:弹模采用Pa,coefMpa=10^6,弹模采用kPa,coefMpa=10^3
     !ikindks-粘结滑移曲线类型
@@ -1011,34 +1134,61 @@
     !ndimnrt=有多少个粘结单元切向固结
     !listglocbeam=局部坐标系求解的组列表
     !lelenrt=切向固结单元列表
-    read(gunit,*)text !hxl2006 MIF
-    read(gunit,*)ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif
-    read(gunit,*)text
-    read(gunit,*)hdam(1:nblks)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text !hxl2006 MIF
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)hdam(1:nblks)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'hdam(1:nblks)',text)
 
-    read(gunit,*)text
-    read(gunit,*)water_level(1:nblks)  !20220409
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)water_level(1:nblks)  !20220409
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'water_level(1:nblks)',text)
 
-    read(gunit,*)text
-    read(gunit,*)modf_dis_blocks(1:nblks)
-    read(gunit,*)text
-    read(gunit,*)uinitial(1:nblks)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)modf_dis_blocks(1:nblks)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'modf_dis_blocks(1:nblks)',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)uinitial(1:nblks)
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'uinitial(1:nblks)',text)
 
 
     print *,'uinitial=',uinitial(1:nblks)
 
-    read(gunit,*)text  !输入与nbackf/=0时的相关内容
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !输入与nbackf/=0时的相关内容
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+        'text',text)
 
 
 
     if(nbspring>0)then  !20150925
 
         allocate(bspring(nbspring))
-        read(gunit,*)text
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+            'text',text)
         print *,text
 
         do idofn=1,nbspring
-            read(gunit,*) bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%spring
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg) bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%spring
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
+                'bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%s' //&
+                'pring',text)
             print *,'bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%spring',bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%spring
 
         enddo
@@ -1070,24 +1220,36 @@
     end subroutine setup_dof_counts
 
     subroutine read_glb_links  ! .glb: dof links and tlinks; moved verbatim from global_data
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+        'text',text)
     print *,text
     do ilink=1,nlinks
 
-        read(gunit,*)npairs
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)npairs
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+            'npairs',text)
         links(ilink)%npairs=npairs
         allocate(links(ilink)%link_freedom(cdofn),links(ilink)%pairnode(2,npairs))
-        read(gunit,*)links(ilink)%link_freedom(1:cdofn)
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)links(ilink)%link_freedom(1:cdofn)
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+            'links(ilink)%link_freedom(1:cdofn)',text)
         do ipair=1,npairs
-            read(gunit,*)i0,links(ilink)%pairnode(1:2,ipair)
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg)i0,links(ilink)%pairnode(1:2,ipair)
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+                'i0,links(ilink)%pairnode(1:2,ipair)',text)
         end do
 
     end do
 
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+        'text',text)
     print *,text
     do ilink=1,ntlink
-        read(gunit,*)i0,tlink(1:2,ilink)
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)i0,tlink(1:2,ilink)
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
+            'i0,tlink(1:2,ilink)',text)
     end do
     end subroutine read_glb_links
 
@@ -1100,12 +1262,22 @@
     end subroutine read_cor_coordinates
 
     subroutine read_glb_element_groups  ! .glb: element groups (+ .ele via read_element) and node-group lists; moved verbatim from global_data
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+        'text',text)
     print *,'text1=',text
-    read(gunit,*)text
-    read(gunit,*)text
-    read(gunit,*)text
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+        'text',text)
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+        'text',text)
     print *,text
 
 
@@ -1118,12 +1290,20 @@
     do igroup=1,ngroup    !!igroup  for elements
 
         print *,'igroup=',igroup
-        read(gunit,*)group(igroup)%name,       group(igroup)%kname,      group(igroup)%index,      &
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%name,       group(igroup)%kname,      group(igroup)%index,      &
             group(igroup)%class,      group(igroup)%nrfields,   group(igroup)%fieldid,    &
             group(igroup)%special,    group(igroup)%sptype,     group(igroup)%nelgroup,   &
             group(igroup)%matno,      group(igroup)%type_nalgo, group(igroup)%type_stiff, &
             group(igroup)%type_ecoint,group(igroup)%ilayer,     elcod_local,group_inf,  &
             group(igroup)%uplift_ic,group(igroup)%liquj  !20220409
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+            'group(igroup)%name,group(igroup)%kname,group(igroup)%index,g' //&
+            'roup(igroup)%class,group(igroup)%nrfields,group(igroup)%fiel' //&
+            'did,group(igroup)%special,group(igroup)%sptype,group(igroup)' //&
+            '%nelgroup,group(igroup)%matno,group(igroup)%type_nalgo,group' //&
+            '(igroup)%type_stiff,group(igroup)%type_ecoint,group(igroup)%' //&
+            'ilayer,elcod_local,group_inf,group(igroup)%uplift_ic,group(i' //&
+            'group)%liquj',text)
         print *,'name=',group(igroup)%name
 
         nrfields=group(igroup)%nrfields
@@ -1133,23 +1313,35 @@
         allocate(group(igroup)%type_mass(nrfields),group(igroup)%order_time(2,nrfields))
         allocate(group(igroup)%list(group(igroup)%nelgroup))
         allocate(group(igroup)%dof(nrfields))
-        read(gunit,*)group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+            'group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group' //&
+            '(igroup)%beta',text)
         !write(7,*)'group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta=',group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
-        read(gunit,*)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+            '(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%n' //&
+            'rfields)',text)
         !write(7,*)'order-Time=', (group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)
 
         if(group(igroup)%index==20.or.group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26) &
-            read(gunit,*) group(igroup)%point_direct   !20230910
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg) group(igroup)%point_direct   !20230910
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+                'group(igroup)%point_direct',text)
         if(group(igroup)%index==20)print *,'group(igroup)%point_direct=',group(igroup)%point_direct
 
         allocate(mdof(nrfields))
         do ifield=1,nrfields
-            read(gunit,*)nfdof
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+                'nfdof',text)
             !print *,'ifield=',ifield,'nfdof=',nfdof
             group(igroup)%dof(ifield)%nfdof=nfdof
             mdof(ifield)=nfdof
             allocate(group(igroup)%dof(ifield)%listdof_f(nfdof))
-            read(gunit,*)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
+            read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
+            if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
+                'group(igroup)%dof(ifield)%listdof_f(1:nfdof)',text)
         end do
 
         index=group(igroup)%index
@@ -1357,13 +1549,19 @@
     !special for hjd
     allocate (tension_joint(nelem))
     tension_joint=0
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+        'text',text)
     print*,'text_tension_joint=',text
-    read(gunit,*)tsel
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)tsel
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+        'tsel',text)
     if (tsel/=0) then
         allocate(icxx(tsel))
         icxx=0
-        read(gunit,*)icxx
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)icxx
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+            'icxx',text)
         tension_joint(icxx)=1
         deallocate(icxx)
     endif
@@ -1372,13 +1570,19 @@
     ! contact  !zhao 05/07/22
     allocate (tension_contact(nelem))
     tension_contact=0
-    read(gunit,*)text
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+        'text',text)
     print*,'text_tension_contact=',text
-    read(gunit,*)tsel
+    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)tsel
+    if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+        'tsel',text)
     if (tsel/=0) then
         allocate(icxx(tsel))
         icxx=0
-        read(gunit,*)icxx
+        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)icxx
+        if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
+            'icxx',text)
         tension_contact(icxx)=1
         deallocate(icxx)
     endif
