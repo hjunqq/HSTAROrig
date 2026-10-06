@@ -110,7 +110,7 @@ def parse_read(code: str):
     return label, cond, rest.strip(), rest[e:].strip()
 
 
-def instrument(path: Path, routines: set[str], tags: dict[str, str]) -> int:
+def instrument(path: Path, routines: set[str], tags: dict[str, str], site: bool = False) -> int:
     lines = path.read_bytes().decode("latin-1").split("\n")
     out, i, current, count = [], 0, None, 0
     while i < len(lines):
@@ -142,8 +142,10 @@ def instrument(path: Path, routines: set[str], tags: dict[str, str]) -> int:
             continue
         label, cond, read_stmt, ilist = parsed
         norm = re.sub(r"\s+", "", read_stmt).lower()
+        if site:  # coverage builds: one tag per source site, not per statement text
+            norm += f"#{path.name}:{i + 1}"
         tag = hashlib.sha1(norm.encode("latin-1")).hexdigest()[:8]
-        tags[tag] = read_stmt
+        tags[tag] = read_stmt + (f"\t{path.name}:{i + 1}" if site else "")
         indent = re.match(r"\s*", lines[i]).group(0) or "    "
         trace = f"write({UNIT},*) 'R:{tag}'" + (f", {ilist}" if ilist else "")
         if cond is None:
@@ -167,6 +169,8 @@ def main() -> int:
     ap.add_argument("out", type=Path)
     ap.add_argument("--routine", action="append", required=True, help="FILE:routine")
     ap.add_argument("--stop-after")
+    ap.add_argument("--site", action="store_true",
+                    help="tag each READ by its source line (coverage only; not stable under refactoring)")
     a = ap.parse_args()
     if a.out.exists():
         shutil.rmtree(a.out)
@@ -177,7 +181,7 @@ def main() -> int:
         by_file.setdefault(f, set()).add(name.lower())
     tags: dict[str, str] = {}
     for f, names in by_file.items():
-        n = instrument(a.out / f, names, tags)
+        n = instrument(a.out / f, names, tags, a.site)
         print(f"{f}: {n} reads instrumented in {sorted(names)}")
     if a.stop_after:
         fem = a.out / "Fem.f90"
