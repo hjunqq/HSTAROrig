@@ -802,37 +802,7 @@
     if(submodel==-1)open(sub_msh_unit,file=probn(1:len1)//'.msh')  !20230407
 
 
-    if(submodel==1)then  !20210321
-        !read(resbunit)text
-        !read(resbunit)text
-        read(resbunit)tbpointsu,tbpointst,tbpointsp
-        write(7,*)'tbpointsu,tbpointst,tbpointsp=',tbpointsu,tbpointst,tbpointsp
-        if(tbpointsu/=0)then
-            allocate(listbpointsu_t(tbpointsu))
-            read(resbunit)listbpointsu_t
-            write(7,*)'listbpointsu_t=',listbpointsu_t
-        endif
-        if(tbpointst/=0)then
-            allocate(listbpointst_t(tbpointst))
-            read(resbunit)listbpointst_t
-        endif
-        if(tbpointsp/=0)then
-            allocate(listbpointsp_t(tbpointsp))
-            read(resbunit)listbpointsp_t
-            write(7,*)'listbpointsp_t=',listbpointsp_t
-        endif
-
-    endif !20210321
-
-    if(outind==-1)then  !20231113
-        read(outindunit,*)tbpointsu
-        write(7,*)'tbpointsu=',tbpointsu
-        if(tbpointsu/=0)then
-            allocate(listbpointsu_t(tbpointsu))
-            read(outindunit,*)listbpointsu_t
-            write(7,*)'listbpointsu_t=',listbpointsu_t
-        endif
-    endif !20231113
+    call read_resb_oid_boundary_points
 
 
     !   groundf=ijk
@@ -841,72 +811,7 @@
     !   k=1,plate,2 Simo-Rifai
     print *,ntsmat,nthmat,kstat,ground_inf,nextrf  !2004/9/11
     !new
-    read(ftfread,*)text
-    read(ftfread,*)nforce,ngaps,nforce_gaps,nsafety_gaps
-    if(nforce/=0)allocate(surface_force(nforce),nforce_appear(nforce))    !nforce_appear !1-- for saftyfactor 2-- for internal force 3-- for both
-    if(nforce_gaps/=0)allocate(nforce_gaps_appear(ngaps))    !nforce_gaps_appear !1-- for saftyfactor 2-- for internal force 3-- for both
-    if(nforce/=0)then
-        read(ftfread,*)text
-        read(ftfread,*)nforce_appear
-    endif
-    if(nforce_gaps/=0)then
-        read(ftfread,*)text
-        read(ftfread,*)nforce_gaps_appear
-        print *,'nforce_gaps_appear=',nforce_gaps_appear
-    endif
-    if(nsafety_gaps/=0)then  !20200409
-        allocate(safety_gaps_appear(ngaps,nsafety_gaps))
-        read(ftfread,*)text
-        do iforce=1,nsafety_gaps
-            write(7,*)'isafety=',iforce,'ngaps=',ngaps
-            read(ftfread,*)safety_gaps_appear(:,iforce)
-            write(7,*)'safety_gaps_appear=',safety_gaps_appear(:,iforce)
-        end do
-    endif  !20200409
-
-    if(nforce/=0)then
-        read(ftfread,*)text
-        do iforce=1,nforce
-
-            read(ftfread,*)text
-            read(ftfread,*)lgroup,neface,node_face,nliste
-            print *,'lgroup=',lgroup,'neface=',neface,'node_face=',node_face
-            surface_force(iforce)%lgroup=lgroup
-            surface_force(iforce)%neface=neface
-            allocate(surface_force(iforce)%list(lgroup),surface_force(iforce)%liste(neface),  &
-                surface_force(iforce)%liste1(neface)) !special for caoguangde
-            allocate(ienface(node_face,neface),nodx(npoin))
-            read(ftfread,*)text
-            read(ftfread,*)surface_force(iforce)%list
-
-            nodx=0
-            do ie=1,neface
-                !read(ftfread,*)i0,ienface(:,ie),  surface_force(iforce)%liste(ie)
-                !if(nliste==1)read(ftfread,*)i0,surface_force(iforce)%liste(ie),ienface(:,ie)
-                if(nliste==1)read(ftfread,*)surface_force(iforce)%liste(ie),ienface(:,ie)
-                if(nliste==2)read(ftfread,*)i0,surface_force(iforce)%liste(ie),surface_force(iforce)%liste1(ie),ienface(:,ie)
-                nodx(ienface(:,ie))=1
-            end do    !ie
-            npface=sum(nodx)
-            surface_force(iforce)%npface=npface
-            allocate(surface_force(iforce)%ftfor(ndimn,npface),  &
-                surface_force(iforce)%list_npface(npface))
-
-            if(nextrf/=0)allocate(surface_force(iforce)%ftfor_ext(ndimn,npface,nextrf)) !2004/9/11
-
-
-            npface=0
-            do ipoin=1,npoin
-                if (nodx(ipoin)==1)then
-                    npface=npface+1
-                    surface_force(iforce)%list_npface(npface)=ipoin
-                endif
-            end do    ! ipoin
-
-            deallocate(ienface,nodx)
-
-        end do    !iforce
-    endif
+    call read_ftr_surface_forces
 
     !  end new
     read(gunit,*)text
@@ -1363,6 +1268,194 @@
     call set_dofs_layer
 
 
+    call read_nrt_constraints
+
+    !special for hjd
+    allocate (tension_joint(nelem))
+    tension_joint=0
+    read(gunit,*)text
+    print*,'text_tension_joint=',text
+    read(gunit,*)tsel
+    if (tsel/=0) then
+        allocate(icxx(tsel))
+        icxx=0
+        read(gunit,*)icxx
+        tension_joint(icxx)=1
+        deallocate(icxx)
+    endif
+    ! special for hjd
+
+    ! contact  !zhao 05/07/22
+    allocate (tension_contact(nelem))
+    tension_contact=0
+    read(gunit,*)text
+    print*,'text_tension_contact=',text
+    read(gunit,*)tsel
+    if (tsel/=0) then
+        allocate(icxx(tsel))
+        icxx=0
+        read(gunit,*)icxx
+        tension_contact(icxx)=1
+        deallocate(icxx)
+    endif
+
+    !   write(chkunit,*)'nodfn='
+    !   do ipoin=1,npoin
+    !   write(chkunit,70)ipoin,nodfn(1:cdofn,ipoin)
+    !   end do
+    !70 format(i5,6(2x,i8))
+    print *,'ground_inf=',ground_inf,'/100=',ground_inf/100
+    if(ground_inf/100==1)call estif_semi_space_center
+    if(ground_inf/100==2)call estif_semi_space
+
+    !if(nbackf/=0)then !20230523
+    !do idofn=1,nbackf
+    ! do i0=1,backf(idofn)%mdism
+    !     ip0=backf(idofn)%listp(i0);jp0=backf(idofn)%listdim(i0)
+    !     backf(idofn)%listdof(i0)=nodfn(jp0,ip0)
+    ! enddo
+    !end do
+    !endif !20230523
+
+    if(nbspring>0)then !20150925
+        do idofn=1,nbspring
+            ip0=bspring(idofn)%listp;jp0=bspring(idofn)%listdim
+            bspring(idofn)%listdof=nodfn(jp0,ip0)
+        end do
+    endif !20150925
+
+    call read_obsc_back_displacement
+
+    !!!!
+    call read_btl_back_points
+
+    !!!
+
+
+
+    end  subroutine global_data
+
+    subroutine read_resb_oid_boundary_points  ! submodel=1: boundary node lists from .resb; outind=-1: from .oid; moved verbatim from global_data
+
+
+    if(submodel==1)then  !20210321
+        !read(resbunit)text
+        !read(resbunit)text
+        read(resbunit)tbpointsu,tbpointst,tbpointsp
+        write(7,*)'tbpointsu,tbpointst,tbpointsp=',tbpointsu,tbpointst,tbpointsp
+        if(tbpointsu/=0)then
+            allocate(listbpointsu_t(tbpointsu))
+            read(resbunit)listbpointsu_t
+            write(7,*)'listbpointsu_t=',listbpointsu_t
+        endif
+        if(tbpointst/=0)then
+            allocate(listbpointst_t(tbpointst))
+            read(resbunit)listbpointst_t
+        endif
+        if(tbpointsp/=0)then
+            allocate(listbpointsp_t(tbpointsp))
+            read(resbunit)listbpointsp_t
+            write(7,*)'listbpointsp_t=',listbpointsp_t
+        endif
+
+    endif !20210321
+
+    if(outind==-1)then  !20231113
+        read(outindunit,*)tbpointsu
+        write(7,*)'tbpointsu=',tbpointsu
+        if(tbpointsu/=0)then
+            allocate(listbpointsu_t(tbpointsu))
+            read(outindunit,*)listbpointsu_t
+            write(7,*)'listbpointsu_t=',listbpointsu_t
+        endif
+    endif !20231113
+
+    end subroutine read_resb_oid_boundary_points
+
+    subroutine read_ftr_surface_forces  ! .ftr: surface/gap internal-force and safety-factor sets; moved verbatim from global_data
+
+    character(80) text
+    integer (ink) i0,ie,ipoin,iforce,lgroup,node_face,neface
+    integer (ink), allocatable::nodx(:),ienface(:,:)
+
+    read(ftfread,*)text
+    read(ftfread,*)nforce,ngaps,nforce_gaps,nsafety_gaps
+    if(nforce/=0)allocate(surface_force(nforce),nforce_appear(nforce))    !nforce_appear !1-- for saftyfactor 2-- for internal force 3-- for both
+    if(nforce_gaps/=0)allocate(nforce_gaps_appear(ngaps))    !nforce_gaps_appear !1-- for saftyfactor 2-- for internal force 3-- for both
+    if(nforce/=0)then
+        read(ftfread,*)text
+        read(ftfread,*)nforce_appear
+    endif
+    if(nforce_gaps/=0)then
+        read(ftfread,*)text
+        read(ftfread,*)nforce_gaps_appear
+        print *,'nforce_gaps_appear=',nforce_gaps_appear
+    endif
+    if(nsafety_gaps/=0)then  !20200409
+        allocate(safety_gaps_appear(ngaps,nsafety_gaps))
+        read(ftfread,*)text
+        do iforce=1,nsafety_gaps
+            write(7,*)'isafety=',iforce,'ngaps=',ngaps
+            read(ftfread,*)safety_gaps_appear(:,iforce)
+            write(7,*)'safety_gaps_appear=',safety_gaps_appear(:,iforce)
+        end do
+    endif  !20200409
+
+    if(nforce/=0)then
+        read(ftfread,*)text
+        do iforce=1,nforce
+
+            read(ftfread,*)text
+            read(ftfread,*)lgroup,neface,node_face,nliste
+            print *,'lgroup=',lgroup,'neface=',neface,'node_face=',node_face
+            surface_force(iforce)%lgroup=lgroup
+            surface_force(iforce)%neface=neface
+            allocate(surface_force(iforce)%list(lgroup),surface_force(iforce)%liste(neface),  &
+                surface_force(iforce)%liste1(neface)) !special for caoguangde
+            allocate(ienface(node_face,neface),nodx(npoin))
+            read(ftfread,*)text
+            read(ftfread,*)surface_force(iforce)%list
+
+            nodx=0
+            do ie=1,neface
+                !read(ftfread,*)i0,ienface(:,ie),  surface_force(iforce)%liste(ie)
+                !if(nliste==1)read(ftfread,*)i0,surface_force(iforce)%liste(ie),ienface(:,ie)
+                if(nliste==1)read(ftfread,*)surface_force(iforce)%liste(ie),ienface(:,ie)
+                if(nliste==2)read(ftfread,*)i0,surface_force(iforce)%liste(ie),surface_force(iforce)%liste1(ie),ienface(:,ie)
+                nodx(ienface(:,ie))=1
+            end do    !ie
+            npface=sum(nodx)
+            surface_force(iforce)%npface=npface
+            allocate(surface_force(iforce)%ftfor(ndimn,npface),  &
+                surface_force(iforce)%list_npface(npface))
+
+            if(nextrf/=0)allocate(surface_force(iforce)%ftfor_ext(ndimn,npface,nextrf)) !2004/9/11
+
+
+            npface=0
+            do ipoin=1,npoin
+                if (nodx(ipoin)==1)then
+                    npface=npface+1
+                    surface_force(iforce)%list_npface(npface)=ipoin
+                endif
+            end do    ! ipoin
+
+            deallocate(ienface,nodx)
+
+        end do    !iforce
+    endif
+
+    end subroutine read_ftr_surface_forces
+
+    subroutine read_nrt_constraints  ! .nrt: interpolation/rotation constraints (trans, trans_c) and refined-mesh groups; moved verbatim from global_data
+
+    character(80) text,title_intp
+    integer (ink) i0,i1,idofn,idimn,igroup,ipoin,ipoin1,ipoin2,itotv,itrans,itransgroup,  &
+        idfn(2),jdfn(2),jdimn,jpoin,jtotv,nintf,ntlg,ntransnode,transgroup,translg
+    integer (ink), allocatable::listf(:),listx(:)
+    real    (irk) f0,f12(2)
+    real    (irk),allocatable::rotation(:,:),rintf(:)
+
     !!int2000
     allocate(trans(ntotv))
     trans(1:ntotv)%nintf=0
@@ -1679,59 +1772,14 @@
     endif
     !!!!!!!!!!!!!!!!!!!!!2003/10/30
 
-    !special for hjd
-    allocate (tension_joint(nelem))
-    tension_joint=0
-    read(gunit,*)text
-    print*,'text_tension_joint=',text
-    read(gunit,*)tsel
-    if (tsel/=0) then
-        allocate(icxx(tsel))
-        icxx=0
-        read(gunit,*)icxx
-        tension_joint(icxx)=1
-        deallocate(icxx)
-    endif
-    ! special for hjd
+    end subroutine read_nrt_constraints
 
-    ! contact  !zhao 05/07/22
-    allocate (tension_contact(nelem))
-    tension_contact=0
-    read(gunit,*)text
-    print*,'text_tension_contact=',text
-    read(gunit,*)tsel
-    if (tsel/=0) then
-        allocate(icxx(tsel))
-        icxx=0
-        read(gunit,*)icxx
-        tension_contact(icxx)=1
-        deallocate(icxx)
-    endif
+    subroutine read_obsc_back_displacement  ! .obsc: displacement back-analysis observations (nbackf/=0); moved verbatim from global_data
 
-    !   write(chkunit,*)'nodfn='
-    !   do ipoin=1,npoin
-    !   write(chkunit,70)ipoin,nodfn(1:cdofn,ipoin)
-    !   end do
-    !70 format(i5,6(2x,i8))
-    print *,'ground_inf=',ground_inf,'/100=',ground_inf/100
-    if(ground_inf/100==1)call estif_semi_space_center
-    if(ground_inf/100==2)call estif_semi_space
-
-    !if(nbackf/=0)then !20230523
-    !do idofn=1,nbackf
-    ! do i0=1,backf(idofn)%mdism
-    !     ip0=backf(idofn)%listp(i0);jp0=backf(idofn)%listdim(i0)
-    !     backf(idofn)%listdof(i0)=nodfn(jp0,ip0)
-    ! enddo
-    !end do
-    !endif !20230523
-
-    if(nbspring>0)then !20150925
-        do idofn=1,nbspring
-            ip0=bspring(idofn)%listp;jp0=bspring(idofn)%listdim
-            bspring(idofn)%listdof=nodfn(jp0,ip0)
-        end do
-    endif !20150925
+    character(80) text
+    integer (ink) i0,i1,idofn,j0,jdofn,mdism,nintf,wstep
+    integer (ink), allocatable::listf(:)
+    real    (irk),allocatable::rintf(:)
 
     if(nbackf/=0)then  !20230523
 
@@ -1776,7 +1824,15 @@
         enddo !idofn !20230523
     endif  !20230523(nbackf/=0.and.Bparameter==0)
 
-    !!!!
+    end subroutine read_obsc_back_displacement
+
+    subroutine read_btl_back_points  ! .btl: parameter back-analysis observation points (Bparameter>0 or nbackdT==2); moved verbatim from global_data
+
+    character(80) text
+    integer (ink) i,i0,idimn,j,nintf,xdofn
+    integer (ink), allocatable::listf(:),listdofn(:)
+    real    (irk),allocatable::rintf(:)
+
     if(Bparameter>0.or.nbackdT==2)then !20230523
         read(back_ctl_unit,*)text  !输入与Bparameter/=0时的相关内容（不为零时，执行参数优化反演）
         read(back_ctl_unit,*)Npoints_pb   !20230523
@@ -1858,11 +1914,7 @@
 
     endif !20230523
 
-    !!!
-
-
-
-    end  subroutine global_data
+    end subroutine read_btl_back_points
 
 
     !!!define the freedom of nodes and elements

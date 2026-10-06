@@ -44,8 +44,8 @@ def main() -> int:
         ea, eb = ending(da / "_stdout.log"), ending(db / "_stdout.log")
         ta = (da / "fort.9917").read_bytes().splitlines() if (da / "fort.9917").exists() else []
         tb = (db / "fort.9917").read_bytes().splitlines() if (db / "fort.9917").exists() else []
-        if ta == tb and ea == eb:
-            continue
+        if ta == tb and (ea == eb or (ea != "stop" and eb != "stop")):
+            continue  # same contract as fuzz_glb.py replay
         bad += 1
         msg = [f"{n}: ending {ea!r} vs {eb!r}" if ea != eb else f"{n}: same ending {ea!r}"]
         k = next((i for i, (x, y) in enumerate(zip(ta, tb)) if x != y), min(len(ta), len(tb)))

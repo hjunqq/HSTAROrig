@@ -19,8 +19,9 @@ one that gets furthest is kept, and repair stops when none makes progress. Every
 its 1.glb, its ending, and the hash of the trace it produced on TRACE_BIN; distinct
 traces are stored once.
 
-replay: run every corpus entry on another trace build and require the same trace
-and the same ending. Exit status 1 on any difference.
+replay: run every corpus entry on another trace build and require the same trace,
+and the same ending if the reference read to the end (otherwise any failure).
+Exit status 1 on any difference.
 
 cover: which instrumented READs the corpus reaches, and which it never does.
 """
@@ -214,6 +215,14 @@ def cmd_replay(a) -> int:
     manifest = json.loads((a.corpus / "manifest.json").read_text())
     if a.case:
         manifest = {k: m for k, m in manifest.items() if m["case"] in a.case}
+    if a.unit:
+        want = set()
+        for ln in a.tags.read_text(encoding="latin-1").splitlines():
+            t, stmt = ln.split("\t")[:2]
+            u = re.match(r"(?i)read\s*\(\s*(\w+)", stmt)
+            if u and u.group(1).lower() in {x.lower() for x in a.unit}:
+                want.add(t)
+        manifest = {k: m for k, m in manifest.items() if want & set(m["tags"])}
     jobs = [(str(a.binary.resolve()), str(a.corpus), k, m["case"], m["deck"])
             for k, m in manifest.items()]
     bad = 0
@@ -226,7 +235,12 @@ def cmd_replay(a) -> int:
                     seen[t] = seen.get(t, 0) + 1
                 continue
             ref = (a.corpus / "traces" / m["trace"]).read_bytes()
-            if trace != ref or end != m["ending"]:
+            # Contract (REFACTOR.md): an input the old reader reads to the end must give
+            # the same trace and end the same way; an input it fails on must also fail on
+            # the new one, with the same trace up to the failure. How it fails may differ:
+            # crashes after the last READ depend on memory layout, which any code move changes.
+            same = trace == ref and (end == m["ending"] or (end != "stop" and m["ending"] != "stop"))
+            if not same:
                 bad += 1
                 if bad <= 10:
                     ra, rb = ref.splitlines(), trace.splitlines()
@@ -274,6 +288,9 @@ def main() -> int:
     r.add_argument("--corpus", type=Path, required=True)
     r.add_argument("--jobs", type=int, default=2)
     r.add_argument("--case", action="append", help="only entries derived from these cases")
+    r.add_argument("--unit", action="append",
+                   help="only entries whose reference trace reaches a READ on this unit (needs --tags)")
+    r.add_argument("--tags", type=Path)
     r.add_argument("--collect", type=Path, help="only record which READ tags run, into this file")
     c = sub.add_parser("cover")
     c.add_argument("--corpus", type=Path, required=True)
