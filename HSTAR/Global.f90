@@ -559,6 +559,108 @@
     integer (ink),pointer::lnods(:)
 
 
+    call open_data_files
+
+    call read_glb_mesh_header
+
+    call read_glb_solution_flags
+
+
+    call read_glb_problem_type
+
+
+    call read_resb_oid_boundary_points
+
+
+    !   groundf=ijk
+    !   i=1,center,2,distribution
+    !   j=1,only vertical,2 three directions
+    !   k=1,plate,2 Simo-Rifai
+    print *,ntsmat,nthmat,kstat,ground_inf,nextrf  !2004/9/11
+    !new
+    call read_ftr_surface_forces
+
+    !  end new
+    call read_glb_dofs_time
+    call read_glb_block_process
+
+
+    call read_glb_special_blocks
+
+
+    call setup_dof_counts
+
+    call read_glb_links
+
+    !!  contact
+    !   read(gunit,*)text
+    !   print *,text
+    !   do ilink=1,ngaps
+    !      read(gunit,*)npairs,gaps(ilink)%gap
+    !      gaps(ilink)%npairs=npairs
+    !      allocate(gaps(ilink)%pairnode(2,npairs))
+    !      do ipair=1,npairs
+    !      read(gunit,*)i0,gaps(ilink)%pairnode(1:2,ipair)
+    !      end do
+    !   end do
+    !! end contact
+
+    call read_cor_coordinates
+
+    call kinddefine
+
+    call read_glb_element_groups
+
+    print *,'tne=',tne
+
+    if(alfa_p4>0)call form_ipp4 !p42010  !20221124
+
+    call set_elem_dofs
+    call set_dofs_layer
+
+
+    call read_nrt_constraints
+
+    call read_glb_tension_lists
+
+    !   write(chkunit,*)'nodfn='
+    !   do ipoin=1,npoin
+    !   write(chkunit,70)ipoin,nodfn(1:cdofn,ipoin)
+    !   end do
+    !70 format(i5,6(2x,i8))
+    print *,'ground_inf=',ground_inf,'/100=',ground_inf/100
+    if(ground_inf/100==1)call estif_semi_space_center
+    if(ground_inf/100==2)call estif_semi_space
+
+    !if(nbackf/=0)then !20230523
+    !do idofn=1,nbackf
+    ! do i0=1,backf(idofn)%mdism
+    !     ip0=backf(idofn)%listp(i0);jp0=backf(idofn)%listdim(i0)
+    !     backf(idofn)%listdof(i0)=nodfn(jp0,ip0)
+    ! enddo
+    !end do
+    !endif !20230523
+
+    if(nbspring>0)then !20150925
+        do idofn=1,nbspring
+            ip0=bspring(idofn)%listp;jp0=bspring(idofn)%listdim
+            bspring(idofn)%listdof=nodfn(jp0,ip0)
+        end do
+    endif !20150925
+
+    call read_obsc_back_displacement
+
+    !!!!
+    call read_btl_back_points
+
+    !!!
+
+
+
+
+    contains  ! sections of global_data: internal procedures, host-associated, so locals are shared as before
+
+    subroutine open_data_files  ! unit numbers and OPEN of all case files; moved verbatim from global_data
     ! set units for data file
     gunit=1
     cunit=2
@@ -681,7 +783,9 @@
     open(faiunit,  file=probn(1:len1)//'.fai',FORM='UNFORMATTED')
     recttunit=35
     open(recttunit,file=probn(1:len1)//'.ctt',FORM='UNFORMATTED') !ctt2005
+    end subroutine open_data_files
 
+    subroutine read_glb_mesh_header  ! .glb: npoin..stab_matde, rmesh data, result-file opens; moved verbatim from global_data
     read(gunit,*)text
     print *,text
     read(gunit,*)npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
@@ -731,7 +835,9 @@
         out_msh=36
         open(out_msh,file=probn(1:len1)//'r.flavia.msh',buffered='YES',blocksize=1048576)
     endif
+    end subroutine read_glb_mesh_header
 
+    subroutine read_glb_solution_flags  ! .glb: ninit..ninistn and the files they switch on; moved verbatim from global_data
     allocate(tlink(2,ntlink))
     read(gunit,*)text
     print *,text
@@ -751,8 +857,9 @@
     !open(teloaw,file=probn(1:len1)//'.tel')
     if(ninistn/=0)stnunit=75 !20231215YL
     if(stnunit/=0)open(stnunit,file=probn(1:len1)//'.stn') !20231215YL
+    end subroutine read_glb_solution_flags
 
-
+    subroutine read_glb_problem_type  ! .glb: type_problem.., nlayer, nmass.., free-flow nodes, temperature switches; moved verbatim from global_data
     !   if (outintr.gt.0) then
     !      open(outint,file=probn(1:len1)//'.oit',RECL=npoin*4,FORM='BINARY',ACCESS='DIRECT')
     !   else if(outintw.gt.0) then
@@ -800,20 +907,9 @@
     read(gunit,*)ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel  !20210320
 
     if(submodel==-1)open(sub_msh_unit,file=probn(1:len1)//'.msh')  !20230407
+    end subroutine read_glb_problem_type
 
-
-    call read_resb_oid_boundary_points
-
-
-    !   groundf=ijk
-    !   i=1,center,2,distribution
-    !   j=1,only vertical,2 three directions
-    !   k=1,plate,2 Simo-Rifai
-    print *,ntsmat,nthmat,kstat,ground_inf,nextrf  !2004/9/11
-    !new
-    call read_ftr_surface_forces
-
-    !  end new
+    subroutine read_glb_dofs_time  ! .glb: mdofn, dof map, time orders, beeta1/2, theta1; moved verbatim from global_data
     read(gunit,*)text
     read(gunit,*)mdofn
     allocate(lmdofn(mdofn),lcdofn(mdofn),order_time_mdofn(mdofn))
@@ -822,6 +918,9 @@
     read(gunit,*)text
     read(gunit,*)beeta1,beeta2,theta1
     print *,'beeta1,beeta2,theta1=',beeta1,beeta2,theta1
+    end subroutine read_glb_dofs_time
+
+    subroutine read_glb_block_process  ! .glb: per-group/per-block appearance, materials, forces, output flags; moved verbatim from global_data
     allocate(appear_process(1:ngroup,0:nblks),appear(ngroup),water_level(nblks), &
         hdam(nblks),uinitial(nblks),matno_process(ngroup,nblks),modf_dis_blocks(nblks))
     if(state_change==1) allocate(state_change_process(1:ngroup,nblks))
@@ -892,8 +991,9 @@
         open(mxy_msh_unit,file=probn(1:len1)//'mxy.flavia.msh',buffered='YES',blocksize=1048576)
         open(mxy_res_unit,file=probn(1:len1)//'mxy.flavia.res',buffered='YES',blocksize=1048576)
     endif !20200311
+    end subroutine read_glb_block_process
 
-
+    subroutine read_glb_special_blocks  ! .glb: ifs, steel, MIF, per-block hdam/water level/modf/uinitial, springs; moved verbatim from global_data
     write(7,*)'irecover=',irecover
 
     allocate(listglocbeam(ngroup))
@@ -944,8 +1044,9 @@
         enddo
 
     endif  !20150925
+    end subroutine read_glb_special_blocks
 
-
+    subroutine setup_dof_counts  ! derive cdofn and allocate mesh arrays (no reading); moved verbatim from global_data
     cdofn=0
     do idofn=1,mdofn
         if (lmdofn(idofn)/=0) then
@@ -966,7 +1067,9 @@
 
     if(Blarge==1)allocate(coord0(ndimn,npoin))  !20221102
     allocate(links(nlinks),group(ngroup)) !,gaps(ngaps)) !contact
+    end subroutine setup_dof_counts
 
+    subroutine read_glb_links  ! .glb: dof links and tlinks; moved verbatim from global_data
     read(gunit,*)text
     print *,text
     do ilink=1,nlinks
@@ -986,28 +1089,17 @@
     do ilink=1,ntlink
         read(gunit,*)i0,tlink(1:2,ilink)
     end do
+    end subroutine read_glb_links
 
-    !!  contact
-    !   read(gunit,*)text
-    !   print *,text
-    !   do ilink=1,ngaps
-    !      read(gunit,*)npairs,gaps(ilink)%gap
-    !      gaps(ilink)%npairs=npairs
-    !      allocate(gaps(ilink)%pairnode(2,npairs))
-    !      do ipair=1,npairs
-    !      read(gunit,*)i0,gaps(ilink)%pairnode(1:2,ipair)
-    !      end do
-    !   end do
-    !! end contact
-
+    subroutine read_cor_coordinates  ! .cor: nodal coordinates; moved verbatim from global_data
     do ipoin=1,npoin   !!!read coordinate
         read(cunit,*)i0,coord(1:ndimn,ipoin)
     end do
 
     if(Blarge==1)coord0=coord   !20221102
+    end subroutine read_cor_coordinates
 
-    call kinddefine
-
+    subroutine read_glb_element_groups  ! .glb: element groups (+ .ele via read_element) and node-group lists; moved verbatim from global_data
     read(gunit,*)text
     print *,'text1=',text
     read(gunit,*)text
@@ -1259,17 +1351,9 @@
             listp_group(ipoin)%listp(listp_group(ipoin)%mgroup)=i0
         end do
     end do
+    end subroutine read_glb_element_groups
 
-    print *,'tne=',tne
-
-    if(alfa_p4>0)call form_ipp4 !p42010  !20221124
-
-    call set_elem_dofs
-    call set_dofs_layer
-
-
-    call read_nrt_constraints
-
+    subroutine read_glb_tension_lists  ! .glb: tension joint / tension contact element lists; moved verbatim from global_data
     !special for hjd
     allocate (tension_joint(nelem))
     tension_joint=0
@@ -1298,40 +1382,7 @@
         tension_contact(icxx)=1
         deallocate(icxx)
     endif
-
-    !   write(chkunit,*)'nodfn='
-    !   do ipoin=1,npoin
-    !   write(chkunit,70)ipoin,nodfn(1:cdofn,ipoin)
-    !   end do
-    !70 format(i5,6(2x,i8))
-    print *,'ground_inf=',ground_inf,'/100=',ground_inf/100
-    if(ground_inf/100==1)call estif_semi_space_center
-    if(ground_inf/100==2)call estif_semi_space
-
-    !if(nbackf/=0)then !20230523
-    !do idofn=1,nbackf
-    ! do i0=1,backf(idofn)%mdism
-    !     ip0=backf(idofn)%listp(i0);jp0=backf(idofn)%listdim(i0)
-    !     backf(idofn)%listdof(i0)=nodfn(jp0,ip0)
-    ! enddo
-    !end do
-    !endif !20230523
-
-    if(nbspring>0)then !20150925
-        do idofn=1,nbspring
-            ip0=bspring(idofn)%listp;jp0=bspring(idofn)%listdim
-            bspring(idofn)%listdof=nodfn(jp0,ip0)
-        end do
-    endif !20150925
-
-    call read_obsc_back_displacement
-
-    !!!!
-    call read_btl_back_points
-
-    !!!
-
-
+    end subroutine read_glb_tension_lists
 
     end  subroutine global_data
 
