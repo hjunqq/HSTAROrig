@@ -1,0 +1,174 @@
+# HSTAR Dynamic Seismic Analysis Example
+# 地震动力分析示例
+
+title: "2D Dynamic Seismic Analysis - Foundation"
+problem_name: "1"
+
+mesh:
+  file: "1.msh"
+  dimension: 2
+
+materials:
+  - id: 1
+    name: "Soil"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 1800.0
+      E: 1.017e9
+      nu: 0.35
+      thickness: 1.0
+
+  - id: 2
+    name: "Concrete"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 2400.0
+      E: 21.5e9
+      nu: 0.30
+      thickness: 1.0
+
+  - id: 3
+    name: "Interface"
+    type: GOODMAN
+    phase: CONTACT
+    properties:
+      density: 2400.0
+      E: 1.017e9
+      nu: 0.35
+      thickness: 1.0
+      kn: 5.0e9
+      ks: 1.0e6
+      friction: 0.3
+      cohesion: 0.432e6
+
+  - id: 4
+    name: "Water"
+    type: FLUID
+    phase: FLUID
+    properties:
+      density: 1000.0
+      bulk_modulus: 2044900.0e3
+      permeability: [1.0e-3, 1.0e-3]
+
+element_groups:
+  - group: 1
+    material: 1
+    element_type: Q4
+    gauss_order: 1
+    dof_type: U
+    rayleigh_alpha: 0.76687505
+    rayleigh_beta: 0.002940561
+
+  - group: 2
+    material: 2
+    element_type: Q4
+    gauss_order: 1
+    dof_type: U
+
+  - group: 3
+    material: 3
+    element_type: Q4
+    gauss_order: 1
+    dof_type: U
+
+  - group: 4
+    material: 4
+    element_type: Q4
+    gauss_order: 1
+    dof_type: W
+
+boundary_conditions:
+  - name: "Bottom fixed"
+    type: FIXED
+    nodes: [1, 2, 3]
+    dofs: [UX, UY]
+    value: 0.0
+
+  - name: "Side roller"
+    type: FIXED
+    nodes: [10, 11, 12]
+    dofs: [UX]
+    value: 0.0
+
+loads:
+  gravity:
+    enabled: true
+    direction: [0, -1]
+    magnitude: 9.81
+
+time_curves:
+  - id: 1
+    type: LINEAR
+    points: [[0, 0], [100, 1]]
+
+  - id: 2
+    type: LINEAR
+    points: [[0, 0], [100, 0]]
+
+  - id: 3
+    type: SEISMIC
+    file: "earthquake_x.dat"
+    direction: X
+    dt: 0.01
+    total_time: 30.0
+    scale: 9.81
+    nlines: 3001
+
+  - id: 4
+    type: SEISMIC
+    file: "earthquake_y.dat"
+    direction: Y
+    dt: 0.01
+    total_time: 30.0
+    scale: 9.81
+    nlines: 3001
+
+analysis:
+  type: DYNAMIC
+  nonlinear: NEWTON_RAPHSON
+
+  increments:
+    total_steps: 20
+    max_iterations: 10
+    tolerance:
+      force: 1.0e-10
+
+  dynamic:
+    method: NEWMARK
+    beta1: 0.600
+    beta2: 0.302
+    theta1: 0.600
+    total_time: 30.0
+    dt: 0.01
+    damping:
+      type: RAYLEIGH
+      alpha: 0.5
+      beta: 0.001
+
+solver:
+  type: PARDISO
+  matrix_type: -2
+  num_threads: 4
+
+output:
+  format: GID
+  mode: APPEND
+  results:
+    - displacement
+    - stress
+    - acceleration
+    - yield
+  monitor_nodes: [1, 50, 100]
+  monitor_interval: 1
+
+water:
+  enabled: true
+  add_mass: 1
+  surface_id: 39
+  total_height: 39
+  ifswater: 2
+  gravity: 9.8
+  dam_height: 0.0
+  water_level: -99.0

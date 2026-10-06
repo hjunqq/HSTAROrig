@@ -3361,15 +3361,7 @@
                             if (order_time==0)coef=theta1*ditime
                         endif
                     endif
-                    ! tfix2026: Fortran .and. does NOT short-circuit — for a heat-only
-                    ! material (T-field group) props(matno)%mechanical is an unassociated
-                    ! pointer and evaluating it here SIGSEGVed every 3D thermal deck on
-                    ! this line (train_temp_creep, "Begin assemble golbal matrix" crash).
-                    use_duncanchang = .false.
-                    if (fieldid(ifield:ifield)=='U'.and.type_problem=='F') then
-                        if (associated(props(matno)%mechanical)) &
-                            use_duncanchang = (props(matno)%mechanical%solid%material=='DUNCANCHANG')
-                    endif
+                    use_duncanchang = (fieldid(ifield:ifield)=='U'.and.props(matno)%mechanical%solid%material=='DUNCANCHANG'.and.type_problem=='F')
 
                     if (is_pardiso) then
                         call assemble_pardiso_mesh(group(igroup)%nelgroup,group(igroup)%list,mesh_main, &

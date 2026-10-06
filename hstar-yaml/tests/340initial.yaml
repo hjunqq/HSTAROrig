@@ -1,0 +1,217 @@
+# 340initial — 三维初始应力分析（三次穿闸）
+# 3D initial stress analysis with B8 hex elements, Goodman joint contact
+
+title: "340initial 三维初始应力分析"
+problem_name: "1"
+
+# ============ 网格 ============
+mesh:
+  cor_file: "1.cor"
+  ele_file: "1.ele"
+  dimension: 3
+
+# ============ 材料 ============
+materials:
+  - id: 1
+    name: "土体"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 0.0e4       # 0.000E+04
+      E: 4.15e9
+      nu: 0.35
+      thickness: 1.0
+      thermal_expansion: 1.0e-5
+      hardening: 1.0e3
+
+  - id: 2
+    name: "混凝土"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 2.4e3       # 0.240E+04
+      E: 21.5e9
+      nu: 0.3
+      thickness: 1.0
+      thermal_expansion: 1.0e-5
+      hardening: 1.0e3
+
+  - id: 3
+    name: "接触面"
+    type: GOODMAN
+    phase: CONTACT
+    properties:
+      density: 2.4e3
+      E: 4.0e9
+      nu: 0.35
+      thickness: 1.0
+      thermal_expansion: 1.0e-5
+      hardening: 1.0e3
+      # Goodman interface
+      kn: 18431372.5
+      ks: 1.0e5
+      friction: 0.02
+      friction_angle: 33.0
+      tensile_strength: 1.0e5
+      cohesion: 0.35e6
+      # JANBU params
+      janbu_modulus: 0.35e6
+      janbu_exponent: 5.0
+      janbu_k0: 4.0
+      janbu_phi: 33.0
+
+  - id: 4
+    name: "混凝土2"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 2.4e3
+      E: 21.5e9
+      nu: 0.3
+      thickness: 1.0
+      thermal_expansion: 1.0e-5
+      hardening: 1.0e3
+
+# ============ 单元组 ============
+element_groups:
+  - group: 1
+    material: 2          # MATNO_PROCESS says mat 2 for group 1
+    element_type: B8
+    gauss_order: 1
+    dof_type: U
+    element_class: "CO"
+    algo_type: "ST"
+    stiffness_type: "PE"
+
+  - group: 2
+    material: 1          # MATNO_PROCESS says mat 1 for group 2
+    element_type: B8
+    gauss_order: 1
+    dof_type: U
+    element_class: "CO"
+    algo_type: "ST"
+    stiffness_type: "PE"
+
+  - group: 3
+    material: 3          # MATNO_PROCESS says mat 3 for group 3
+    element_type: B8
+    gauss_order: 1
+    dof_type: U
+    element_class: "CO"
+    algo_type: "ST"
+    stiffness_type: "PE"
+    elcod_local: 0.02    # 2.000E-02
+
+# ============ 边界条件 ============
+# (boundary conditions are complex, read from .pre with hundreds of nodes)
+# For E2E test we use the actual .pre file directly
+boundary_conditions: []
+
+# ============ 荷载 ============
+loads:
+  gravity:
+    enabled: true
+    direction: [0, 0, -1]
+    magnitude: 9.8
+
+  # Edge loads: 153 surface elements (from .loa)
+  # distributed_loads defined separately
+
+# ============ 时间曲线 ============
+time_curves:
+  - id: 2
+    type: LINEAR
+    points: [[0, 1], [1, 1]]
+
+# ============ 分析控制 ============
+analysis:
+  type: FREQUENCY        # type_problem = Q
+  nonlinear: NEWTON_RAPHSON   # type_nl = 5
+
+  increments:
+    total_steps: 200
+    max_iterations: 1
+    tolerance:
+      force: 1.0e-5
+    dt: 1.0
+    blocks:
+      - steps: 200
+        dt: 1
+        stiffness_update: 1
+        load_curve: 1
+        max_iterations: 1
+        print_interval: 1
+        output_interval: 1
+        tolerance:
+          force: 1.0e-5
+      - steps: 5
+        dt: 1
+        stiffness_update: 1
+        load_curve: 1
+        max_iterations: 1
+        print_interval: 1
+        output_interval: 1
+        tolerance:
+          force: 1.0e-5
+
+# ============ 求解器 ============
+solver:
+  type: PARDISO
+  matrix_type: -2
+  num_threads: 4
+  message_level: 0
+  isdefault: 1
+  reducing_order: 2
+  PreCGS: 0
+  permutation: 0
+  maxiter: 20
+  out_of_core: 0
+  eps_pivot: 20
+  iparm11: 0
+  iparm13: 0
+
+# ============ 高级控制 ============
+glb_control:
+  ninit: 0
+  kinit: 0
+  winit: -1
+  kstab: 0
+  kstat: 0
+  nmass: 999
+  nsmat: 999
+  nhmat: 999
+  nqmat: 999
+  nswkw: 999
+  ntsmat: 999
+  nthmat: 999
+  # IFS/水参数
+  icaddmass: 0
+  swlifs2006: 39
+  toth: 39.0
+  ifswater: 2
+  ifsgravity: 9.8
+  absorb: 0.6
+  alfa_p4: -10.0
+  stiff_p4: 1.0e20
+  # 裂缝参数
+  ftcrack: 1.5e6
+  coefMpa: 1.0e6
+  ikindks: 5
+  doubsig: 1
+  ktan1: 1.0e8
+  ktan2: 1.0e8
+  # Newmark
+  beta1: 0.6
+  beta2: 0.302
+  theta1: 0.6
+
+# ============ 输出控制 ============
+output:
+  format: GID
+  mode: REPLACE
+  results:
+    - displacement
+    - stress
+    - mises_stress
+    - force
+    - yield

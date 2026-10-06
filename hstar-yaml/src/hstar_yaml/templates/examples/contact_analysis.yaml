@@ -1,0 +1,101 @@
+# HSTAR Contact Analysis Example
+# 接触分析示例
+
+title: "2D Contact Analysis"
+problem_name: "1"
+
+mesh:
+  file: "1.msh"
+  dimension: 2
+
+materials:
+  - id: 1
+    name: "Soil"
+    type: MOHR_COULOMB
+    phase: SOLID
+    properties:
+      density: 1800.0
+      E: 30.0e6
+      nu: 0.35
+      cohesion: 25.0e3
+      friction_angle: 20.0
+      dilation_angle: 0.0
+      thickness: 1.0
+
+  - id: 2
+    name: "Concrete"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 2400.0
+      E: 30.0e9
+      nu: 0.2
+      thickness: 0.8
+
+element_groups:
+  - group: 1
+    material: 1
+    element_type: Q8
+    gauss_order: 3
+    dof_type: U
+
+  - group: 2
+    material: 2
+    element_type: Q8
+    gauss_order: 3
+    dof_type: U
+
+boundary_conditions:
+  - name: "Bottom fixed"
+    type: FIXED
+    nodes: [1, 2, 3, 4, 5]
+    dofs: [UX, UY]
+    value: 0.0
+
+loads:
+  gravity:
+    enabled: true
+    direction: [0, -1]
+    magnitude: 9.81
+
+time_curves:
+  - id: 1
+    type: LINEAR
+    points: [[0, 0], [1, 1]]
+
+analysis:
+  type: STATIC
+  nonlinear: NEWTON_RAPHSON
+  increments:
+    total_steps: 10
+    max_iterations: 50
+    tolerance:
+      force: 1.0e-3
+      displacement: 1.0e-3
+
+solver:
+  type: PARDISO
+  matrix_type: -2
+  num_threads: 4
+
+contact:
+  gap_groups:
+    - id: 1
+      name: "Pile-soil interface"
+      master_nodes: [200, 201, 202, 203]
+      slave_nodes: [300, 301, 302, 303]
+      initial_gap: 0.0
+      friction: 0.3
+      normal_stiffness: 1.0e8
+      tangential_stiffness: 1.0e6
+  max_iterations: 500
+  tolerance: 1.0e-5
+  solver_type: PROFILE
+
+output:
+  format: GID
+  mode: REPLACE
+  results:
+    - displacement
+    - stress
+    - strain

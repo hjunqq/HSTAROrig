@@ -1,0 +1,94 @@
+# HSTAR Static 2D Analysis Example
+# 二维静力分析示例
+
+title: "2D Static Analysis"
+problem_name: "1"
+
+mesh:
+  file: "1.msh"
+  dimension: 2
+
+materials:
+  - id: 1
+    name: "Soil"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 0.0
+      E: 1.017e9
+      nu: 0.35
+      thickness: 1.0
+
+  - id: 2
+    name: "Concrete"
+    type: ELASTIC_ISOTROPIC
+    phase: SOLID
+    properties:
+      density: 2400.0
+      E: 21.5e9
+      nu: 0.30
+      thickness: 1.0
+
+element_groups:
+  - group: 1
+    material: 1
+    element_type: Q4
+    gauss_order: 1
+    dof_type: U
+
+  - group: 2
+    material: 2
+    element_type: Q4
+    gauss_order: 1
+    dof_type: U
+
+boundary_conditions:
+  - name: "Bottom fixed"
+    type: FIXED
+    nodes: [1, 2, 3, 4, 5]
+    dofs: [UX, UY]
+    value: 0.0
+
+  - name: "Side roller"
+    type: FIXED
+    nodes: [10, 11, 12]
+    dofs: [UX]
+    value: 0.0
+
+loads:
+  gravity:
+    enabled: true
+    direction: [0, -1]
+    magnitude: 9.81
+
+time_curves:
+  - id: 1
+    type: LINEAR
+    points: [[0, 0], [100, 1]]
+
+  - id: 2
+    type: LINEAR
+    points: [[0, 0], [100, 0]]
+
+analysis:
+  type: STATIC
+  nonlinear: NEWTON_RAPHSON
+  increments:
+    total_steps: 10
+    max_iterations: 50
+    tolerance:
+      force: 1.0e-3
+      displacement: 1.0e-3
+
+solver:
+  type: PARDISO
+  matrix_type: -2
+  num_threads: 4
+
+output:
+  format: GID
+  mode: REPLACE
+  results:
+    - displacement
+    - stress
+    - strain
