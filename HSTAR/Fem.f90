@@ -10712,6 +10712,7 @@
     SUBROUTINE PREDICT
 
     integer(ink) ordert,idofn,ipoin,itotv,idimn,jdofn
+    integer(ink) jtotv2026 !tfix2026
     real   (irk) accmid
     integer(ink) igroup,ielem,ielgroup,index,igapb,jdimn !simo_rifai
     character(1 )field1  !simo_rifai
@@ -10812,6 +10813,38 @@
         end do
 
     enddo
+
+    !tfix2026: interpolation (TRAL/trans) slaves must SATISFY their constraint
+    !tfix2026 after prediction. Without this, a slave whose master is a FIXED
+    !tfix2026 dof never moves: the solver scatter recovers slave increments as
+    !tfix2026 sum(w * result(totveq(master))) and a fixed master has no equation
+    !tfix2026 (totveq==0, silently skipped) - train_temp_creep nodes 258-260
+    !tfix2026 (TRAL slaves of fixed node 257) stayed frozen at the initial
+    !tfix2026 temperature while 257 followed its curve. Syncing the predicted
+    !tfix2026 state to the masters' predicted state is the constraint's own
+    !tfix2026 definition: exact for free masters (their iteration increments
+    !tfix2026 flow through the solver scatter as before) and it hands fixed
+    !tfix2026 masters' prescribed jump to the slave (whose later iteration
+    !tfix2026 increments are 0, consistently). Single-level masters only, as
+    !tfix2026 the TRAL reader builds them.
+    do itotv=1,ntotv
+        if (trans(itotv)%nintf/=0) then
+            result_zero(itotv)=0.0
+            deltafi(itotv)=0.0
+            if (allocated(result_first))  result_first(itotv)=0.0
+            if (allocated(result_second)) result_second(itotv)=0.0
+            do jdofn=1,trans(itotv)%nintf
+                jtotv2026=trans(itotv)%listf(jdofn)
+                if (jtotv2026==0) cycle
+                result_zero(itotv)=result_zero(itotv)+trans(itotv)%rintf(jdofn)*result_zero(jtotv2026)
+                deltafi(itotv)=deltafi(itotv)+trans(itotv)%rintf(jdofn)*deltafi(jtotv2026)
+                if (allocated(result_first)) result_first(itotv)= &
+                    result_first(itotv)+trans(itotv)%rintf(jdofn)*result_first(jtotv2026)
+                if (allocated(result_second)) result_second(itotv)= &
+                    result_second(itotv)+trans(itotv)%rintf(jdofn)*result_second(jtotv2026)
+            end do
+        endif
+    end do
 
     delitfi=deltafi
 
