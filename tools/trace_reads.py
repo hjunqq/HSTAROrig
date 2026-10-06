@@ -141,13 +141,19 @@ def instrument(path: Path, routines: set[str], tags: dict[str, str], site: bool 
             i += 1
             continue
         label, cond, read_stmt, ilist = parsed
+        # iostat=/iomsg= added for error reporting must not change the tag (REFACTOR.md);
+        # with iostat=V the trace is written only if the READ succeeded, as before.
         norm = re.sub(r"\s+", "", read_stmt).lower()
+        ios = re.search(r",iostat=(\w+)", norm)
+        norm = re.sub(r",(iostat|iomsg)=\w+", "", norm)
         if site:  # coverage builds: one tag per source site, not per statement text
             norm += f"#{path.name}:{i + 1}"
         tag = hashlib.sha1(norm.encode("latin-1")).hexdigest()[:8]
         tags[tag] = read_stmt + (f"\t{path.name}:{i + 1}" if site else "")
         indent = re.match(r"\s*", lines[i]).group(0) or "    "
         trace = f"write({UNIT},*) 'R:{tag}'" + (f", {ilist}" if ilist else "")
+        if ios:
+            trace = f"if ({ios.group(1)}==0) " + trace
         if cond is None:
             out.extend(lines[i:j + 1])
             out.extend(wrap(trace, indent))
