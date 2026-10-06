@@ -223,9 +223,17 @@ def cmd_replay(a) -> int:
             if u and u.group(1).lower() in {x.lower() for x in a.unit}:
                 want.add(t)
         manifest = {k: m for k, m in manifest.items() if want & set(m["tags"])}
+    # --progress: one JSON line per finished entry, flushed at once, so a replay cut
+    # short (the bridge host restarts on a schedule) resumes where it stopped.
+    done: dict[str, bool] = {}
+    if a.progress and a.progress.exists():
+        for ln in a.progress.read_text().splitlines():
+            r = json.loads(ln)
+            done[r["key"]] = r["ok"]
+    prog = open(a.progress, "a") if a.progress else None
     jobs = [(str(a.binary.resolve()), str(a.corpus), k, m["case"], m["deck"])
-            for k, m in manifest.items()]
-    bad = 0
+            for k, m in manifest.items() if k not in done]
+    bad = sum(1 for ok in done.values() if not ok)
     seen: dict[str, int] = {}
     with ProcessPoolExecutor(a.jobs) as pool:
         for key, trace, end in pool.map(replay_one, jobs, chunksize=8):
@@ -240,6 +248,9 @@ def cmd_replay(a) -> int:
             # the new one, with the same trace up to the failure. How it fails may differ:
             # crashes after the last READ depend on memory layout, which any code move changes.
             same = trace == ref and (end == m["ending"] or (end != "stop" and m["ending"] != "stop"))
+            if prog:
+                prog.write(json.dumps({"key": key, "ok": same, "end": end}) + "\n")
+                prog.flush()
             if not same:
                 bad += 1
                 if bad <= 10:
@@ -291,6 +302,7 @@ def main() -> int:
     r.add_argument("--unit", action="append",
                    help="only entries whose reference trace reaches a READ on this unit (needs --tags)")
     r.add_argument("--tags", type=Path)
+    r.add_argument("--progress", type=Path, help="resumable record of finished entries")
     r.add_argument("--collect", type=Path, help="only record which READ tags run, into this file")
     c = sub.add_parser("cover")
     c.add_argument("--corpus", type=Path, required=True)
