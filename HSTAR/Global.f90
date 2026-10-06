@@ -74,6 +74,16 @@
     integer(ink) nstepjq,nstepjp,lquunit,disunit,pmtunit,stnunit,nliqu,omgunit !20231008
     integer(ink) out_gid_dismax !20231009
     real   (irk) base_freq
+    real   (irk) vie_base_force(3) !audit2026 VIE: sum per direction of ONLY the
+    !audit2026 absorbing-boundary incident-wave nodal loads injected into tofor
+    !audit2026 (Fem.f90:13960/13963/13967) - isolates the VIE RHS contribution
+    !audit2026 from gravity/inertia. It is a constant-coefficient linear combo of
+    !audit2026 the declared incident-wave curves (fchd,fchv); dynamic_vie_rhs binds it.
+    real   (irk) base_ext_force(3) !audit2026 P0-2 probe: sum of the assembled
+    !audit2026 external load vector (tofor) per direction, captured at the END of
+    !audit2026 FORCE_EXTERNAL - the DOWNSTREAM RHS observation point. Shielding the
+    !audit2026 tload->tofor scatter (Fem.f90:14015) zeroes the seismic here while
+    !audit2026 element%tload upstream still carries it.
     type shear_liquifaction
         real(irk),pointer::stres(:,:)
     end type shear_liquifaction

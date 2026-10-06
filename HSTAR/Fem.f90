@@ -2820,6 +2820,7 @@
 
 
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
 
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
@@ -3420,6 +3421,7 @@
 
 
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
 
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
@@ -4152,6 +4154,7 @@
 
 
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
 
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
@@ -5307,6 +5310,7 @@
 
 
 100             toforl=tofor
+                if(type_problem=='F')call energy_audit !energy_audit2026
 
                 if (istep/noutn*noutn==istep)then
                     iwriten=iwriten+1
@@ -6167,6 +6171,7 @@
 
 
 100             toforl=tofor
+                if(type_problem=='F')call energy_audit !energy_audit2026
 
                 if (istep/noutn*noutn==istep)then
                     iwriten=iwriten+1
@@ -6394,6 +6399,7 @@
 
 
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
 
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
@@ -8135,6 +8141,7 @@
             if(modf_dis_blocks(iblks)==1)call construction_dis_modify
 
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
                 call out_record
@@ -8444,6 +8451,7 @@
 10              continue
             end do    !! for idiv
 100         toforl=tofor
+            if(type_problem=='F')call energy_audit !energy_audit2026
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
                 call out_record
@@ -9212,6 +9220,7 @@
             !write(7,*)'af gpvarupdate','stres0=',element(1)%field(1)%gpvar(1:3,1) !,'stres=',element(1)%field(1)%gpvar(1:3,1)
 
             if(gamamax/=0)call gamamaxupdate !20231125YL 更新地震过程中最大动剪应变
+            if(type_problem=='F')call energy_audit !energy_audit2026
             if (istep/noutn*noutn==istep)then
                 iwriten=iwriten+1
                 call out_record
@@ -10708,6 +10717,161 @@
     end subroutine load_of_addtional_mass
 
     !response_spectrum
+
+    SUBROUTINE ENERGY_AUDIT
+
+    !! Per-step energy/momentum scalars for the dynamic run, printed to 1.chk.
+    !! Print-only: MUST NOT touch any solver state. The element loop mirrors
+    !! ELOAD_FIELD (Residu.f90): ikh=2 is the mass matrix (lumped when the
+    !! second dimension is 1), ikh=1 is the stiffness used for beta*K*v
+    !! Rayleigh damping. Downstream (harness/mechanics.py) closes the energy
+    !! balance against the DECLARED input curves, so everything here is state
+    !! (v'Mv, Mv per direction, v'Ma, v'Cv, v'stfor, v'tofor, fachv) and the
+    !! judgement lives outside the solver.
+
+    character(10)fieldid,fieldi
+    integer(ink) igroup,ifield,ikh,ielgroup,ielem,index,nevab_f,ic,idofn,   &
+        ipoin,idimn,itotv,nrfields,matno,nstre
+    integer(ink), pointer::ldofs(:)
+    real   (irk), pointer::fstif(:,:)
+    real   (irk), allocatable::fmv(:),fma(:),fdmp(:),fmr(:),ftld(:),value(:),valuea(:),eload(:)
+    real   (irk) ek,pma,pdamp,pint,pext,pmom(3),fch(3),fchd(3),fchv(3),alfa,beta,lamda
+    real   (irk) mtot(3),basef(3)
+
+    if (type_problem/='F') return
+    if (.not.allocated(result_first))  return
+    if (.not.allocated(result_second)) return
+
+    allocate(fmv(ntotv),fma(ntotv),fdmp(ntotv),fmr(ntotv),ftld(ntotv))
+    fmv=0.0 ; fma=0.0 ; fdmp=0.0 ; fmr=0.0 ; ftld=0.0
+
+    DO igroup =1,ngroup
+        if (appear(igroup)<=0) cycle
+        fieldid =group(igroup)%fieldid
+        if (fieldid=='UP') cycle
+        nrfields=group(igroup)%nrfields
+        index   =group(igroup)%index
+        matno   =group(igroup)%matno
+        nstre   =group(igroup)%nstre
+        do ifield=1,nrfields
+            fieldi=fieldid(ifield:ifield)
+            if (fieldi(1:1)/='U') cycle
+            nevab_f=elkn(index)%el_field(ifield)%nnode_f*group(igroup)%dof(ifield)%nfdof
+            allocate(value(nevab_f),valuea(nevab_f),eload(nevab_f))
+            do ikh=1,2
+                alfa=group(igroup)%alfa
+                beta=group(igroup)%beta
+                if (ikh==1.and.beta==0.0.and.   &
+                    props(matno)%mechanical%solid%material/='DUNCANCHANG') cycle
+                DO ielgroup = 1,group(igroup)%nelgroup
+                    ielem = group(igroup)%list(ielgroup)
+                    if (.not.associated(element(ielem)%field(ifield)%khandmc(ikh)%fstif)) cycle
+                    if (props(matno)%mechanical%solid%material=='DUNCANCHANG') then
+                        lamda=sum(element(ielem)%field(1)%gpvar(nstre+1,:))/   &
+                            size(element(ielem)%field(1)%gpvar,dim=2)
+                        beta=lamda/base_freq
+                        alfa=lamda*base_freq
+                    endif
+                    fstif=>element(ielem)%field(ifield)%khandmc(ikh)%fstif
+                    ldofs=>element(ielem)%field(ifield)%ldofs_f
+                    value=result_first(ldofs)
+                    ic=size(fstif,dim=2)
+                    if (ikh==2) then
+                        valuea=result_second(ldofs)
+                        if (ic==1) then
+                            do idofn=1,nevab_f
+                                fmv (ldofs(idofn))=fmv (ldofs(idofn))+fstif(idofn,1)*value (idofn)
+                                fma (ldofs(idofn))=fma (ldofs(idofn))+fstif(idofn,1)*valuea(idofn)
+                                fdmp(ldofs(idofn))=fdmp(ldofs(idofn))+alfa*fstif(idofn,1)*value(idofn)
+                                fmr (ldofs(idofn))=fmr (ldofs(idofn))+fstif(idofn,1) !mass row-sum (M·1)
+                            end do
+                        else
+                            eload=MATMUL(fstif,value)
+                            fmv (ldofs)=fmv (ldofs)+eload
+                            fdmp(ldofs)=fdmp(ldofs)+alfa*eload
+                            eload=MATMUL(fstif,valuea)
+                            fma (ldofs)=fma (ldofs)+eload
+                            do idofn=1,nevab_f
+                                fmr(ldofs(idofn))=fmr(ldofs(idofn))+sum(fstif(idofn,:)) !mass row-sum
+                            end do
+                        endif
+                        ! applied load (gravity body force + seismic inertia
+                        ! -M·fachv, Fem.f90:13722) accumulated for the base-force
+                        ! balance; once per element (ikh==2 runs once)
+                        if (associated(element(ielem)%field(ifield)%tload)) &
+                            ftld(ldofs)=ftld(ldofs)+element(ielem)%field(ifield)%tload
+                    else
+                        if (ic==1) then
+                            do idofn=1,nevab_f
+                                fdmp(ldofs(idofn))=fdmp(ldofs(idofn))+beta*fstif(idofn,1)*value(idofn)
+                            end do
+                        else
+                            eload=MATMUL(fstif,value)
+                            fdmp(ldofs)=fdmp(ldofs)+beta*eload
+                        endif
+                    endif
+                    nullify(fstif,ldofs)
+                end do
+            end do
+            deallocate(value,valuea,eload)
+        end do
+    END DO
+
+    ek   =0.5*dot_product(result_first,fmv)
+    pma  =dot_product(result_first,fma)
+    pdamp=dot_product(result_first,fdmp)
+    pint =0.0
+    pext =0.0
+    if (allocated(stfor)) pint=dot_product(result_first,stfor)
+    if (allocated(tofor)) pext=dot_product(result_first,tofor)
+
+    ! pmom = Σ(Mv) per direction (base momentum); mtot = Σ(M·1) per direction
+    ! (total mass, rᵀMr); basef = Σ tofor per direction (base force from the
+    ! ACTUAL assembled external vector). The d'Alembert base balance
+    ! basef(d) + mtot(d)·fachv(d) ≈ 0 reads the seismic term out of the real
+    ! tofor — shielding the mass-proportional injection (Fem.f90:13722) leaves
+    ! basef without it, breaking the balance while fachv still evaluates. That
+    ! is the RHS-bound positive dynamic_drive_binding could not give.
+    pmom=0.0 ; mtot=0.0 ; basef=0.0
+    do ipoin=1,npoin
+        do idimn=1,ndimn
+            itotv=nodfn(idimn,ipoin)
+            if (itotv/=0) then
+                pmom(idimn)=pmom(idimn)+fmv(itotv)
+                mtot(idimn)=mtot(idimn)+fmr(itotv)
+                basef(idimn)=basef(idimn)+ftld(itotv) !applied-load base sum
+            endif
+        end do
+    end do
+
+    fch=0.0
+    if (allocated(fachv)) fch(1:ndimn)=fachv(1:ndimn)
+    fchd=0.0
+    fchv=0.0
+    if (allocated(earthquake_curve_d)) then
+        do idimn=1,ndimn
+            if (earthquake_curve_d(idimn)>0) fchd(idimn)=tcurves(earthquake_curve_d(idimn))%dfact
+            if (earthquake_curve_v(idimn)>0) fchv(idimn)=tcurves(earthquake_curve_v(idimn))%dfact
+        end do
+    endif
+
+    ! basef (cols 21-23) = Σ element%tload per dir (UPSTREAM, applied load).
+    ! basef_rhs (cols 24-26) = Σ tofor per dir captured at the end of
+    ! FORCE_EXTERNAL (DOWNSTREAM assembled RHS). The audit's RHS-bound check
+    ! reads basef_rhs; shielding Fem.f90:14015 (tload->tofor scatter) zeroes
+    ! basef_rhs's seismic while basef upstream keeps it — the probe shows both.
+    ! vie_base_force (cols 27-29) = Σ per dir of ONLY the absorbing-boundary
+    ! incident-wave injections into tofor (Fem.f90:13960/63/67). Isolated from
+    ! gravity/inertia; a constant-coeff linear combo of the declared incident
+    ! curves (fchd,fchv) — dynamic_vie_rhs binds it. Shielding those injections
+    ! zeroes it while fchd/fchv still evaluate.
+    write(chkunit,900) ttime,ek,pmom,pma,pdamp,pint,pext,fch,fchd,fchv,mtot, &
+        basef,base_ext_force,vie_base_force
+900 format(' energyaudit:',30es17.8)
+
+    deallocate(fmv,fma,fdmp,fmr,ftld)
+
+    END SUBROUTINE ENERGY_AUDIT
 
     SUBROUTINE PREDICT
 
@@ -13182,6 +13346,7 @@
     real   (irk),allocatable::value(:),tt(:),cc(:),loadlocal(:,:,:),forceint(:,:),forcel(:,:)
     real   (irk) dx,ca,ss,t1,t2,t3,timer,coordzi,timer1,timer2
     integer(ink) nextr,i0,i1,iextr,iforce,ipface,idimn,itdis,itveloc,matno
+    integer(ink) i_bef2026,j_bef2026 !audit2026 P0-2 probe loop vars
     real   (irk),pointer::cordzfree(:)
     real   (irk),pointer::estif0(:,:),estif(:,:)
     real   (irk),allocatable::dfact1(:),dfact2(:),dfact3(:),dfact4(:) !hxl2006 VIE
@@ -13596,6 +13761,19 @@
         end do         !! for igroup
         deallocate(ic_inertia_group)   !2017/06
 
+        ! audit2026 VIE: capture Σtofor per direction BEFORE the absorbing-
+        ! boundary loop, so the VIE contribution can be read as a tofor DELTA
+        ! (after - before). Observing the tofor delta, NOT the intermediate
+        ! eload, is what makes shielding the tofor scatter (13960/63/67)
+        ! actually zero vie_base_force — an eload-based sum would miss the shield.
+        vie_base_force=0.0
+        do i_bef2026=1,npoin
+            do j_bef2026=1,ndimn
+                itotv=nodfn(j_bef2026,i_bef2026)
+                if (itotv/=0) vie_base_force(j_bef2026)= &
+                    vie_base_force(j_bef2026)-tofor(itotv)   !minus before
+            end do
+        end do
         !hxl2006 VIE
         do ielem=1,nabssgroup
             aelems=tabss(ielem)%aelems
@@ -13804,6 +13982,16 @@
         end do
         !end hxl2006 VIE
 
+        ! audit2026 VIE: add Σtofor AFTER the loop → vie_base_force = after-before
+        ! = the absorbing-boundary incident-wave contribution to the RHS.
+        do i_bef2026=1,npoin
+            do j_bef2026=1,ndimn
+                itotv=nodfn(j_bef2026,i_bef2026)
+                if (itotv/=0) vie_base_force(j_bef2026)= &
+                    vie_base_force(j_bef2026)+tofor(itotv)   !plus after
+            end do
+        end do
+
     end if   !! for fast problems !if (type_problem=='F')then
 
     !************************************************************************
@@ -13966,6 +14154,23 @@
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(ground_inf/=0.and.allocated(load_space)) then
         tofor(ldofs_space)=tofor(ldofs_space)+load_space
+    endif
+
+    ! audit2026 P0-2 probe: capture the assembled external load base force per
+    ! direction from tofor at the END of FORCE_EXTERNAL — the DOWNSTREAM RHS
+    ! observation point (all of gravity body force + seismic inertia via
+    ! tload->tofor scatter + icaddmass + nmcon has landed here). Independent of
+    ! element%tload: shielding Fem.f90:14015 (the tload->tofor scatter) removes
+    ! the seismic from THIS sum while element%tload upstream keeps it.
+    if (type_problem=='F') then
+        base_ext_force=0.0
+        do i_bef2026=1,npoin
+            do j_bef2026=1,ndimn
+                itotv=nodfn(j_bef2026,i_bef2026)
+                if (itotv/=0) base_ext_force(j_bef2026)= &
+                    base_ext_force(j_bef2026)+tofor(itotv)
+            end do
+        end do
     endif
 
 1111 format(a10,i10,2(a10,f15.5),a10,2f15.5)
