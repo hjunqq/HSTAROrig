@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ROOT.parent / "cases/cases"
+CASES = ROOT.parent / "cases/cases"  # replaced by --cases-root
 sys.path.insert(0, str(ROOT.parent / "hstar-evolution/tools"))
 from yl_parse_flavia import parse  # noqa: E402
 
@@ -101,6 +101,9 @@ def run_case(name: str, binary: Path, out: Path, timeout: int) -> dict:
 
 
 def cmd_run(a) -> int:
+    global CASES
+    if a.cases_root:
+        CASES = a.cases_root.resolve()
     binary = a.binary.resolve(strict=True)
     out = a.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -196,6 +199,7 @@ def main() -> int:
     r.add_argument("--case", action="append")
     r.add_argument("--timeout", type=int, default=300)
     r.add_argument("--jobs", type=int, default=2)
+    r.add_argument("--cases-root", type=Path, help="default: cases/cases")
     d = sub.add_parser("diff")
     d.add_argument("a", type=Path)
     d.add_argument("b", type=Path)

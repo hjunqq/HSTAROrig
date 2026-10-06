@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-SRCDIR="$ROOT/HSTAR"
+SRCDIR="${HSTAR_SRC:-$ROOT/HSTAR}"   # override to build an instrumented copy
 PROFILE="${1:-release}"
 BUILDDIR="${2:-$ROOT/build/$PROFILE}"
 STUB_SRC="${GIDPOST_STUB:-$ROOT/../_archive/src/gidpost_stub.c}"
@@ -14,6 +14,7 @@ STUB_SRC="${GIDPOST_STUB:-$ROOT/../_archive/src/gidpost_stub.c}"
 
 case "$PROFILE" in
     release) FFLAGS=(-O2) ;;
+    trace)   FFLAGS=(-O0) ;;   # read-trace builds: fast to compile, values identical
     debug)   FFLAGS=(-O0 -g -traceback -check bounds,pointers,uninit -fpe0) ;;
     *) echo "unknown profile: $PROFILE" >&2; exit 2 ;;
 esac
