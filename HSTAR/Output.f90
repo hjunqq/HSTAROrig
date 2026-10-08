@@ -1636,6 +1636,7 @@
 
     if (gid_f==1) then
         write(out_gid_dis,101)'tofor',1,total_step,2,1,0
+        if(native_mode) call native_force_begin()
         allocate(value(1:ndimn))
         do ipoin=1,npoin
             value=0.
@@ -1651,6 +1652,7 @@
 
 
             write(out_gid_dis,10)ipoin,value
+            if(native_mode) call native_force_row(ipoin,value)
         end do
         deallocate(value)
     endif

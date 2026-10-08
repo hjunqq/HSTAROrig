@@ -181,7 +181,7 @@
     print *,'Input runblks, =?'
     !read *,runblks
     if(native_mode) then
-        runblks=1
+        runblks=native_blocks
     else
     read (inpunit,*)runblks
     endif
@@ -1704,11 +1704,13 @@
         write(7,*)'ninit=',ninit,'iblks=',iblks,'restart=',restart
         if(ninit/=0.and.iblks==1.and.restart==0)call read_initial
 
+        if(native_mode) call native_transition(iblks,'before',maxval(abs(result_zero)))
         if (uinitial(iblks)==1) then
             result_zero=0.0
             if(allocated(result_first))result_first=0.0
             if(allocated(result_second))result_second=0.0
         endif
+        if(native_mode) call native_transition(iblks,'after',maxval(abs(result_zero)))
         print *,'a1'
 
         appear_p=appear
@@ -3605,11 +3607,11 @@
 
     do iincs=1,lincs
         if(native_mode) then
-            miter=native_iterations
+            miter=native_iterations(iblks)
             ditime=1.
             noutn=1
             noutf=1
-            nstep=native_substeps
+            nstep=native_substeps(iblks)
             inc_step=1
             nresta=1
             cwater=0.
@@ -3646,11 +3648,11 @@
         print *,'iincs=',iincs,'lincs=',lincs
 
         if(native_mode) then
-            miter=native_iterations
+            miter=native_iterations(iblks)
             ditime=1.
             noutn=1
             noutf=1
-            nstep=native_substeps
+            nstep=native_substeps(iblks)
             inc_step=1
             nresta=1
             cwater=0.
@@ -3666,6 +3668,8 @@
         endif
         if(native_mode) call native_receipt(props(1)%mechanical%solid%e,props(1)%mechanical%solid%nu, &
             props(1)%mechanical%solid%density,props(1)%mechanical%solid%alfa,gravy,nstep,miter)
+        if(native_mode) call native_stage_receipt(iblks,appear,group(1:ngroup)%matno,uinitial(iblks), &
+            gravy,nstep,miter,edge_load_group,tcurvegravity)
 
         if(cwater/=0.and.delgroup>0)then
             allocate(coef_water(delgroup,nstep))

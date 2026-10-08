@@ -100,6 +100,7 @@
         <File RelativePath=".\yl_authoring_toml.f90"/>
         <File RelativePath=".\NativeInput.f90"/>
         <File RelativePath=".\NativeContract.inc"/>
+        <File RelativePath=".\NativeDamContract.inc"/>
 
 	</Files>
 	<Globals/>

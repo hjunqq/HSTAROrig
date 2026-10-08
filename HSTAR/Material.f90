@@ -273,7 +273,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(munit,*)text
     if(native_mode) then
-        mmats=1
+        mmats=native_materials
     else
     read(munit,*)mmats  ! !20200617
     endif
@@ -286,7 +286,7 @@
         if(native_mode) then
             property='MECHANICAL'
             name='SOLID'
-            imat=1
+            imat=jmat
         else
         read(munit,*)property,name,imat
         endif
@@ -318,11 +318,11 @@
                     allocate(props(imat)%mechanical%solid)
                     if(native_mode) then
                         material='ELASTIC_ISOTROPIC'
-                        density=native_density
+                        density=native_density(imat)
                         ratio=1.
                         thickness=1.
-                        e=native_e
-                        nu=native_nu
+                        e=native_e(imat)
+                        nu=native_nu(imat)
                         alfa=1.e-5_irk
                         icreep=0
                         kind_wt=0
@@ -346,6 +346,9 @@
                     props(imat)%mechanical%solid%e        =e
                     props(imat)%mechanical%solid%nu       =nu
                     props(imat)%mechanical%solid%alfa     =alfa
+                    if(native_mode) call native_material_receipt(imat,props(imat)%mechanical%solid%e, &
+                        props(imat)%mechanical%solid%nu,props(imat)%mechanical%solid%density, &
+                        props(imat)%mechanical%solid%alfa)
                     props(imat)%mechanical%solid%icreep   =icreep   !2019/09/30
                     props(imat)%mechanical%solid%iE   =iE
                     props(imat)%mechanical%solid%iNu   =iNu

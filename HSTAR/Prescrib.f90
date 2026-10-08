@@ -231,7 +231,7 @@
           print *,'ifixset=',ifixset,'type_abc=',type_abc
           if (type_abc=='MIF')read(punit,*)ifixvar,ifixvar0,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr  !20230402
           if(native_mode) then
-              ifixvar=ifixset; nfixnods=17; itcurve=0; tfixvar=0
+              ifixvar=ifixset; nfixnods=native_nbc(ifixset); itcurve=merge(1,0,native_dam); tfixvar=0
               outfix=1; jfixvar=0; gamawx=0.; nextr=0
           else
           if (type_abc/='MIF')read(punit,*)ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr ! 20230402
@@ -241,7 +241,7 @@
           ! tfixvar indicates the time  order of the input fixed value
           allocate(list_fix(nfixnods))
           if(native_mode) then
-              list_fix(1:nfixnods)=native_nodes
+              list_fix(1:nfixnods)=native_bc(1:nfixnods,ifixset)
           else
           read(punit,*)list_fix(1:nfixnods)
           endif

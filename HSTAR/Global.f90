@@ -820,12 +820,12 @@
         'text',text)
     print *,text
     if(native_mode) then
-        npoin=289
-        npoinb=289
-        nelem=256
+        npoin=native_points
+        npoinb=native_points
+        nelem=native_elements
         ndimn=2
-        nmats=1
-        ngroup=1
+        nmats=native_materials
+        ngroup=native_materials
         ntlink=0
         outplot='GIDR'
         kstab=0
@@ -910,7 +910,7 @@
         ninit=0
         kinit=0
         winit=0
-        nblks=1
+        nblks=native_blocks
         nlinks=0
         nonsym=0
         outinp=0
@@ -1153,7 +1153,7 @@
     print *,text
     do iblk=1,nblks
         if(native_mode) then
-            appear_process(1:ngroup,iblk)=1
+            appear_process(1:ngroup,iblk)=native_appearance(1:ngroup,iblk)
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)appear_process(1:ngroup,iblk)
         endif
@@ -1169,7 +1169,7 @@
     print *,text
     do iblk=1,nblks
         if(native_mode) then
-            matno_process(1:ngroup,iblk)=1
+            matno_process(1:ngroup,iblk)=[(i0,i0=1,ngroup)]
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)matno_process(1:ngroup,iblk)
         endif
@@ -1227,7 +1227,7 @@
         gid_u=1
         gid_s=1
         gid_ms=0
-        gid_f=0
+        gid_f=merge(1,0,native_dam)
         gid_rot=0
         gid_v=0
         gid_a=0
@@ -1407,7 +1407,7 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
     if(native_mode) then
-        uinitial(1:nblks)=0
+        uinitial(1:nblks)=native_reset(1:nblks)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)uinitial(1:nblks)
     endif
@@ -1549,14 +1549,18 @@
         if(native_mode) then
             group(igroup)%name='Q4'
             group(igroup)%kname='Default'
+            if(native_dam) then
+                if(igroup==1) group(igroup)%kname='Foundation'
+                if(igroup==2) group(igroup)%kname='Dam'
+            endif
             group(igroup)%index=5
             group(igroup)%class='CO'
             group(igroup)%nrfields=1
             group(igroup)%fieldid='U'
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
-            group(igroup)%nelgroup=256
-            group(igroup)%matno=1
+            group(igroup)%nelgroup=native_elcounts(igroup)
+            group(igroup)%matno=igroup
             group(igroup)%type_nalgo=0
             group(igroup)%type_stiff=1
             group(igroup)%type_ecoint=1

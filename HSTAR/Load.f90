@@ -383,7 +383,7 @@ endif  !kpload=1  20210502
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(loadunit,*)text
     if(native_mode) then
-        nedge=0
+        nedge=merge(40,0,native_dam)
     else
     read(loadunit,*)nedge
     endif
@@ -395,7 +395,11 @@ endif  !kpload=1  20210502
     do while(tedge<nedge)
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(loadunit,*)text                               !4
+       if(native_mode) then
+           sedge=40; nnode=2; index=1; vdimn=0
+       else
        read(loadunit,*)sedge,nnode,index,vdimn  !20211028
+       endif
        lineload=lineload+2
        do iedge=1,sedge
           tedge=tedge+1
@@ -403,7 +407,13 @@ endif  !kpload=1  20210502
           edges(tedge)%index=index
           edges(tedge)%vdimn=vdimn !20211028
           allocate(edges(tedge)%lnode(nnode))
+          if(native_mode) then
+              i0=tedge
+              edges(tedge)%lnode(1:nnode)=native_edges(1:2,tedge)
+              edges(tedge)%aelem=native_edges(3,tedge)
+          else
           read(loadunit,*)i0,edges(tedge)%lnode(1:nnode),edges(tedge)%aelem
+          endif
         !if(vdimn==3)write(7,*)'tedge=',tedge,'iedge=',iedge
           !print *, i0,edges(tedge)%lnode(1:nnode),edges(tedge)%aelem
           lineload=lineload+1
@@ -778,6 +788,10 @@ end subroutine element_in_out
     if(native_mode) then
         edge_load_group=0
         delgroup=0
+        if(native_dam.and.iblks==2) then
+            edge_load_group=40
+            delgroup=1
+        endif
     else
     read(loadunit,*)edge_load_group,delgroup
     endif
@@ -791,17 +805,27 @@ end subroutine element_in_out
     allocate(gpwater(delgroup)) !2013/3/18
     jedge=0
     do ipegroup=1,delgroup
+       if(native_mode) then
+           begin_edge=1; end_edge=40; itcurve=1; water=2; code_load=0
+       else
        read(loadunit,*)begin_edge,end_edge,itcurve,water,code_load
+       endif
        gpwater(ipegroup)%water=water    !2013/3/18
        lineload=lineload+1
        !!
        if (water/=0) then
+          if(native_mode) then
+              cor0=50._irk; cor1=0._irk; p0=0._irk; p1=50._irk; fact=native_pressure
+          else
           read(loadunit,*)cor0,cor1,p0,p1,fact
+          endif
            gpwater(ipegroup)%cor0=cor0     !2013/3/18
            gpwater(ipegroup)%cor1=cor1     !2013/3/18
            gpwater(ipegroup)%p0=p0         !2013/3/18
            gpwater(ipegroup)%p1=p1         !2013/3/18
            gpwater(ipegroup)%fact=fact     !2013/3/18
+           if(native_mode) call native_pressure_receipt(gpwater(ipegroup)%cor0,gpwater(ipegroup)%cor1, &
+               gpwater(ipegroup)%p0,gpwater(ipegroup)%p1,gpwater(ipegroup)%fact)
            
           lineload=lineload+1
        endif
@@ -938,7 +962,7 @@ end subroutine element_in_out
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read (loadunit,*) text
     if(native_mode) then
-        gravy=native_gravity
+        gravy=native_gravity(iblks)
         factg(1:ndimn)=[0.,-1.]
         factf(1:ndimn)=[0.,-1.]
     else
@@ -957,6 +981,7 @@ end subroutine element_in_out
     endif
     if(native_mode) then
         tcurvegravity(1:ngroup)=1
+        if(native_dam) tcurvegravity(1:ngroup)=native_appearance(1:ngroup,iblks)
     else
     read(loadunit,*)tcurvegravity(1:ngroup)
     endif
