@@ -375,6 +375,42 @@ contains
                             ' (for '//trim(path)//')')
   end subroutine store_value
 
+  ! TOML decimal grammar; Fortran READ also accepts forms like 2.5+10 and .25.
+  ! Those are not TOML numbers and must not enter a material as a different syntax.
+  logical function numeric_token(val) result(ok)
+    character(*), intent(in) :: val
+    character(:), allocatable :: mantissa, exponent, whole, fraction
+    integer :: k
+    ok=.false.
+    mantissa=trim(val)
+    if(len(mantissa)==0) return
+    if(scan(mantissa(:1),'+-')/=0) mantissa=mantissa(2:)
+    if(len(mantissa)==0) return
+    k=scan(mantissa,'eE')
+    if(k>0) then
+      exponent=mantissa(k+1:)
+      if(len(exponent)==0) return
+      if(scan(exponent(:1),'+-')/=0) exponent=exponent(2:)
+      if(len(exponent)==0) return
+      if(verify(exponent,'0123456789')/=0) return
+      mantissa=mantissa(:k-1)
+    endif
+    k=index(mantissa,'.')
+    whole=mantissa
+    if(k>0) then
+      whole=mantissa(:k-1)
+      fraction=mantissa(k+1:)
+      if(len(fraction)==0) return
+      if(verify(fraction,'0123456789')/=0) return
+    endif
+    if(len(whole)==0) return
+    if(verify(whole,'0123456789')/=0) return
+    if(len(whole)>1) then
+      if(whole(:1)=='0') return
+    endif
+    ok=.true.
+  end function numeric_token
+
   subroutine put_scalar(doc, path, val, nline, ok)
     type(toml_doc_t), intent(inout) :: doc
     character(len=*), intent(in) :: path, val
@@ -402,7 +438,7 @@ contains
       return
     end if
     ! List-directed READ alone accepts trailing tokens; reject them lexically first.
-    if(verify(val,'0123456789.eE+-')/=0) then
+    if(.not.numeric_token(val)) then
       ok=.false.
       return
     endif
