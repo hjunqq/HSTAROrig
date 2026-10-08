@@ -78,7 +78,8 @@
         group(igroup)%water_pipe%pipecooling=0
         if(ecwpipe/=1) cycle  !20200221
 
-	        read(tunit,*)text
+	        if(native_mode) text='TOML-03'
+	        if(.not.native_mode) read(tunit,*)text
 	        read(tunit,*)ncool
             print *,'igroup=',igroup,'text=',text,'ncool=',ncool
 	        group(igroup)%water_pipe%pipecooling=ncool
@@ -99,7 +100,8 @@
     if(outintr<0)then   !20200226
 	do igroup=1,ngroup
         allocate(group(igroup)%temp_pre)
-         read(tunit,*)text
+         if(native_mode) text='TOML-03'
+         if(.not.native_mode) read(tunit,*)text
 	        read(tunit,*)group(igroup)%temp_pre%time0,group(igroup)%temp_pre%temp0, &
                          group(igroup)%temp_pre%temp_var_curve	       
     end do				  !!igroup     	   
@@ -112,21 +114,28 @@
     if (restart==1)   then
        print *,'linet=',linet
        do i0=1,linet
-          read(tunit,*)text
+          if(native_mode) text='TOML-03'
+          if(.not.native_mode) read(tunit,*)text
        end do
     end if
 
     !! set of edge_define structure
 
     if(iblks==1) then  !20230829
-    read(tunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(tunit,*)text
+    if(native_mode) then
+        ntemp_surface=0
+    else
     read(tunit,*)ntemp_surface  !20230402
+    endif
     if(ntemp_surface/=0)then
     !read(tunit,*)text
     allocate(temp_surface(ntemp_surface))
     
     do i0=1,ntemp_surface
-        read(tunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(tunit,*)text
         read(tunit,*)ntime_gap,vertical_direction,nheight
         temp_surface(i0)%ntime_gap=ntime_gap
         temp_surface(i0)%vertical_direction=vertical_direction
@@ -145,8 +154,13 @@
     endif !20230402
     endif  !20230829
     
-        read(tunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(tunit,*)text
+    if(native_mode) then
+        ntedge=0
+    else
     read(tunit,*)ntedge  !20230402
+    endif
 
     print *,text
     print *,'ntedge=',ntedge
@@ -157,7 +171,8 @@
     allocate(tedges(ntedge))
     tedge=0
     do while(tedge<ntedge)
-       read(tunit,*)text                               !4
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read(tunit,*)text                               !4
        read(tunit,*)sedge,nnode,index,beta_bar,ibeta_bar
        print *,'ibeta_bar=',ibeta_bar,'beta_bar=',beta_bar
        linet=linet+2
@@ -234,16 +249,24 @@
 
 
 
-    11    read(tunit,*)text
-    read(tunit,*)text
+    11 continue
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(tunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(tunit,*)text
+    if(native_mode) then
+        ntelgroup=0
+    else
     read(tunit,*)ntelgroup
+    endif
     linet=linet+3
     if (ntelgroup==0) goto 22
     if (allocated(tedgeload)) deallocate(tedgeload)
     allocate(tedgeload(ntelgroup))
     tedge=0
     do while(tedge<ntelgroup)
-       read(tunit,*)text                               !4
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read(tunit,*)text                               !4
        read(tunit,*)sedge,itcurve,nline
        read(tunit,*)begin_edge,end_edge
        linet=linet+2
@@ -294,10 +317,18 @@
        end do
        deallocate(listdge)
     end do  ! do while
-22    read(tunit,*)text
-      read(tunit,*)text
+22 continue
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(tunit,*)text
+      if(native_mode) text='TOML-03'
+      if(.not.native_mode) read(tunit,*)text
       print *, text
+	  if(native_mode) then
+	      npipe=0
+	      algo_pipe=3
+	  else
 	  read(tunit,*)npipe,algo_pipe
+	  endif
       
       print *,'npipe,algo_pipe=',npipe,algo_pipe
 linet=linet+3

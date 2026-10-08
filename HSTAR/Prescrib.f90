@@ -167,10 +167,17 @@
 
        if  (restart==1)   then
           do jblks=1,iblks-1
-             read(punit,*)text
+             if(native_mode) text='TOML-03'
+             if(.not.native_mode) read(punit,*)text
+             if(native_mode) then
+                 nfixsets=2
+                 nline=0
+             else
              read(punit,*)nfixsets,nline
+             endif
              do ifixset=1,nline
-                read(punit,*)text
+                if(native_mode) text='TOML-03'
+                if(.not.native_mode) read(punit,*)text
              end do
           end do
        end if
@@ -180,8 +187,14 @@
   !!!!20231130     
     if(nbackdT==2) then  !20231130    
         
-       read(punit,*)text
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read(punit,*)text
+       if(native_mode) then
+           nfixsets=2
+           nline=0
+       else
        read(punit,*)nfixsets,nline
+       endif
        read(punit,*)ifixvar,ifixvar0,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr  !20230402
        ndofix=nfixnods
        allocate(prescribx(ndofix))
@@ -205,20 +218,39 @@
         end do
        
     else  !20231130 
-       read(punit,*)text
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read(punit,*)text
+       if(native_mode) then
+           nfixsets=2
+           nline=0
+       else
        read(punit,*)nfixsets,nline
+       endif
        ndofix=0
        do ifixset=1,nfixsets
           print *,'ifixset=',ifixset,'type_abc=',type_abc
           if (type_abc=='MIF')read(punit,*)ifixvar,ifixvar0,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr  !20230402
+          if(native_mode) then
+              ifixvar=ifixset; nfixnods=17; itcurve=0; tfixvar=0
+              outfix=1; jfixvar=0; gamawx=0.; nextr=0
+          else
           if (type_abc/='MIF')read(punit,*)ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr ! 20230402
+          endif
 
           ! tfixvar =0, u(or p, Pw); tfixvar=1, V or DP/Dt; tfixvar=2, a;; tfixvar=3, ÐéÄâÔ¼Êøµã
           ! tfixvar indicates the time  order of the input fixed value
           allocate(list_fix(nfixnods))
+          if(native_mode) then
+              list_fix(1:nfixnods)=native_nodes
+          else
           read(punit,*)list_fix(1:nfixnods)
+          endif
           allocate(val_fix(nfixnods))
+          if(native_mode) then
+              val_fix(1:nfixnods)=0.
+          else
           read(punit,*)val_fix(1:nfixnods)
+          endif
           
           !write(7,*)'ifixsets=',ifixset,'ifixvar=',ifixvar,'jfixvar=',jfixvar,'gamaw=',gamaw
           !write(7,*)'listfix=',list_fix

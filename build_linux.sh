@@ -21,7 +21,7 @@ esac
 
 # Dependency order
 SRCS=(Vartype.f90 Array.f90 Elements.f90 gidpost.F90 vsl_gauss_module.f90
-      Global.f90 Material.f90 meshfine.f90 Load.f90 Prescrib.f90 Solver.f90
+      yl_authoring_toml.f90 NativeInput.f90 Global.f90 Material.f90 meshfine.f90 Load.f90 Prescrib.f90 Solver.f90
       Output.f90 Temper.f90 Stiff.f90 Residu.f90 Level.f90 Fem.f90)
 
 rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR"
@@ -33,7 +33,7 @@ for f in "${SRCS[@]}"; do
     obj="$BUILDDIR/${f%.*}.o"
     echo "  $f"
     ifx -c "${FFLAGS[@]}" -qopenmp -module "$BUILDDIR" -I "$BUILDDIR" \
-        -I "$MKLROOT/include" "$SRCDIR/$f" -o "$obj"
+        -I "$SRCDIR" -I "$MKLROOT/include" "$SRCDIR/$f" -o "$obj"
     OBJS+=("$obj")
 done
 

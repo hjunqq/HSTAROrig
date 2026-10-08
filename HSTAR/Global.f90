@@ -22,6 +22,7 @@
     !!DEC$ OBJCOMMENT LIB:"libguide.lib"
     !include 'mkl_vsl.fi'
 
+    use native_input
     use variable_types
     use arrayutil
     use elements
@@ -756,16 +757,24 @@
     print *,'Input the problem name?'
     !   read *,probn
     len1=len_trim(probn)
-    open(gunit,     file=probn(1:len1)//'.glb')
+    if(.not.native_mode) open(gunit,     file=probn(1:len1)//'.glb')
+    if(native_mode) then
+        open(cunit,file=trim(native_mesh_prefix)//'.cor',status='old',action='read')
+    else
     open(cunit,     file=probn(1:len1)//'.cor')
+    endif
+    if(native_mode) then
+        open(eunit,file=trim(native_mesh_prefix)//'.ele',status='old',action='read')
+    else
     open(eunit,     file=probn(1:len1)//'.ele')
-    open(punit,     file=probn(1:len1)//'.pre')
-    open(munit,     file=probn(1:len1)//'.mat')
-    open(loadunit,  file=probn(1:len1)//'.loa')
+    endif
+    if(.not.native_mode) open(punit,     file=probn(1:len1)//'.pre')
+    if(.not.native_mode) open(munit,     file=probn(1:len1)//'.mat')
+    if(.not.native_mode) open(loadunit,  file=probn(1:len1)//'.loa')
     open(chkunit,   file=probn(1:len1)//'.chk')
-    open(solveunit, file=probn(1:len1)//'.sol')
-    open(mainunit,  file=probn(1:len1)//'.man')
-    open(outpread,  file=probn(1:len1)//'.opr')
+    if(.not.native_mode) open(solveunit, file=probn(1:len1)//'.sol')
+    if(.not.native_mode) open(mainunit,  file=probn(1:len1)//'.man')
+    if(.not.native_mode) open(outpread,  file=probn(1:len1)//'.opr')
     open(outpwrite, file=probn(1:len1)//'.opw')
     open(outewrite, file=probn(1:len1)//'.oew')
     open(outgwrite, file=probn(1:len1)//'.ogw')
@@ -777,12 +786,12 @@
     open(initwunit,  file=probn(1:len1)//'.inw')  !20210207
     if(Uopt_R==1) &
         open(vcor_unit,  file=probn(1:len1)//'.vcor')  !20210502
-    open(tunit,     file=probn(1:len1)//'.tem')
+    if(.not.native_mode) open(tunit,     file=probn(1:len1)//'.tem')
     open(ftfunit,   file=probn(1:len1)//'.ftf')
-    open(ftfread,   file=probn(1:len1)//'.ftr')
-    open(ifsunit,   file=probn(1:len1)//'.ifs')
-    open(mwaqu_unit,file=probn(1:len1)//'.aqu')  !20220330
-    open(nrtunit,   file=probn(1:len1)//'.nrt')
+    if(.not.native_mode) open(ftfread,   file=probn(1:len1)//'.ftr')
+    if(.not.native_mode) open(ifsunit,   file=probn(1:len1)//'.ifs')
+    if(.not.native_mode) open(mwaqu_unit,file=probn(1:len1)//'.aqu')  !20220330
+    if(.not.native_mode) open(nrtunit,   file=probn(1:len1)//'.nrt')
     open(outbar,    file=probn(1:len1)//'.bar')
     open(outbeam,   file=probn(1:len1)//'.bem')
     open(outcontact,file=probn(1:len1)//'.ctr')
@@ -805,11 +814,30 @@
     end subroutine open_data_files
 
     subroutine read_glb_mesh_header  ! .glb: npoin..stab_matde, rmesh data, result-file opens; moved verbatim from global_data
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'text',text)
     print *,text
+    if(native_mode) then
+        npoin=289
+        npoinb=289
+        nelem=256
+        ndimn=2
+        nmats=1
+        ngroup=1
+        ntlink=0
+        outplot='GIDR'
+        kstab=0
+        mat_curve=0
+        meshc=0
+        rmesh=0
+        level_set_problem=0
+        ljdp=0
+        stab_matde=99999
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,m' //&
         'at_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde',text)
@@ -825,14 +853,16 @@
         prot(idimn,idimn,:)=1.0
     enddo
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'text',text)
     if(rmesh/=0)read(gunit,*,iostat=glb_ios,iomsg=glb_msg)valv1,valv2 !2004/7/12
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'valv1,valv2',text)
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'text',text)
     if (rmesh/=0)then
@@ -871,11 +901,34 @@
 
     subroutine read_glb_solution_flags  ! .glb: ninit..ninistn and the files they switch on; moved verbatim from global_data
     allocate(tlink(2,ntlink))
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_solution_flags', &
         'text',text)
     print *,text
+    if(native_mode) then
+        ninit=0
+        kinit=0
+        winit=0
+        nblks=1
+        nlinks=0
+        nonsym=0
+        outinp=0
+        outintr=0
+        outintw=0
+        neuman=0
+        equvs=0
+        type_ABC='FIX'
+        block_stab=0
+        nbackf=0
+        nbspring=0
+        ebody=0
+        outind=0
+        nbackdT=0
+        ninistn=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw,neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outind,nbackdT,ninistn  !20231215YL
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_solution_flags', &
         'ninit,kinit,winit,nblks,nlinks,nonsym,outinp,outintr,outintw' //&
         ',neuman,equvs,type_ABC,block_stab,nbackf,nbspring,ebody,outi' //&
@@ -903,11 +956,26 @@
     !   else if(outintw.gt.0) then
     !      open(outint,file=probn(1:len1)//'.oit',FORM='BINARY',ACCESS='append')
     !   endif
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
+    if(native_mode) then
+        type_problem='Q'
+        type_solver='PROFILE'
+        type_load='LOAD'
+        type_nl=5
+        stabpw=0
+        nlayer=0
+        kglb=0
+        state_change=0
+        Bparameter=0
+        balgor=0
+        upliftin=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kgl' //&
         'b,state_change,Bparameter,balgor,upliftin',text)
@@ -927,23 +995,40 @@
         pause
     endif
     print *,type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
     if(nlayer==2)read(gunit,*,iostat=glb_ios,iomsg=glb_msg) type_nl_layer1,type_nl_layer2,solver_iter
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'type_nl_layer1,type_nl_layer2,solver_iter',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
+    if(native_mode) then
+        nmass=1
+        nsmat=1
+        nhmat=1
+        nqmat=1
+        nldfl=0
+        kgmat=0
+        nswkw=1
+        uwcpl=0
+        NGRAV=1
+        nflow=0
+        ECWPIPE=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,ECWPIPE  !20200220
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,' //&
         'ECWPIPE',text)
     print *,nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,ngrav,nflow,ECWPIPE  !20200220
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
@@ -960,11 +1045,22 @@
     endif
 
     ! temperature
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
+    if(native_mode) then
+        ntsmat=999
+        nthmat=999
+        kstat=0
+        ground_inf=0
+        src=0
+        nextrf=0
+        submodel=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel  !20210320
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'ntsmat,nthmat,kstat,ground_inf,src,nextrf,submodel',text)
 
@@ -972,23 +1068,43 @@
     end subroutine read_glb_problem_type
 
     subroutine read_glb_dofs_time  ! .glb: mdofn, dof map, time orders, beeta1/2, theta1; moved verbatim from global_data
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'text',text)
+    if(native_mode) then
+        mdofn=2
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'mdofn',text)
     allocate(lmdofn(mdofn),lcdofn(mdofn),order_time_mdofn(mdofn))
+    if(native_mode) then
+        lmdofn(1:mdofn)=1
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'lmdofn(1:mdofn)',text)
+    if(native_mode) then
+        order_time_mdofn(1:mdofn)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'order_time_mdofn(1:mdofn)',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'text',text)
+    if(native_mode) then
+        beeta1=0.5
+        beeta2=0.25
+        theta1=1.0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)beeta1,beeta2,theta1
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'beeta1,beeta2,theta1',text)
     print *,'beeta1,beeta2,theta1=',beeta1,beeta2,theta1
@@ -1004,46 +1120,67 @@
 
     allocate(equvs_process(ngroup),average_appear(ngroup)) !zhao 05/07/30
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
     print *,text
+    if(native_mode) then
+        equvs_process(1:ngroup)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)equvs_process(1:ngroup)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'equvs_process(1:ngroup)',text)
     !levelset
     allocate(appear_level(ngroup))
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
     print *,text
+    if(native_mode) then
+        appear_level(1:ngroup)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)appear_level(1:ngroup)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'appear_level(1:ngroup)',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
     print *,text
     do iblk=1,nblks
+        if(native_mode) then
+            appear_process(1:ngroup,iblk)=1
+        else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)appear_process(1:ngroup,iblk)
+        endif
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
             'appear_process(1:ngroup,iblk)',text)
         print *,'appear_process=',appear_process(1:ngroup,iblk)
     end do
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
     print *,text
     do iblk=1,nblks
+        if(native_mode) then
+            matno_process(1:ngroup,iblk)=1
+        else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)matno_process(1:ngroup,iblk)
+        endif
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
             'matno_process(1:ngroup,iblk)',text)
         print *,'iblks=',iblks,'ngroup=',ngroup,'matno=',matno_process(1:ngroup,iblk)
     end do
 
     if(state_change==1)then !11/23/2014
-        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
             'text',text)
         print *,text
@@ -1055,37 +1192,92 @@
         end do
     endif
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text               !zhao 05/08/05
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text               !zhao 05/08/05
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
     allocate(force_process(ngroup))
+    if(native_mode) then
+        force_process(1:ngroup)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)force_process(1:ngroup)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'force_process(1:ngroup)',text)
 
     print *,'force_process=',force_process
 
     average_appear=0 !for stress average
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
+    if(native_mode) then
+        average_appear(1:ngroup)=2
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'average_appear(1:ngroup)',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
+    if(native_mode) then
+        gid_u=1
+        gid_s=1
+        gid_ms=0
+        gid_f=0
+        gid_rot=0
+        gid_v=0
+        gid_a=0
+        gid_T=0
+        gid_P=0
+        gid_Pv=0
+        gid_ep=0
+        gid_Y=0
+        gid_FC=0
+        gid_Ns=0
+        gid_Ss=0
+        gid_Mxy=0
+        gid_bem=0
+        gid_wh=0
+        gid_wv=0
+        gid_bcs=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,gid' //&
         '_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh' //&
         ',gid_wv,gid_bcs',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'text',text)
+    if(native_mode) then
+        res_u=0
+        res_s=0
+        res_ms=0
+        res_f=0
+        res_rot=0
+        res_v=0
+        res_a=0
+        res_T=0
+        res_P=0
+        res_Pv=0
+        res_ep=0
+        res_Y=0
+        res_FC=0
+        res_Ns=0
+        res_Ss=0
+        res_Tv=0
+        res_Pa=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,   &
         res_Pv,res_ep,res_Y,res_FC,res_Ns,res_Ss,res_Tv,res_Pa   !20210324
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
         'res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,res' //&
         '_Pv,res_ep,res_Y,res_FC,res_Ns,res_Ss,res_Tv,res_Pa',text)
@@ -1111,17 +1303,41 @@
 
     allocate(listglocbeam(ngroup))
     listglocbeam=0
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text       !ifs2006 zhao, 06/03/29
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text       !ifs2006 zhao, 06/03/29
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        Icaddmass=0
+        swlifs2006=50.
+        toth=50.
+        ifswater=2
+        ifsgravity=9.8
+        absorb=0.6
+        alfa_p4=10.
+        stiff_p4=1.e20
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4,stiff_p4
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4' //&
         ',stiff_p4',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text   !steel 2006
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text   !steel 2006
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        ftcrack=1.5e6
+        coefMpa=1.e6
+        ikindks=0
+        doubsig=2
+        ktan1=1.e8
+        ktan2=1.e8
+        nlocalbeam=0
+        ndimnrt=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimnrt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimn' //&
         'rt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)',text)
@@ -1134,43 +1350,75 @@
     !ndimnrt=有多少个粘结单元切向固结
     !listglocbeam=局部坐标系求解的组列表
     !lelenrt=切向固结单元列表
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text !hxl2006 MIF
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text !hxl2006 MIF
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        ntrans=0
+        nlaymif=0
+        epsMIFb=1.
+        gamaMIF=0.02
+        ifixvar0_inpb=2
+        camif=1980.
+        dxmif=25.
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        hdam(1:nblks)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)hdam(1:nblks)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'hdam(1:nblks)',text)
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        water_level(1:nblks)=-99
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)water_level(1:nblks)  !20220409
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'water_level(1:nblks)',text)
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        modf_dis_blocks(1:nblks)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)modf_dis_blocks(1:nblks)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'modf_dis_blocks(1:nblks)',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
+    if(native_mode) then
+        uinitial(1:nblks)=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)uinitial(1:nblks)
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'uinitial(1:nblks)',text)
 
 
     print *,'uinitial=',uinitial(1:nblks)
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !输入与nbackf/=0时的相关内容
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !输入与nbackf/=0时的相关内容
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
 
@@ -1179,7 +1427,8 @@
     if(nbspring>0)then  !20150925
 
         allocate(bspring(nbspring))
-        read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
             'text',text)
         print *,text
@@ -1220,7 +1469,8 @@
     end subroutine setup_dof_counts
 
     subroutine read_glb_links  ! .glb: dof links and tlinks; moved verbatim from global_data
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
         'text',text)
     print *,text
@@ -1242,7 +1492,8 @@
 
     end do
 
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
         'text',text)
     print *,text
@@ -1262,20 +1513,25 @@
     end subroutine read_cor_coordinates
 
     subroutine read_glb_element_groups  ! .glb: element groups (+ .ele via read_element) and node-group lists; moved verbatim from global_data
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
         'text',text)
     print *,'text1=',text
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
         'text',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
         'text',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
         'text',text)
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
         'text',text)
     print *,text
@@ -1290,12 +1546,33 @@
     do igroup=1,ngroup    !!igroup  for elements
 
         print *,'igroup=',igroup
+        if(native_mode) then
+            group(igroup)%name='Q4'
+            group(igroup)%kname='Default'
+            group(igroup)%index=5
+            group(igroup)%class='CO'
+            group(igroup)%nrfields=1
+            group(igroup)%fieldid='U'
+            group(igroup)%special='ST'
+            group(igroup)%sptype='PE'
+            group(igroup)%nelgroup=256
+            group(igroup)%matno=1
+            group(igroup)%type_nalgo=0
+            group(igroup)%type_stiff=1
+            group(igroup)%type_ecoint=1
+            group(igroup)%ilayer=1
+            elcod_local=0.
+            group_inf=0
+            group(igroup)%uplift_ic=0
+            group(igroup)%liquj=0
+        else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%name,       group(igroup)%kname,      group(igroup)%index,      &
             group(igroup)%class,      group(igroup)%nrfields,   group(igroup)%fieldid,    &
             group(igroup)%special,    group(igroup)%sptype,     group(igroup)%nelgroup,   &
             group(igroup)%matno,      group(igroup)%type_nalgo, group(igroup)%type_stiff, &
             group(igroup)%type_ecoint,group(igroup)%ilayer,     elcod_local,group_inf,  &
             group(igroup)%uplift_ic,group(igroup)%liquj  !20220409
+        endif
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
             'group(igroup)%name,group(igroup)%kname,group(igroup)%index,g' //&
             'roup(igroup)%class,group(igroup)%nrfields,group(igroup)%fiel' //&
@@ -1313,12 +1590,22 @@
         allocate(group(igroup)%type_mass(nrfields),group(igroup)%order_time(2,nrfields))
         allocate(group(igroup)%list(group(igroup)%nelgroup))
         allocate(group(igroup)%dof(nrfields))
+        if(native_mode) then
+            group(igroup)%type_mass(1:nrfields)=0
+            group(igroup)%alfa=0.
+            group(igroup)%beta=0.
+        else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
+        endif
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
             'group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group' //&
             '(igroup)%beta',text)
         !write(7,*)'group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta=',group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
+        if(native_mode) then
+            group(igroup)%order_time=0
+        else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
+        endif
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
             '(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%n' //&
             'rfields)',text)
@@ -1332,14 +1619,22 @@
 
         allocate(mdof(nrfields))
         do ifield=1,nrfields
+            if(native_mode) then
+                nfdof=2
+            else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
+            endif
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
                 'nfdof',text)
             !print *,'ifield=',ifield,'nfdof=',nfdof
             group(igroup)%dof(ifield)%nfdof=nfdof
             mdof(ifield)=nfdof
             allocate(group(igroup)%dof(ifield)%listdof_f(nfdof))
+            if(native_mode) then
+                group(igroup)%dof(ifield)%listdof_f=[1,2]
+            else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
+            endif
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
                 'group(igroup)%dof(ifield)%listdof_f(1:nfdof)',text)
         end do
@@ -1549,11 +1844,16 @@
     !special for hjd
     allocate (tension_joint(nelem))
     tension_joint=0
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
         'text',text)
     print*,'text_tension_joint=',text
+    if(native_mode) then
+        tsel=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)tsel
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
         'tsel',text)
     if (tsel/=0) then
@@ -1570,11 +1870,16 @@
     ! contact  !zhao 05/07/22
     allocate (tension_contact(nelem))
     tension_contact=0
-    read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
         'text',text)
     print*,'text_tension_contact=',text
+    if(native_mode) then
+        tsel=0
+    else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)tsel
+    endif
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
         'tsel',text)
     if (tsel/=0) then
@@ -1633,22 +1938,33 @@
     integer (ink) i0,ie,ipoin,iforce,lgroup,node_face,neface
     integer (ink), allocatable::nodx(:),ienface(:,:)
 
-    read(ftfread,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(ftfread,*)text
+    if(native_mode) then
+        nforce=0
+        ngaps=0
+        nforce_gaps=0
+        nsafety_gaps=0
+    else
     read(ftfread,*)nforce,ngaps,nforce_gaps,nsafety_gaps
+    endif
     if(nforce/=0)allocate(surface_force(nforce),nforce_appear(nforce))    !nforce_appear !1-- for saftyfactor 2-- for internal force 3-- for both
     if(nforce_gaps/=0)allocate(nforce_gaps_appear(ngaps))    !nforce_gaps_appear !1-- for saftyfactor 2-- for internal force 3-- for both
     if(nforce/=0)then
-        read(ftfread,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ftfread,*)text
         read(ftfread,*)nforce_appear
     endif
     if(nforce_gaps/=0)then
-        read(ftfread,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ftfread,*)text
         read(ftfread,*)nforce_gaps_appear
         print *,'nforce_gaps_appear=',nforce_gaps_appear
     endif
     if(nsafety_gaps/=0)then  !20200409
         allocate(safety_gaps_appear(ngaps,nsafety_gaps))
-        read(ftfread,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ftfread,*)text
         do iforce=1,nsafety_gaps
             write(7,*)'isafety=',iforce,'ngaps=',ngaps
             read(ftfread,*)safety_gaps_appear(:,iforce)
@@ -1657,10 +1973,12 @@
     endif  !20200409
 
     if(nforce/=0)then
-        read(ftfread,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ftfread,*)text
         do iforce=1,nforce
 
-            read(ftfread,*)text
+            if(native_mode) text='TOML-03'
+            if(.not.native_mode) read(ftfread,*)text
             read(ftfread,*)lgroup,neface,node_face,nliste
             print *,'lgroup=',lgroup,'neface=',neface,'node_face=',node_face
             surface_force(iforce)%lgroup=lgroup
@@ -1668,7 +1986,8 @@
             allocate(surface_force(iforce)%list(lgroup),surface_force(iforce)%liste(neface),  &
                 surface_force(iforce)%liste1(neface)) !special for caoguangde
             allocate(ienface(node_face,neface),nodx(npoin))
-            read(ftfread,*)text
+            if(native_mode) text='TOML-03'
+            if(.not.native_mode) read(ftfread,*)text
             read(ftfread,*)surface_force(iforce)%list
 
             nodx=0
@@ -1716,9 +2035,15 @@
     trans(1:ntotv)%nintf=0
     if(meshc/=0) goto 111
     if(rmesh/=0) goto 222
-    read(nrtunit,*)text
-    read(nrtunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(nrtunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(nrtunit,*)text
+    if(native_mode) then
+        transgroup=0
+    else
     read(nrtunit,*)transgroup
+    endif
     do itransgroup=1,transgroup
         read(nrtunit,*)ntransnode,translg
         print *, 'ntransnode,translg=',ntransnode,translg
@@ -1995,8 +2320,13 @@
 111 continue
     allocate(trans_c(npoin))
     trans_c(1:npoin)%nintf=0
-    read(nrtunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(nrtunit,*)text
+    if(native_mode) then
+        transgroup=0
+    else
     read(nrtunit,*)transgroup
+    endif
     do itrans=1,transgroup
         read(nrtunit,*)ipoin,nintf
         trans_c(ipoin)%nintf=nintf
@@ -2009,8 +2339,10 @@
 
     if (meshc==1.or.meshc==2) then  !if(meshc/=0) then
         allocate(appear_p(ngroup))
-        read(nrtunit,*)text
-        read(nrtunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(nrtunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(nrtunit,*)text
         read(nrtunit,*)ngroup0
         do igroup=1,ngroup0
             read(nrtunit,*)i0,group(igroup)%cgroup
@@ -2437,7 +2769,8 @@
     ix2=ground_inf-ground_inf/100*100-(ground_inf-ground_inf/100*100)/10*10
 
 
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
     read(gunit,*)ne_space,e_space,nu_space,ngaus_p,t0,pes
     nnode_p=2
@@ -2754,7 +3087,8 @@
     if(ground_inf==0) return
     ix1=(ground_inf-ground_inf/100*100)/10
     ix2=ground_inf-ground_inf/100*100-(ground_inf-ground_inf/100*100)/10*10
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
     read(gunit,*)ne_space,e_space,nu_space,ngaus_p,t0,pes,ifcg,nel  !080621 add nel
     print *,'ne_space=',ne_space
@@ -3642,22 +3976,43 @@
     real(irk),   allocatable::aera(:),rot(:,:,:),frict(:),cohes(:),ft(:),Gf(:),center1(:),center2(:),disbotom(:),  &
         distop(:),ictp_aera(:),jctp_aera(:)
 
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
+    if(native_mode) then
+        ngaps=0
+        ngapb=0
+        contactpe=1
+        miter_bt=500
+        tor_bt=1.e-5
+        iblks_bt=1
+        nonsbt=0
+        xlwsol=0
+        method_gapi=0
+        miter_state=1
+        type_solver_ctt='PROFILE'
+        restart_ctt=0
+        damp_ctt=0.
+        istatec=1
+    else
     read(gunit,*)ngaps,ngapb,contactpe,miter_bt,tor_bt,iblks_bt,nonsbt,xlwsol,method_gapi,miter_state,type_solver_ctt,restart_ctt,damp_ctt,istatec  !tcl1124
+    endif
     print *,'ngaps=',ngaps
 
     if (ngaps==0) return
 
     allocate(block_appear_process(ngapb,nblks))   !20200331
-    read(gunit,*)text   !20200331
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text   !20200331
     read(gunit,*)(block_appear_process(:,iblks),iblks=1,nblks)  !20200331
 
     allocate(gaps(ngaps),gapb(ngapb))
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
 
     do igaps=1,ngaps
-        read(gunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(gunit,*)text
         !print *,'igaps=',igaps,text
         allocate(gaps(igaps)%xlwmd(ndimn))
         read(gunit,*)ngroupt,gaps(igaps)%xlwmd,gaps(igaps)%frict_less,gaps(igaps)%goodman,gaps(igaps)%thin_layer
@@ -3765,11 +4120,13 @@
     end do
 
     print *,'after input gaps information'
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
 
     do igapb=1,ngapb
-        read(gunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(gunit,*)text
         print *,'igapb=',igapb,text
         read(gunit,*)gapb(igapb)%ngroupt,gapb(igapb)%ngroupb,gapb(igapb)%nrdof,gapb(igapb)%eblock !2017/11/19
 
@@ -4716,15 +5073,21 @@
     integer(ink),allocatable::nel_pipe(:),icpoin(:),jcpoin(:)
     real(irk)   alfa1,Qw,lamda_w,density_w,Cw,begin_time,end_time,dtime_change,k2(2,2)
 
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
+    if(native_mode) then
+        nwcpipe=0
+    else
     read(gunit,*)nwcpipe
+    endif
     print *,'nwcpipe=',nwcpipe
 
 
     if (nwcpipe==0) return
     allocate(wc_pipe(nwcpipe))
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
     do i0=1,nwcpipe
         read(gunit,*)iwc,listgroup_c,listgroup_w,nline_g_w
@@ -4850,14 +5213,20 @@
     real(irk)   dl,diameter_s,aera_s,e,k0(2,2),  &
         k1(2,2),k2(2,2),tt(2,2),ft,err_ctl
     real(irk) ,allocatable::roti(:),rotj(:),rote(:)
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
+    if(native_mode) then
+        nrcsteel=0
+    else
     read(gunit,*)nrcsteel
+    endif
     print *,'nrcsteel=',nrcsteel
 
     if (nrcsteel==0) return
     allocate(rc_steel(nrcsteel),roti(ndimn),rotj(ndimn),rote(ndimn))
-    read(gunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(gunit,*)text
     print *,text
     do i0=1,nrcsteel
         read(gunit,*)listgroup_c,listgroup_s,nline_g_sc,diameter_s,e,ft,ikindsc,err_ctl,mxter

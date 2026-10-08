@@ -89,11 +89,17 @@
 
 
 
+    call native_start()
+    if(native_mode) then
+        restart=0; relis=0; sysrelis=0; ADINA=0; Uopt_R=0; gamamax=0
+        probn='1'
+    else
     open(inpunit,file='inp')
     read (inpunit,*) text
     read (inpunit,*) restart,relis,sysrelis,ADINA,Uopt_R,gamamax !20231215YL
     read (inpunit,*) text
     read (inpunit,*) probn
+    endif
     !	adina=0
 
     !mystatus=0
@@ -174,7 +180,11 @@
     print *,'nblks=',nblks
     print *,'Input runblks, =?'
     !read *,runblks
+    if(native_mode) then
+        runblks=1
+    else
     read (inpunit,*)runblks
+    endif
     call TIME(char_time)
     print *, 'time: ', char_time
     write(chkunit,*)'time: ', char_time
@@ -3581,24 +3591,49 @@
     if(Bparameter/=0.and.iblks==1)rewind(upliftunit)
 
 
-    read(mainunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(mainunit,*)text
+    if(native_mode) then
+        nincs=1
+    else
     read(mainunit,*)nincs
+    endif
 
     print *,' in static_U**'
 
     if(ngaps/=0.or.nrcsteel/=0)allocate(tofor0(ntotv)) !!ctt2005
 
     do iincs=1,lincs
+        if(native_mode) then
+            miter=native_iterations
+            ditime=1.
+            noutn=1
+            noutf=1
+            nstep=native_substeps
+            inc_step=1
+            nresta=1
+            cwater=0.
+            Qstatic=0
+        else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
+        endif
+        if(native_mode) then
+            toler_force=1.e-5_irk
+            toler_var(1:mdofn)=1.e-5_irk
+        else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
+        endif
+
         if(cwater/=0.and.delgroup>0)then
             do idelgroup=1,delgroup
-                read(mainunit,*)text
+                if(native_mode) text='TOML-03'
+                if(.not.native_mode) read(mainunit,*)text
             end do
         end if
         if(Qstatic/=0) then !20221104
             do i0=1,6
-                read(mainunit,*)text
+                if(native_mode) text='TOML-03'
+                if(.not.native_mode) read(mainunit,*)text
             end do
         endif
 
@@ -3610,8 +3645,28 @@
     do iincs=lincs+1,nincs
         print *,'iincs=',iincs,'lincs=',lincs
 
+        if(native_mode) then
+            miter=native_iterations
+            ditime=1.
+            noutn=1
+            noutf=1
+            nstep=native_substeps
+            inc_step=1
+            nresta=1
+            cwater=0.
+            Qstatic=0
+        else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
+        endif
+        if(native_mode) then
+            toler_force=1.e-5_irk
+            toler_var(1:mdofn)=1.e-5_irk
+        else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
+        endif
+        if(native_mode) call native_receipt(props(1)%mechanical%solid%e,props(1)%mechanical%solid%nu, &
+            props(1)%mechanical%solid%density,props(1)%mechanical%solid%alfa,gravy,nstep,miter)
+
         if(cwater/=0.and.delgroup>0)then
             allocate(coef_water(delgroup,nstep))
             do idelgroup=1,delgroup
@@ -3621,7 +3676,8 @@
 
 
         if(Qstatic/=0) then !20221104
-            read(mainunit,*)text  !20221104
+            if(native_mode) text='TOML-03'
+            if(.not.native_mode) read(mainunit,*)text  !20221104
             allocate(qstatic_force)  !20221104
             allocate(qstatic_force%appearg(ngroup),qstatic_force%qfactor(ndimn),qstatic_force%cor_coef(2,Qstatic))
             read(mainunit,*)qstatic_force%iaxe

@@ -9586,8 +9586,13 @@
 
     endif !20220330
 
-    read(ifsunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(ifsunit,*)text
+    if(native_mode) then
+        ifsnedge=0
+    else
     read(ifsunit,*)ifsnedge
+    endif
     print *,text
     print *,'ifsnedge=',ifsnedge
 
@@ -9595,7 +9600,8 @@
     allocate(ifsedges(ifsnedge))
     tedge=0
     do while(tedge<ifsnedge)
-        read(ifsunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ifsunit,*)text
         read(ifsunit,*)sedge,nnode,index,bkind
 
         edimn=elkn(index)%ndimn
@@ -10219,15 +10225,21 @@
         deriv(:,:),elcod0(:,:),cartd(:,:),xjaci(:,:), &
         s(:,:),rr(:,:)
 
-    read(ifsunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(ifsunit,*)text
+    if(native_mode) then
+        nifsgroup=0
+    else
     read(ifsunit,*)nifsgroup
+    endif
     print *,text
     print *,'nifsgroup=',nifsgroup
     if (nifsgroup==0) return
     allocate(tifs(nifsgroup))
     tedge=0
     do while(tedge<nifsgroup)
-        read(ifsunit,*)text                               !4
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ifsunit,*)text                               !4
         read(ifsunit,*)sedge,nnode,index
 
         edimn=elkn(index)%ndimn
@@ -10321,15 +10333,21 @@
         deriv(:,:),elcod0(:,:),cartd(:,:),xjaci(:,:), &
         s(:,:),rr(:,:)
 
-    read(ifsunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(ifsunit,*)text
+    if(native_mode) then
+        nabsfgroup=0
+    else
     read(ifsunit,*)nabsfgroup
+    endif
     print *,text
     print *,'nabsfgroup=',nabsfgroup
     if (nabsfgroup==0) return
     allocate(tabsf(nabsfgroup))
     tedge=0
     do while(tedge<nabsfgroup)
-        read(ifsunit,*)text                               !4
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ifsunit,*)text                               !4
         read(ifsunit,*)sedge,nnode,index !,alfa
 
         edimn=elkn(index)%ndimn
@@ -10418,8 +10436,13 @@
         s(:,:),rr(:,:),speed(:),shapes(:,:),shapet(:,:),estif(:,:), &
         shapeb(:,:),speedb(:,:),rrb(:,:),estif_mid1(:,:),estif_mid2(:,:),estif_mid3(:,:)
 
-    read(ifsunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(ifsunit,*)text
+    if(native_mode) then
+        nabssgroup=0
+    else
     read(ifsunit,*)nabssgroup   !,exx,uxx,densxx
+    endif
     print *,text
     print *,'nabssgroup=',nabssgroup
     if (nabssgroup==0) return
@@ -10427,7 +10450,8 @@
     tedge=0
     do while(tedge<nabssgroup)
         allocate(speed(ndimn),xyz0(ndimn),gpcod(ndimn),spring(ndimn))
-        read(ifsunit,*)text                               !4
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(ifsunit,*)text                               !4
         read(ifsunit,*)sedge,nnode,index,xyz0(1:ndimn),cdbound   !!hxl_l
 
         edimn=elkn(index)%ndimn

@@ -131,15 +131,21 @@
     if (restart==1)then
        print *,'lineload=',lineload
        do i1=1,lineload
-          read(loadunit,*)text
+          if(native_mode) text='TOML-03'
+          if(.not.native_mode) read(loadunit,*)text
        end do
     end if
 
     if (meshc==1.or.rmesh/=0)rewind(loadunit)
      if(Bparameter/=0)rewind(loadunit)  !20190810
 
-    read(loadunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(loadunit,*)text
+    if(native_mode) then
+        ntcurve=1
+    else
     read(loadunit,*)ntcurve
+    endif
     if (allocated(tcurves)) deallocate(tcurves)
     if (ntcurve.ne.0)allocate(tcurves(ntcurve))
     lineload=lineload+2
@@ -147,7 +153,14 @@
     do itcurve=1,ntcurve
         !print *,'itcurve=',itcurve
 
+       if(native_mode) then
+           ntime=2
+           type_curve='LINEAR'
+           nstoch_curve=0
+           nline=2
+       else
        read(loadunit,*)ntime,type_curve,nstoch_curve,nline
+       endif
        tcurves(itcurve)%nstoch_curve=nstoch_curve
        print *,'ntime=',ntime,type_curve,nstoch_curve,nline
        lineload=lineload+1
@@ -179,7 +192,12 @@
        case('WATERLEVEL')
        allocate(tcurves(itcurve)%ttime_curve(ntime))
        do i0=1,ntime
+       if(native_mode) then
+           tcurves(itcurve)%ttime_curve(i0)=i0-1
+           tcurves(itcurve)%dfact_curve(i0)=1.
+       else
        read(loadunit,*)tcurves(itcurve)%ttime_curve(i0),tcurves(itcurve)%dfact_curve(i0)
+       endif
        end do
        case('SEISMIC')
        allocate(tcurves(itcurve)%dtrec,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend,tcurves(itcurve)%ample)
@@ -207,7 +225,11 @@
        endif
        case default
        allocate(tcurves(itcurve)%ttime_curve(ntime))
+       if(native_mode) then
+           tcurves(itcurve)%ttime_curve(1:ntime)=[0.,1.]
+       else
        read(loadunit,*)tcurves(itcurve)%ttime_curve(1:ntime)
+       endif
        end select
        if (type_curve=='SEISMIC') then
         read(loadunit,*)tcurves(itcurve)%dfact_curve
@@ -217,7 +239,11 @@
        !    end do
        elseif (type_curve/='ARCLENGTH'.and.type_curve/='EXTRAPOLATION'   &
            .and.type_curve/='HARMONIC'.and.type_curve/='WATERLEVEL') then
+        if(native_mode) then
+            tcurves(itcurve)%dfact_curve(1:ntime)=1.
+        else
         read(loadunit,*)tcurves(itcurve)%dfact_curve(1:ntime) !!one record 
+        endif
         endif
        lineload=lineload+nline
     end do
@@ -225,8 +251,14 @@ print *,'ok waterlevel'
     !! set of point_load structure in the iblks-th BLOCK
 
     if (allocated(pload)) deallocate(pload)
-    read(loadunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(loadunit,*)text
+    if(native_mode) then
+        nplgroup=0
+        kpload=0
+    else
     read(loadunit,*)nplgroup,kpload
+    endif
     lineload=lineload+2
     print *,'nplgroup=',nplgroup
     if (nplgroup==0) goto 11
@@ -271,7 +303,8 @@ if(kpload==1)then !20210502
        elseif(type_curve=='EXTRAPOLATION')then
           nextr=tcurves(pload(iplgroup)%order_time_curve)%nextr
           allocate(pload(iplgroup)%listep(npload,2*nextr+1))
-          read(loadunit,*)text
+          if(native_mode) text='TOML-03'
+          if(.not.native_mode) read(loadunit,*)text
           do i0=1,npload
              !read(loadunit,*)i1,pload(iplgroup)%list(i0),pload(iplgroup)%listep(i0,1:2*nextr+1)
              read(loadunit,*)i1,pload(iplgroup)%listep(i0,1:2*nextr+1)
@@ -347,15 +380,21 @@ endif  !kpload=1  20210502
     !! set of edge_define structure
 
     if (allocated(edges)) deallocate(edges)
-    read(loadunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(loadunit,*)text
+    if(native_mode) then
+        nedge=0
+    else
     read(loadunit,*)nedge
+    endif
     print *,'nedge=',nedge
     lineload=lineload+2
     if (nedge==0) goto 22
     allocate(edges(nedge))
     tedge=0
     do while(tedge<nedge)
-       read(loadunit,*)text                               !4
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read(loadunit,*)text                               !4
        read(loadunit,*)sedge,nnode,index,vdimn  !20211028
        lineload=lineload+2
        do iedge=1,sedge
@@ -731,10 +770,17 @@ end subroutine element_in_out
 
    
 
-    read(loadunit,*)text
-    read(loadunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(loadunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(loadunit,*)text
     print *,text
+    if(native_mode) then
+        edge_load_group=0
+        delgroup=0
+    else
     read(loadunit,*)edge_load_group,delgroup
+    endif
     
     print *,'edge_load_group=',edge_load_group,'delgroup=',delgroup
     lineload=lineload+3
@@ -889,21 +935,42 @@ end subroutine element_in_out
     !                                 no gravity in igroup
 33  if(.not.allocated(factg))allocate(factg(ndimn))
     if (.not.allocated(factf))allocate(factf(ndimn))
-    read (loadunit,*) text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read (loadunit,*) text
+    if(native_mode) then
+        gravy=native_gravity
+        factg(1:ndimn)=[0.,-1.]
+        factf(1:ndimn)=[0.,-1.]
+    else
     read (loadunit,*) gravy,factg(1:ndimn),factf(1:ndimn)
+    endif
     print *,'gray=',gravy,factg(1:ndimn),factf(1:ndimn)
     lineload=lineload+2
 
 
     if (.not.allocated(tcurvegravity))allocate(tcurvegravity(ngroup))
+    if(native_mode) then
+        text='TOML-03'
+        nline=1
+    else
     read(loadunit,*)text,nline
+    endif
+    if(native_mode) then
+        tcurvegravity(1:ngroup)=1
+    else
     read(loadunit,*)tcurvegravity(1:ngroup)
+    endif
 print *,'tcurv=',tcurvegravity(1:ngroup)
 
     lineload=lineload+nline+1
 
-    read (loadunit,*) text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read (loadunit,*) text
+    if(native_mode) then
+        nbeamload=0
+    else
     read (loadunit,*) nbeamload
+    endif
 	
     lineload=lineload+2
     if (nbeamload/=0) then
@@ -981,8 +1048,13 @@ print *,'tcurv=',tcurvegravity(1:ngroup)
        end do
        deallocate(trot,elcod,rload,rload1,gloc,trotx)
     endif
-    read (loadunit,*) text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read (loadunit,*) text
+    if(native_mode) then
+        nplateload=0
+    else
     read (loadunit,*) nplateload
+    endif
     
     if(nplateload==0)return
     nevab=24    !20200113
@@ -992,7 +1064,8 @@ print *,'tcurv=',tcurvegravity(1:ngroup)
 
 	iplateload=0
     do while (iplateload<nplateload)
-       read (loadunit,*) text
+       if(native_mode) text='TOML-03'
+       if(.not.native_mode) read (loadunit,*) text
        read (loadunit,*) igroup,itcurve,water
        tplateload=group(igroup)%nelgroup
        read(loadunit,*)cor0,cor1,p0,p1,fact

@@ -237,8 +237,13 @@
 
     allocate(props(nmats))
 
-    read(munit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(munit,*)text
+    if(native_mode) then
+        nscurve=0
+    else
     read(munit,*)nscurve
+    endif
     if (nscurve.ne.0)allocate(scurves(nscurve))
     do iscurve=1,nscurve
 
@@ -253,21 +258,38 @@
 
     end do
 
+    if(native_mode) then
+        nline=0
+    else
     read(munit,*)nline
+    endif
     do iline=1,nline
-        read(munit,*) text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(munit,*) text
         print *, text
     end do
 
 
-    read(munit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(munit,*)text
+    if(native_mode) then
+        mmats=1
+    else
     read(munit,*)mmats  ! !20200617
+    endif
 
     do jmat=1,mmats
 
         print *,'jmat=',jmat
-        read(munit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(munit,*)text
+        if(native_mode) then
+            property='MECHANICAL'
+            name='SOLID'
+            imat=1
+        else
         read(munit,*)property,name,imat
+        endif
 
         print *,property,name,imat
 
@@ -276,19 +298,46 @@
 
         case('MECHANICAL')
             allocate(props(imat)%mechanical)
+            if(native_mode) then
+                nphase=1
+            else
             read(munit,*)nphase
+            endif
             do iphase=1,nphase      !! loop for nphase
 
+                if(native_mode) then
+                    phase='SOLID'
+                else
                 read(munit,*)phase
+                endif
 
                 phase_select: select case(trim(phase))
                     ! select 2
 
                 case('SOLID')
                     allocate(props(imat)%mechanical%solid)
+                    if(native_mode) then
+                        material='ELASTIC_ISOTROPIC'
+                        density=native_density
+                        ratio=1.
+                        thickness=1.
+                        e=native_e
+                        nu=native_nu
+                        alfa=1.e-5_irk
+                        icreep=0
+                        kind_wt=0
+                        jliqu=0
+                    else
                     read(munit,*)material,density,ratio,thickness,e,nu,alfa,icreep,kind_wt,jliqu  !20220713
+                    endif
                     print *,material,density,ratio,thickness,e,nu,alfa,icreep,kind_wt,jliqu
+                    if(native_mode) then
+                        iE=0
+                        iNu=0
+                        density_w=1000.
+                    else
                     read(munit,*)iE,iNu,density_w   !20190810
+                    endif
                     props(imat)%mechanical%solid%material =trim(material)
                     props(imat)%mechanical%solid%density  =density
                     props(imat)%mechanical%solid%density_w  =density_w
@@ -714,15 +763,20 @@
                         endif
                     case('ClayPZ')
                         allocate(props(imat)%mechanical%solid%ClayPZ)
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)props(imat)%mechanical%solid%ClayPZ%ntest     !ntest
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)mg,alfag
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)Kevo,Keso,icels
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)beta0,beta1,expf
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)h0,extcr,pcut
 
                         props(imat)%mechanical%solid%ClayPZ%d(1)=kevo		!Kevo
@@ -745,14 +799,17 @@
                         props(imat)%mechanical%solid%SandPZ%d=0.0d0
                         props(imat)%mechanical%solid%SandPZ%humidification=0
 
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)props(imat)%mechanical%solid%SandPZ%ntest,pztype,humidification
 
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)mg,mf,alfag,alfaf
 
                         if(pztype==11)then   !PZ模型中的K、G用DC的参数来求
-                            read(munit,*)text
+                            if(native_mode) text='TOML-03'
+                            if(.not.native_mode) read(munit,*)text
                             allocate(props(imat)%mechanical%solid%DuncanChang)
                             read(munit,*)props(imat)%mechanical%solid%DuncanChang%model, &
                                 props(imat)%mechanical%solid%DuncanChang%cohes, &
@@ -778,12 +835,15 @@
                                 !                                props(imat)%mechanical%solid%DuncanChang%dphi            !902
                             endif
                         else
-                            read(munit,*)text
+                            if(native_mode) text='TOML-03'
+                            if(.not.native_mode) read(munit,*)text
                             read(munit,*)Kevo,Keso,icels
                         endif
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)beta0,beta1,expf
-                        read(munit,*)text
+                        if(native_mode) text='TOML-03'
+                        if(.not.native_mode) read(munit,*)text
                         read(munit,*)h0,gama,hu0,gamau,pcut,extcr
 
                         if(abs(humidification)==2)then
@@ -792,7 +852,8 @@
                             allocate(props(imat)%mechanical%solid%SandPZ%eline(abs(humidification)))
                             props(imat)%mechanical%solid%SandPZ%bline=0
                             props(imat)%mechanical%solid%SandPZ%eline=0
-                            read(munit,*)text
+                            if(native_mode) text='TOML-03'
+                            if(.not.native_mode) read(munit,*)text
                             read(munit,*)props(imat)%mechanical%solid%SandPZ%bline,    &
                                 props(imat)%mechanical%solid%SandPZ%eline  !通过指定湿化曲线号考虑湿化
                             if(humidification==-2)read(munit,*)props(imat)%mechanical%solid%SandPZ%d(17),    &
@@ -805,7 +866,8 @@
                             allocate(props(imat)%mechanical%solid%SandPZ%sigmad(abs(humidification)))
                             props(imat)%mechanical%solid%SandPZ%bline=0
                             props(imat)%mechanical%solid%SandPZ%sigmad=0.0d0
-                            read(munit,*)text
+                            if(native_mode) text='TOML-03'
+                            if(.not.native_mode) read(munit,*)text
                             read(munit,*)props(imat)%mechanical%solid%SandPZ%bline
                             read(munit,*)props(imat)%mechanical%solid%SandPZ%sigmad
                         endif
@@ -852,14 +914,22 @@
                         !     SURFACES
                         !
                         WRITE(chkunit,*)'ntest'
+                        if(native_mode) then
+                            text='TOML-03'
+                        else
                         READ(munit,*) text
+                        endif
                         READ(munit,*) ntest
 
                         write(chkunit,*)'ntest=',ntest
                         WRITE(chkunit,*)'XMGC,XMFC,ALFAF,ALFAG'
                         WRITE(chkunit,*)'XMGC=6*SIN(PHIG)/(3-SIN(PHIG))'
                         WRITE(chkunit,*)'XMFC WILL BEAR A FIXED RATIO WITH XMGC'
+                        if(native_mode) then
+                            text='TOML-03'
+                        else
                         READ(munit,*) text
+                        endif
                         READ (munit,*)XMGC,XMFC,ALFAF,ALFAG
                         write(chkunit,*)XMGC,XMFC,ALFAF,ALFAG
                         PHIG=ASIN(3.0*XMGC/(6.0+XMGC))
@@ -870,10 +940,18 @@
                         write(chkunit,*)'                        1 HEV CONST, HES VAR'
                         write(chkunit,*)'                        2 HEV VAR, HES CONST'
                         write(chkunit,*)'                        3 BOTH CONSTANT'
+                        if(native_mode) then
+                            text='TOML-03'
+                        else
                         READ(munit,*) text
+                        endif
                         READ (munit,*)HEV0,HES0,ICELS
                         write(chkunit,*)HEV0,HES0,ICELS
+                        if(native_mode) then
+                            text='TOML-03'
+                        else
                         READ(munit,*) text
+                        endif
                         write(chkunit,*)'BETA0,BETA1,EXPF'
                         READ (munit,*)BETA0,BETA1,EXPF
                         write(chkunit,*)BETA0,BETA1,EXPF
@@ -883,7 +961,11 @@
                         write(chkunit,*)'OR IN CALCULATION OF ELASTIC INITIAL MATRIX'
                         write(chkunit,*)'IF P0 IS LESS THAN PCUT'
                         write(chkunit,*)'H0,HU0,GAMHU,GAMDM,PCUT'
+                        if(native_mode) then
+                            text='TOML-03'
+                        else
                         READ(munit,*) text
+                        endif
                         READ (munit,*)H0,HU0,GAMHU,GAMDM,PCUT
                         write(chkunit,*)H0,HU0,GAMHU,GAMDM,PCUT
                         !
@@ -942,7 +1024,8 @@
                         props(imat)%mechanical%fluid%bulks=bulks
                         props(imat)%mechanical%fluid%bulkd=bulkd
                         if (ksmsa==1) then
-                            read(munit,*)text
+                            if(native_mode) text='TOML-03'
+                            if(.not.native_mode) read(munit,*)text
                             read(munit,*)nswpw,dpwats,npmpm,dpwatp
                             allocate(props(imat)%mechanical%fluid%swpwc(1:nswpw),        &
                                 props(imat)%mechanical%fluid%pmpwc(1:npmpm),        &

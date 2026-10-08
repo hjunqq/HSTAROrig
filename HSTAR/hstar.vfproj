@@ -97,6 +97,10 @@
 			<File RelativePath=".\Vartype.f90"/>
 			<File RelativePath=".\vsl_gauss_module.f90"/>
 		</Filter>
+        <File RelativePath=".\yl_authoring_toml.f90"/>
+        <File RelativePath=".\NativeInput.f90"/>
+        <File RelativePath=".\NativeContract.inc"/>
+
 	</Files>
 	<Globals/>
 </VisualStudioProject>

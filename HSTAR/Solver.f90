@@ -6818,14 +6818,27 @@
     Case ('SET')
         if(restart==1)   then
             do jblks=1,iblks-1
-                read(solveunit,*)text
-                read(solveunit,*)text
+                if(native_mode) text='TOML-03'
+                if(.not.native_mode) read(solveunit,*)text
+                if(native_mode) text='TOML-03'
+                if(.not.native_mode) read(solveunit,*)text
             end do
         end if
         if(meshc==1.or.rmesh/=0)rewind(solveunit)
         if(Bparameter/=0)rewind(solveunit)  !20190810
+        if(native_mode) then
+            text='TOML-03'
+        else
         Read (solveunit,*) text
+        endif
+        if(native_mode) then
+            iafile=0
+            icond=0
+            ipdchk=1
+            ising=1
+        else
         Read (solveunit,*) iafile,icond,ipdchk,ising
+        endif
         if(iafile/=0)open(iafile,file='forpivots',form='unformatted')
         call totv_to_eq
         if(neq==0) return   !2017/11/19

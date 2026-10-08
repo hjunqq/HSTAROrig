@@ -4171,14 +4171,26 @@
     integer(ink),allocatable::temp(:,:),icpx(:)
 
 
-    read(outpread,*)text
-    read(outpread,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
     !print *,text
+    if(native_mode) then
+        irecover=0
+        wpgroup=0
+        wegroup=0
+        wggroup=0
+        wjgroup=0
+    else
     read(outpread,*)irecover,wpgroup,wegroup,wggroup,wjgroup
+    endif
     !print *,'irecover,wpgroup,wegroup,wggroup,wjgroup=',irecover,wpgroup,wegroup,wggroup,wjgroup
     !stop
-    read(outpread,*)text
-    read(outpread,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
     if (wpgroup==0)goto 1  !20210803
     if(Bparameter==-3)then
         rewind(back_ctl_unit)
@@ -4313,7 +4325,9 @@
 
     !20210803
 
-1   read(outpread,*)text
+1 continue
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
     if (wegroup==0) goto 2
     toutelement=0
     allocate(temp(3,wegroup))
@@ -4338,7 +4352,9 @@
     end do
 
     deallocate(temp)
-2   read(outpread,*)text
+2 continue
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
 
     if (wggroup==0) goto 3
     toutgap=0
@@ -4363,7 +4379,9 @@
 
     deallocate(temp)
 
-3   read(outpread,*)text
+3 continue
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(outpread,*)text
 
     if (wjgroup==0) return
     toutmcjoint=0
