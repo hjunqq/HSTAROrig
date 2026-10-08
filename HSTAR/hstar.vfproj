@@ -29,7 +29,7 @@
 		</Configuration>
 		<Configuration Name="Debug|x64" UseCompiler="ifxCompiler">
 			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" WarnInterfaces="true" Traceback="true" BoundsCheck="true" RuntimeLibrary="rtMultiThreadedDebug" UseMkl="mklParallel"/>
-			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="lib64" GenerateManifest="false" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies="shlwapi.lib;zlib.lib;libhdf5_hl.lib;libhdf5.lib;gidpost.lib"/>
+			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="lib64" GenerateManifest="false" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies="shlwapi.lib zlib.lib libhdf5_hl.lib libhdf5.lib gidpost.lib"/>
 			<Tool Name="VFResourceCompilerTool"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
 			<Tool Name="VFCustomBuildTool"/>

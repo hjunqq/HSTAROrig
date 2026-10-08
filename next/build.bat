@@ -25,7 +25,7 @@ cd /d "%BUILD_DIR%"
 set FC=ifx
 set "MKL_INC=C:\Program Files (x86)\Intel\oneAPI\mkl\2025.3\include"
 set "MKL_LIB=C:\Program Files (x86)\Intel\oneAPI\mkl\2025.3\lib"
-set FFLAGS=/nologo /debug:full /Od /warn:interfaces /traceback /check:bounds /Qmkl:parallel /I"%NEXT_DIR%" /I"%MKL_INC%"
+set FFLAGS=/nologo /Qmkl:parallel /I"%NEXT_DIR%" /I"%MKL_INC%"
 
 REM Compile each file in dependency order
 echo [1/18] Vartype.f90

@@ -50,13 +50,13 @@
     integer(ink) Uopt_R,vcor_unit !20210502
     integer(ink) hwdirec  !20220105
     real   (irk) hcoord   !20220105
-    integer(ink) Blarge  !20221102, ¿¼ÂÇÁº°å´ó±äÐÎÓ°Ïì
+    integer(ink) Blarge  !20221102, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó°ï¿½ï¿½
 
     real   (irk) toler_force,lttime,f0,dfact,xload,yload,err,fincre
     real   (irk) preact0,preact1,preact4
     integer(ink) blks_new,incs_new,icttstif           !!rrr
-    integer(ink) Qstatic          !20221104,¸Ã²ÎÊýÖ¸¶¨Äâ¾²Á¦·¨ÖÐ¼ÓËÙ¶ÈËæ×ø±ê±ä»¯µÄµãÊý
-    integer(ink) :: inpunit=43    !20190810, Í¨µÀºÅ×öÁË¹æ·¶µ÷Õû
+    integer(ink) Qstatic          !20221104,ï¿½Ã²ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½â¾²ï¿½ï¿½ï¿½ï¿½ï¿½Ð¼ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ä»¯ï¿½Äµï¿½ï¿½ï¿½
+    integer(ink) :: inpunit=43    !20190810, Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¹æ·¶ï¿½ï¿½ï¿½ï¿½
     integer(ink) matno,index,order_int,ngaus,jndex,nstre,igaus,ielgroup,ielem, &
         jelem,kelem,jkelm,icjr !2003/10/31
     integer(ink),pointer::lnods(:)
@@ -74,6 +74,16 @@
     integer(ink) nstepjq,nstepjp,lquunit,disunit,pmtunit,stnunit,nliqu,omgunit !20231008
     integer(ink) out_gid_dismax !20231009
     real   (irk) base_freq
+    real   (irk) vie_base_force(3) !audit2026 VIE: sum per direction of ONLY the
+    !audit2026 absorbing-boundary incident-wave nodal loads injected into tofor
+    !audit2026 (Fem.f90:13960/13963/13967) - isolates the VIE RHS contribution
+    !audit2026 from gravity/inertia. It is a constant-coefficient linear combo of
+    !audit2026 the declared incident-wave curves (fchd,fchv); dynamic_vie_rhs binds it.
+    real   (irk) base_ext_force(3) !audit2026 P0-2 probe: sum of the assembled
+    !audit2026 external load vector (tofor) per direction, captured at the END of
+    !audit2026 FORCE_EXTERNAL - the DOWNSTREAM RHS observation point. Shielding the
+    !audit2026 tload->tofor scatter (Fem.f90:14015) zeroes the seismic here while
+    !audit2026 element%tload upstream still carries it.
     type shear_liquifaction
         real(irk),pointer::stres(:,:)
     end type shear_liquifaction
@@ -161,14 +171,14 @@
     integer (ink) miter_bt,iblks_bt,  neq_bt,mpairs,miter_state  !ctt2005 !fzx from solver
     integer (ink)   npoin_bem,nelem_bem,npoin_mxy,nelem_mxy
     integer (ink)   npoin_bcs,nelem_bcs  !20210328
-    integer(ink) nrcsteel,nwcpipe       !20210328(¿¼ÂÇ¸Ö½î»ìÄýÍÁÖ®¼äÕ³½á»¬ÒÆ+¸Ö½îµÄ×éÊý£©
-    integer(ink) nvarp_U,nintp_U,vdirect  !20210502,nvarp_U(UÐÍ¶É²ÛÄÚÈ¦×ø±ê¿É±ä½ÚµãÊý),nintp_U(ÓëÄÚÈ¦×ø±ê±ä»¯¹ØÁª½ÚµãÊý£©
-    integer(ink),allocatable::varplist_U(:,:),intplist_U(:,:) !20210502ÉÏÊöµãºÅÁÐ±í
-    real   (irk),allocatable::rintf_U(:,:) !20210502 ²åÖµÏµÊý
+    integer(ink) nrcsteel,nwcpipe       !20210328(ï¿½ï¿½ï¿½Ç¸Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö®ï¿½ï¿½Õ³ï¿½á»¬ï¿½ï¿½+ï¿½Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    integer(ink) nvarp_U,nintp_U,vdirect  !20210502,nvarp_U(Uï¿½Í¶É²ï¿½ï¿½ï¿½È¦ï¿½ï¿½ï¿½ï¿½É±ï¿½Úµï¿½ï¿½ï¿½),nintp_U(ï¿½ï¿½ï¿½ï¿½È¦ï¿½ï¿½ï¿½ï¿½ä»¯ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½
+    integer(ink),allocatable::varplist_U(:,:),intplist_U(:,:) !20210502ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½
+    real   (irk),allocatable::rintf_U(:,:) !20210502 ï¿½ï¿½ÖµÏµï¿½ï¿½
     real   (irk) radiusi,centerR(2)
     integer(ink)   Npara,Mvalue,Nblks_pb,mobstimes,Npoints_pb,Npoints_pbx !20210803
-    integer(ink) ngdis_bk  !20211121(·´ÑÝ¸ÕÌåÎ»ÒÆµÄ×éÊý£©
-    integer(ink) ngval_bk  !20211201(·´ÑÝ½ÚµãÖµµÄ×éÊý£©
+    integer(ink) ngdis_bk  !20211121(ï¿½ï¿½ï¿½Ý¸ï¿½ï¿½ï¿½Î»ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    integer(ink) ngval_bk  !20211201(ï¿½ï¿½ï¿½Ý½Úµï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
     !! for caculate the interal forces
     integer(ink) npface,ftfunit,mat_curve
@@ -356,17 +366,17 @@
     end type group_of_back_analysis !20230523
 
     type observation_node_information !20190810
-        integer(ink) inode,idofn  !inode¹Û²â½ÚµãºÅ£»idofn,¹Û²âµã×ÔÓÉ¶ÈÐòºÅ£¨ÔÚ1£ºmdofn£©ÖÐµÄÎ»ÖÃ£»
-        !!,jnode jnode ÎªÏà¶ÔÖµ¶ÔÓ¦½ÚµãºÅ
+        integer(ink) inode,idofn  !inodeï¿½Û²ï¿½Úµï¿½Å£ï¿½idofn,ï¿½Û²ï¿½ï¿½ï¿½ï¿½ï¿½É¶ï¿½ï¿½ï¿½Å£ï¿½ï¿½ï¿½1ï¿½ï¿½mdofnï¿½ï¿½ï¿½Ðµï¿½Î»ï¿½Ã£ï¿½
+        !!,jnode jnode Îªï¿½ï¿½ï¿½Öµï¿½ï¿½Ó¦ï¿½Úµï¿½ï¿½
         integer(ink) iblks,iincs,istep,ivalue_point,iobse,ic
-        integer(ink) jvalue   !Î»ÒÆÆðÊ¼¹Û²âµã
+        integer(ink) jvalue   !Î»ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½Û²ï¿½ï¿½
         real(irk) value_measure,value_computation !20220108
         real(irk),pointer::dudx(:),dudx2(:,:)  !20220108
     end type observation_node_information !20190810
 
     type back_parameter_information !20190810
-        integer(ink) imat,mode_transform   !imat:±»·´ÑÝµÄ²ÄÁÏºÅ;mode_transform:²ÎÊý±ä»»·½Ê½,0(²»±ä»»),1(µ¹Êý)
-        character (10) name  !name,±»·´ÑÝµÄ²ÄÁÏÃû
+        integer(ink) imat,mode_transform   !imat:ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄ²ï¿½ï¿½Ïºï¿½;mode_transform:ï¿½ï¿½ï¿½ï¿½ï¿½ä»»ï¿½ï¿½Ê½,0(ï¿½ï¿½ï¿½ä»»),1(ï¿½ï¿½ï¿½ï¿½)
+        character (10) name  !name,ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄ²ï¿½ï¿½ï¿½ï¿½ï¿½
         real(irk) factor,factor_inc
     end type back_parameter_information !20190810
 
@@ -437,7 +447,7 @@
             ft1(:),wt0(:),wt1(:),wt2(:),ctforce_stres0(:,:), &  !2019/03/19
             damage0(:),damage(:)
         real    (irk), pointer::kgdm(:)
-        real    (irk)  gapi,Rf,n,Pa,e,miu,thick,Ke,gamaw    !Ke¶ÔÓ¦ÓÚºÎ½ðÎÄµÄbeishu£¬2017/02/14
+        real    (irk)  gapi,Rf,n,Pa,e,miu,thick,Ke,gamaw    !Keï¿½ï¿½Ó¦ï¿½ÚºÎ½ï¿½ï¿½Äµï¿½beishuï¿½ï¿½2017/02/14
         type(gap_collect_node),pointer::gaps_collect(:) !2015/11/17
     end type gap_group
 
@@ -457,8 +467,8 @@
     end type gap_block_group
 
     !! end contact !ctt2005
-    !! £¨»ìÄýÍÁ+¸Ö½î¼°Óë»ìÄýÍÁÕ³½á£©½»»¥Çó½â 20210328
-    type line_steel_stick   !¶ÔÓ¦Ã¿¸ù¸Ö½î¼°¶ÔÓ¦µÄÁª½áµ¥Ôª
+    !! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½Ö½î¼°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ³ï¿½á£©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 20210328
+    type line_steel_stick   !ï¿½ï¿½Ó¦Ã¿ï¿½ï¿½ï¿½Ö½î¼°ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½áµ¥Ôª
         integer (ink)  npairs_sc,nline_s
         integer (ink), pointer::linenode_s(:,:),ianode_s(:,:),pairnode_sc(:)
         real    (irk), pointer::rot_sc(:,:),aera_sc(:),dl_s(:),rot_s(:,:),aera_s(:,:),tao_cs(:),slip_sc(:)
@@ -467,16 +477,16 @@
     end type line_steel_stick
 
 
-    type group_stick_and_steel  !¶ÔÓ¦Ò»ÖÖÀàÐÍµÄ¸Ö½î¼°¶ÔÓ¦Áª½áµ¥Ôª×é
-        integer (ink)  nline_g_sc,listgroup_s,listgroup_c,ikindsc,mxter !¶ÔÓ¦µÄconcreteµ¥Ôª×éºÅ
+    type group_stick_and_steel  !ï¿½ï¿½Ó¦Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ÍµÄ¸Ö½î¼°ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½áµ¥Ôªï¿½ï¿½
+        integer (ink)  nline_g_sc,listgroup_s,listgroup_c,ikindsc,mxter !ï¿½ï¿½Ó¦ï¿½ï¿½concreteï¿½ï¿½Ôªï¿½ï¿½ï¿½
         real    (irk)  diameter_s,ft,err_ctl
         type(line_steel_stick),pointer::line_g_sc(:)
     end type group_stick_and_steel  !20210328
 
-    !! end£¨»ìÄýÍÁ+¸Ö½î¼°Óë»ìÄýÍÁÕ³½á£©½»»¥Çó½â 20210308
+    !! endï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½Ö½î¼°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ³ï¿½á£©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 20210308
 
-    !! £¨»ìÄýÍÁ+ÀäÈ´Ë®¹Ü£©½»»¥Çó½â 20210411
-    type line_water_pipe   !¶ÔÓ¦Ã¿¸ùÀäÈ´Ë®¹Ü
+    !! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½È´Ë®ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 20210411
+    type line_water_pipe   !ï¿½ï¿½Ó¦Ã¿ï¿½ï¿½ï¿½ï¿½È´Ë®ï¿½ï¿½
         integer (ink)  nline_w,npairs_wc
         integer (ink), pointer::linenode_w(:,:),ianode_w(:,:),pairnode_wc(:)
         real    (irk), pointer::cmatrix_c(:,:),kmatrix_w(:,:),idcr(:,:)
@@ -484,13 +494,13 @@
     end type line_water_pipe
 
 
-    type group_water_pipe  !¶ÔÓ¦Ò»ÖÖÀàÐÍµÄÀäÈ´Ë®¹Ü
+    type group_water_pipe  !ï¿½ï¿½Ó¦Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Íµï¿½ï¿½ï¿½È´Ë®ï¿½ï¿½
         integer (ink)  nline_g_w,listgroup_w,listgroup_c,iwc
         real    (irk)  alfa1,Qw,lamda_w,density_w,Cw,begin_time,end_time,twater_curve,dtime_change
         type(line_water_pipe),pointer::line_g_w(:)
     end type group_water_pipe  !20210411
 
-    !! end£¨»ìÄýÍÁ+ÀäÈ´Ë®¹Ü£©½»»¥Çó½â 20210411
+    !! endï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½È´Ë®ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 20210411
 
 
     type(group_of_elements),       allocatable::group(:)
@@ -511,8 +521,8 @@
     type(back_points_information),      allocatable::para_points(:) !!20200819
     type(back_points_information),      allocatable::para_pointsx(:) !!20230523
 
-    type(group_stick_and_steel),  allocatable::rc_steel(:) !!20210308,×ÜµÄ¸Ö½î¼°¶ÔÓ¦Áª½áµ¥Ôª×é
-    type(group_water_pipe),  allocatable::wc_pipe(:) !!20210411,×ÜµÄÀäÈ´Ë®¹Ü
+    type(group_stick_and_steel),  allocatable::rc_steel(:) !!20210308,ï¿½ÜµÄ¸Ö½î¼°ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½áµ¥Ôªï¿½ï¿½
+    type(group_water_pipe),  allocatable::wc_pipe(:) !!20210411,ï¿½Üµï¿½ï¿½ï¿½È´Ë®ï¿½ï¿½
 
     type(gap_node), allocatable::gapnode(:)	 !2010/10
     type(gap_group), allocatable::gaps(:)  !ctt2005
@@ -609,7 +619,7 @@
     disunit=0     !73  for liqu judge
     pmtunit=0     !74  shear strain for calculaing permanent deformation  nzw 2013-5-8
     stnunit=0     !75  residual strain for calculaing permanent deformation  nzw 2013-5-8
-    gamamaxunit=1012  !20231008´æ´¢×î´ó¶¯¼ôÓ¦±ä
+    gamamaxunit=1012  !20231008ï¿½æ´¢ï¿½ï¿½ó¶¯¼ï¿½Ó¦ï¿½ï¿½
     !20231215YL
 
     title(1)='Ux'
@@ -955,7 +965,7 @@
 
     average_appear=0 !for stress average
     read(gunit,*)text
-    read(gunit,*)average_appear(1:ngroup) !=0 ²»²ÎÓëÓ¦Á¦Æ½¾ù£¬=1Ó¦Á¦ÍâÍÆ =2 Ó¦Á¦Ö±½ÓÆ½¾ù =-1°´Ô­À´·½Ê½ÍâÍÆ =-2°´Ô­À´·½Ê½Ö±½ÓÆ½¾ù
+    read(gunit,*)average_appear(1:ngroup) !=0 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½=1Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ =2 Ó¦ï¿½ï¿½Ö±ï¿½ï¿½Æ½ï¿½ï¿½ =-1ï¿½ï¿½Ô­ï¿½ï¿½ï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½ =-2ï¿½ï¿½Ô­ï¿½ï¿½ï¿½ï¿½Ê½Ö±ï¿½ï¿½Æ½ï¿½ï¿½
     read(gunit,*)text
     read(gunit,*)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
@@ -987,15 +997,15 @@
     read(gunit,*)Icaddmass,swlifs2006,toth,ifswater,ifsgravity,absorb,alfa_p4,stiff_p4
     read(gunit,*)text   !steel 2006
     read(gunit,*)ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimnrt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)
-    !ftcrack-´àÐÔ¿ªÁÑÊ±ÓÃ£¬¿¹À­Ç¿¶È
-    !coefMpa-Õ³½á»¬ÒÆÊ±µÄÏµÊý£¬10^6/EµÄµ¥Î»£¬±ÈÈç:µ¯Ä£²ÉÓÃPa,coefMpa=10^6,µ¯Ä£²ÉÓÃkPa,coefMpa=10^3
-    !ikindks-Õ³½á»¬ÒÆÇúÏßÀàÐÍ
-    !doubsig-=1µ¥µ¯»É£¬=2Ë«µ¯»É
-    !ktan1¡¢ktan2·¨Ïò¸Õ¶È£¬¿ÉÈ¡10^8kN/m^3
-    !nlocalbeam-¼¸×éµ¥ÔªÓÃ¾Ö²¿×ø±êÏµÇó½â£¬¹²ÓÃ½áµãµÄ×éÒªÃ´È«ÊÇÕûÌå£¬ÒªÃ´È«ÊÇ¾Ö²¿
-    !ndimnrt=ÓÐ¶àÉÙ¸öÕ³½áµ¥ÔªÇÐÏò¹Ì½á
-    !listglocbeam=¾Ö²¿×ø±êÏµÇó½âµÄ×éÁÐ±í
-    !lelenrt=ÇÐÏò¹Ì½áµ¥ÔªÁÐ±í
+    !ftcrack-ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½ï¿½Ê±ï¿½Ã£ï¿½ï¿½ï¿½ï¿½ï¿½Ç¿ï¿½ï¿½
+    !coefMpa-Õ³ï¿½á»¬ï¿½ï¿½Ê±ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½10^6/Eï¿½Äµï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½Pa,coefMpa=10^6,ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½kPa,coefMpa=10^3
+    !ikindks-Õ³ï¿½á»¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    !doubsig-=1ï¿½ï¿½ï¿½ï¿½ï¿½É£ï¿½=2Ë«ï¿½ï¿½ï¿½ï¿½
+    !ktan1ï¿½ï¿½ktan2ï¿½ï¿½ï¿½ï¿½Õ¶È£ï¿½ï¿½ï¿½È¡10^8kN/m^3
+    !nlocalbeam-ï¿½ï¿½ï¿½éµ¥Ôªï¿½Ã¾Ö²ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½â£¬ï¿½ï¿½ï¿½Ã½ï¿½ï¿½ï¿½ï¿½ï¿½ÒªÃ´È«ï¿½ï¿½ï¿½ï¿½ï¿½å£¬ÒªÃ´È«ï¿½Ç¾Ö²ï¿½
+    !ndimnrt=ï¿½Ð¶ï¿½ï¿½Ù¸ï¿½Õ³ï¿½áµ¥Ôªï¿½ï¿½ï¿½ï¿½Ì½ï¿½
+    !listglocbeam=ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½
+    !lelenrt=ï¿½ï¿½ï¿½ï¿½Ì½áµ¥Ôªï¿½Ð±ï¿½
     read(gunit,*)text !hxl2006 MIF
     read(gunit,*)ntrans,nlaymif,epsMIFb,gamaMIF,ifixvar0_inpb,camif,dxmif
     read(gunit,*)text
@@ -1012,7 +1022,7 @@
 
     print *,'uinitial=',uinitial(1:nblks)
 
-    read(gunit,*)text  !ÊäÈëÓënbackf/=0Ê±µÄÏà¹ØÄÚÈÝ
+    read(gunit,*)text  !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½nbackf/=0Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 
 
@@ -1482,7 +1492,7 @@
 
 
             end do
-            ! by LTC 2020/01/12 , ×®×÷ÎªÁºµ¥Ôª´¦Àí£¬×÷Îª´Ó½Úµã´¦Àí¡£
+            ! by LTC 2020/01/12 , ×®ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½Ó½Úµã´¦ï¿½ï¿½ï¿½ï¿½
         elseif(translg==-10)then
 
             do itrans=1,ntransnode
@@ -1585,8 +1595,8 @@
             end do
 
         elseif(translg==40)then  !20231008
-            !*******for shell to body element nodes¿ÇÖÐÐÄµãÓë±íÃæ½ÚµãÎ»ÒÆ×ª»»£¨±íÃæ½ÚµãÎªÕûÌåÎ»ÒÆ£¬¿ÇÖÐÐÄ½ÚµãÎª¾Ö²¿×ø±êÎ»ÒÆ£©
-            ! ¸ø¶¨²åÖµÏµÊýÒÑ¾­¿¼ÂÇÁË¿Õ¼ä×ø±êÏµµÄ×ª»»
+            !*******for shell to body element nodesï¿½ï¿½ï¿½ï¿½ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Î»ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Îªï¿½ï¿½ï¿½ï¿½Î»ï¿½Æ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä½Úµï¿½Îªï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½Æ£ï¿½
+            ! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÖµÏµï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¿Õ¼ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½×ªï¿½ï¿½
 
             do itrans=1,ntransnode
                 read(nrtunit,*)i0,ipoin,jpoin
@@ -1734,10 +1744,10 @@
             allocate( backf(idofn)%listp(backf(idofn)%mdism),   &
                 backf(idofn)%dism(backf(idofn)%mdism,backf(idofn)%wstep),backf(idofn)%listdim(backf(idofn)%mdism),      &
                 backf(idofn)%wtime(backf(idofn)%wstep),   &
-                backf(idofn)%relat(backf(idofn)%mdism),backf(idofn)%ic(backf(idofn)%mdism)) !+ic£¬20210726
+                backf(idofn)%relat(backf(idofn)%mdism),backf(idofn)%ic(backf(idofn)%mdism)) !+icï¿½ï¿½20210726
 
             do i0=1,backf(idofn)%mdism  !i0,20230523
-                read(observc_unit,*)j0,jdofn,nintf  !,backf(idofn)%dism(i0)  !½ÚµãºÅ£¬×ÔÓÉ¶È£¬²åÖµµãÊý
+                read(observc_unit,*)j0,jdofn,nintf  !,backf(idofn)%dism(i0)  !ï¿½Úµï¿½Å£ï¿½ï¿½ï¿½ï¿½É¶È£ï¿½ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½
                 !print *,'i0=',i0,'j0,jdofn,nintf=',j0,jdofn,nintf
                 allocate(listf(nintf),rintf(nintf))
                 read(observc_unit,*)listf
@@ -1760,7 +1770,7 @@
             read(observc_unit,*)backf(idofn)%wtime
             print *,'text,backf(idofn)%wstep=',text,backf(idofn)%wstep
             do j0=1, backf(idofn)%mdism!j0
-                read(observc_unit,*)backf(idofn)%dism(j0,:)  !×ÜÎ»ÒÆ£¨Ïà¶ÔµãºÅÎªÁã£©»òÏà¶ÔÎ»
+                read(observc_unit,*)backf(idofn)%dism(j0,:)  !ï¿½ï¿½Î»ï¿½Æ£ï¿½ï¿½ï¿½Ôµï¿½ï¿½Îªï¿½ã£©ï¿½ï¿½ï¿½ï¿½ï¿½Î»
             enddo !j0 20230523
 
         enddo !idofn !20230523
@@ -1768,7 +1778,7 @@
 
     !!!!
     if(Bparameter>0.or.nbackdT==2)then !20230523
-        read(back_ctl_unit,*)text  !ÊäÈëÓëBparameter/=0Ê±µÄÏà¹ØÄÚÈÝ£¨²»ÎªÁãÊ±£¬Ö´ÐÐ²ÎÊýÓÅ»¯·´ÑÝ£©
+        read(back_ctl_unit,*)text  !ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Bparameter/=0Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½Îªï¿½ï¿½Ê±ï¿½ï¿½Ö´ï¿½Ð²ï¿½ï¿½ï¿½ï¿½Å»ï¿½ï¿½ï¿½ï¿½Ý£ï¿½
         read(back_ctl_unit,*)Npoints_pb   !20230523
         print *,'Npoints_pb=',Npoints_pb
 
@@ -1921,7 +1931,7 @@
         do inode=1,nnormp4(ipoin)
             do jnode=inode+1,nnormp4(ipoin)
                 value=dot_product(p4p(ipoin)%norm(:,inode),p4p(ipoin)%norm(:,jnode))
-                if(abs(value)<cosd(alfa_p4))then !abs(value),¼ÓABSµÄÔ­ÒòÊÇÃæÓÐ¿ÉÄÜÊÇÏà·´µÄ
+                if(abs(value)<cosd(alfa_p4))then !abs(value),ï¿½ï¿½ABSï¿½ï¿½Ô­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à·´ï¿½ï¿½
                     ipp4(ipoin)=0
                     goto 10101
                 endif
@@ -1933,7 +1943,7 @@
     !write(7,*)'ipp4 for p4'
     !do ipoin=1,npoin
     !   if(ipp4(ipoin)==0)cycle
-    !   write(7,*)'ipoin=',ipoin !ipp4(ipoin)==1µÄµã£¬ËµÃ÷ÈÆ´ËµãµÄµ¥ÔªµÄÍâ·¨Ïò¼Ð½ÇÐ¡ÓÚalfa_p4£¬Ò²¾ÍÊÇ»ù±¾ÔÚÒ»¸öÆ½ÃæÄÚ
+    !   write(7,*)'ipoin=',ipoin !ipp4(ipoin)==1ï¿½Äµã£¬Ëµï¿½ï¿½ï¿½Æ´Ëµï¿½Äµï¿½Ôªï¿½ï¿½ï¿½â·¨ï¿½ï¿½Ð½ï¿½Ð¡ï¿½ï¿½alfa_p4ï¿½ï¿½Ò²ï¿½ï¿½ï¿½Ç»ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½
     !enddo
 
     do ipoin=1,npoin
@@ -1979,7 +1989,7 @@
         end do
     end do
 
-    !!20230523 !¾É°æ±¾½«¼à²âµãÓëÍø¸ñ½ÚµãÖØºÏ£¬ÐèÒª¶ÔÎ»ÒÆ·ÖÀë·´ÑÝµÄ½Úµã¼ÓÈë¼ÆËã×ÔÓÉ¶È£¬ÐÂ°æ±¾²»ÐèÒª¡£
+    !!20230523 !ï¿½É°æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ØºÏ£ï¿½ï¿½ï¿½Òªï¿½ï¿½Î»ï¿½Æ·ï¿½ï¿½ë·´ï¿½ÝµÄ½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É¶È£ï¿½ï¿½Â°æ±¾ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½
     !if(nbackf/=0)then
     !    		       do igapbf=1,nbackf
     !                     do kpoin=1,backf(igapbf)%mdism
@@ -1994,7 +2004,7 @@
     !!20230523
 
     !20210803
-    !if(Bparameter>0)then  !¾É°æ±¾½«¼à²âµãÓëÍø¸ñ½ÚµãÖØºÏ£¬ÐèÒª¸ø¶¨×ÔÓÉ¶È£¬ÐÂ°æ±¾²»ÐèÒª
+    !if(Bparameter>0)then  !ï¿½É°æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ØºÏ£ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É¶È£ï¿½ï¿½Â°æ±¾ï¿½ï¿½ï¿½ï¿½Òª
     !  do i=1,Npoints_pb !20230523
     !  inode=para_points(i)%inode
     !  idofn=para_points(i)%idofn
@@ -3418,8 +3428,8 @@
         !      read(gunit,*)gaps(igaps)%e,gaps(igaps)%miu,gaps(igaps)%thick
         !      e=gaps(igaps)%e
         !      miu=gaps(igaps)%miu
-        !        lambda=e*miu/((1+miu)*(1-2*miu))	!À­Ã·³£Êý
-        !     g=e/(2*(1+miu))						!¼ôÇÐÄ£Á¿
+        !        lambda=e*miu/((1+miu)*(1-2*miu))	!ï¿½ï¿½Ã·ï¿½ï¿½ï¿½ï¿½
+        !     g=e/(2*(1+miu))						!ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½
         !      gaps(igaps)%kgroup0(ndimn,ndimn)=1./(lambda+2*g)/gaps(igaps)%thick
         !gaps(igaps)%kgroup0(1,1)=1./g/gaps(igaps)%thick
         !      if(ndimn==3)gaps(igaps)%kgroup0(2,2)=1./g/gaps(igaps)%thick
@@ -3461,7 +3471,7 @@
             allocate(gapb(igapb)%center(ndimn),gapb(igapb)%ext_force(3*(ndimn-1)))  !20231019
             gapb(igapb)%ext_force=0. !20231019
             if(type_problem=='F')allocate(gapb(igapb)%mass_inertia(3*(ndimn-1)))
-            allocate(gapb(igapb)%listrdof(gapb(igapb)%nrdof)) !fzx Ô¼ÊøµãµÄÈý¸ö£¨¶þÎ¬£©¡¢Áù¸ö£¨ÈýÎ¬£©×ÔÓÉ¶ÈµÄÕûÌå×ÔÓÉ¶ÈºÅ
+            allocate(gapb(igapb)%listrdof(gapb(igapb)%nrdof)) !fzx Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½ï¿½ï¿½ï¿½ï¿½É¶Èµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É¶Èºï¿½
             read(gunit,*)gapb(igapb)%listrdof
         endif
 
@@ -3477,7 +3487,7 @@
 
     end do
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !¿¼ÂÇ¼«ÏÞÆ½ºâ
+    !ï¿½ï¿½ï¿½Ç¼ï¿½ï¿½ï¿½Æ½ï¿½ï¿½
 
     if(block_stab==1)then
         print *,'block_stab=',block_stab
@@ -3760,7 +3770,7 @@
     endif
 
 
-    !!!!!!!!!!!!!!!!!!!!!!!!!! ÒÔ½Úµã¶Ô×÷Îª½Ó´¥µã¶Ô
+    !!!!!!!!!!!!!!!!!!!!!!!!!! ï¿½Ô½Úµï¿½ï¿½ï¿½ï¿½Îªï¿½Ó´ï¿½ï¿½ï¿½ï¿½
     if(contactpe==2) go to 10
 
     mpairs=0 !zhao 05/09/06ctr
@@ -4117,7 +4127,7 @@
             enddo
         end do
 
-        !if(nbackf/=0)then  !!20230523   ´Ë¶Î×¨ÎªÎ»ÒÆ·ÖÀë·´ÑÝÉèÖÃ
+        !if(nbackf/=0)then  !!20230523   ï¿½Ë¶ï¿½×¨ÎªÎ»ï¿½Æ·ï¿½ï¿½ë·´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         !    		       do igapbf=1,nbackf
         !          if(igapb/=backf(igapbf)%groupb) cycle
         !                do kpoin=1,backf(igapbf)%mdism
@@ -4128,9 +4138,9 @@
         !                end do
         !                end do
         !
-        !endif !!20230523   ´Ë¶Î×¨ÎªÎ»ÒÆ·ÖÀë·´ÑÝÉèÖÃ
+        !endif !!20230523   ï¿½Ë¶ï¿½×¨ÎªÎ»ï¿½Æ·ï¿½ï¿½ë·´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
-        if(block_stab==2)then  !!20191031   ´Ë¶Î×¨Îª£¨¿éÌå+½çÃæÔª²»¹²Íø¸ñ£©µÄ¿éÌå¼«ÏÞÆ½ºâ·ÖÎöÉèÖÃ
+        if(block_stab==2)then  !!20191031   ï¿½Ë¶ï¿½×¨Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ñ£©µÄ¿ï¿½ï¿½å¼«ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
             do igroup=1,gapb(igapb)%ngroupb
                 jgroup=gapb(igapb)%listgroupb(igroup)
@@ -4497,7 +4507,7 @@
                 wc_pipe(i0)%line_g_w(i1)%ianode_w(2,j1)=j1+1
             end do
 
-            do j1=1,nel_pipe(i1)  !Ë®¹Üµ¥Ôª¸Õ¶È¾ØÕó
+            do j1=1,nel_pipe(i1)  !Ë®ï¿½Üµï¿½Ôªï¿½Õ¶È¾ï¿½ï¿½ï¿½
 
                 k2(1,1)=-1.;k2(1,2)=1.;k2(2,1)=-1.;k2(2,2)=1.
                 k2=k2*alfa1*.5*(Cw*density_w*Qw)/lamda_w
@@ -4662,7 +4672,7 @@
                 !print *,'ipairs=',ipairs,'rot_sc=',rc_steel(i0)%line_g_sc(i1)%rot_sc(:,ipairs)
             end do
 
-            do j1=1,nel_steel(i1)  !¸Ö½îµ¥Ôª¸Õ¶È¾ØÕó
+            do j1=1,nel_steel(i1)  !ï¿½Ö½îµ¥Ôªï¿½Õ¶È¾ï¿½ï¿½ï¿½
 
                 dl= rc_steel(i0)%line_g_sc(i1)%dl_s(j1)
                 aera_s=3.14159*(.5*diameter_s)**2
@@ -4858,7 +4868,7 @@
     end subroutine contact_pair_process0
 
     subroutine contact_pair_process  !20210630
-    !20210630ÐÞ¸Ä£º¶ÔÓÚ²»²ÎÓëÔËËã¿éÌåµ¥Ôª×é£¬Æä½Ó´¥µã¶Ô²»¿¼ÂÇÊ©¹¤¹ý³ÌÓ°Ïì¡£
+    !20210630ï¿½Þ¸Ä£ï¿½ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½åµ¥Ôªï¿½é£¬ï¿½ï¿½Ó´ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½ï¿½Ê©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó°ï¿½ì¡£
 
     integer(ink) igroup,ielem,igaps,ipairs,npairs,ielgroup,ipoin1,ipoin2,eblock,igapb,jgroup
     integer(ink),allocatable::ipx(:)
