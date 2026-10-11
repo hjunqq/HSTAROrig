@@ -17,9 +17,29 @@ module native_input
   integer, parameter :: native_nodes(17) = [1,18,35,52,69,86,103,120,137,154,171,188,205,222,239,256,273]
   type(toml_doc_t), private :: doc
   logical, allocatable, private :: seen(:)
+  ! PRE pilot: HSTAR_NATIVE_PRE=contract (default, profile constants) | toml (boundary data from TOML)
+  logical :: native_pre_toml=.false., native_pre_receipt_on=.false.
+  type, private :: pre_set_t
+    integer :: ifixvar=0, itcurve=0, outfix=1
+    real(real64) :: value=0._real64
+    integer, allocatable :: nodes(:)
+  end type
+  type, private :: pre_step_t
+    type(pre_set_t), allocatable :: sets(:)
+  end type
+  type, private :: pre_nset_t
+    character(len=TOML_LEN_TEXT) :: name=""
+    integer, allocatable :: nodes(:)
+  end type
+  type, private :: pre_cand_t
+    integer :: dof, nset, bnd, itcurve, outfix
+    real(real64) :: val
+  end type
+  type(pre_step_t), allocatable, private :: native_pre(:)
 contains
   subroutine native_start()
     character(1024) :: flag, filename
+    character(256) :: pre_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -33,6 +53,15 @@ contains
     if(file_size > 65536) call native_error('TOML exceeds profile limit (64 KiB)')
     j=max(index(trim(filename),'/',back=.true.),index(trim(filename),achar(92),back=.true.))
     native_mesh_prefix=filename(:j)//'1'
+    call get_environment_variable("HSTAR_NATIVE_PRE",pre_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_PRE too long")
+    if(ios==0 .and. len_trim(pre_env)>0) then
+      select case(trim(pre_env))
+      case("contract"); native_pre_receipt_on=.true.
+      case("toml"); native_pre_toml=.true.; native_pre_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_PRE must be contract or toml")
+      end select
+    endif
     call toml_read(trim(filename),doc)
     if(doc%failed) then
       write(error_unit,*) 'TOML line',doc%fail_line
@@ -89,6 +118,7 @@ contains
       if(native_substeps(i)<1 .or. native_substeps(i)>100) call native_error('substeps out of range [1,100]')
       if(native_iterations(i)<1 .or. native_iterations(i)>100) call native_error('max_iterations out of range [1,100]')
     enddo
+    if(native_pre_toml) call parse_pre()
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
     enddo
@@ -202,6 +232,197 @@ contains
     close(u)
   end subroutine
 
+  ! ---------------------------------------------------------------------------
+  ! PRE pilot (HSTAR_NATIVE_PRE=toml): boundary data come from validated TOML
+  ! instead of the profile constants. See pilot_design.md (decisions 1-10).
+  ! ---------------------------------------------------------------------------
+  function itoa(i) result(s)
+    integer, intent(in) :: i
+    character(:), allocatable :: s
+    character(16) :: b
+    write(b,"(i0)") i
+    s=trim(b)
+  end function
+
+  logical function pre_owned(path)
+    character(*), intent(in) :: path
+    pre_owned=.false.
+    if(.not.native_pre_toml) return
+    pre_owned = index(path,"nset[")==1 .or. index(path,".boundary[")>0
+  end function
+
+  function string_value(path) result(s)
+    character(*), intent(in) :: path
+    character(:), allocatable :: s
+    integer :: k
+    k=key_index(path)
+    if(doc%entry(k)%kind /= TV_STR) call native_error("expected string: "//path)
+    s=trim(doc%entry(k)%svalue)
+  end function
+
+  subroutine parse_pre()
+    type(pre_nset_t), allocatable :: ns(:)
+    type(pre_cand_t), allocatable :: cand(:)
+    type(pre_cand_t) :: t
+    integer, allocatable :: owner(:,:)
+    character(*), parameter :: dofname(3)=["ux","uy","uz"]
+    character(:), allocatable :: p, q, sp, nm, dn, amp
+    integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre
+    real(real64) :: val
+    ndim_pre=2
+    nn=doc%count_of("nset")
+    if(nn<1) call native_error("at least one [[nset]] is required")
+    allocate(ns(nn))
+    do i=1,nn
+      p=indexed("nset",i)
+      k=key_index(p//".@table")
+      ns(i)%name=string_value(p//".name")
+      if(len(ns(i)%name)==0) call native_error("empty nset name: "//p)
+      do j=1,i-1
+        if(trim(ns(j)%name)==trim(ns(i)%name)) call native_error("duplicate nset name: "//trim(ns(i)%name))
+      enddo
+      n=integer_value(p//".nodes.count")
+      if(n<1) call native_error("nset has no nodes: "//trim(ns(i)%name))
+      allocate(ns(i)%nodes(n))
+      do k=1,n
+        v=integer_value(indexed(p//".nodes",k))
+        if(v<1 .or. v>native_points) call native_error("node out of range 1.."//itoa(native_points)//" in nset "//trim(ns(i)%name)//": "//itoa(v))
+        do j=1,k-1
+          if(ns(i)%nodes(j)==v) call native_error("duplicate node "//itoa(v)//" in nset "//trim(ns(i)%name))
+        enddo
+        ns(i)%nodes(k)=v
+      enddo
+    enddo
+    k=doc%find("amplitude[1].name")
+    if(k==0) call native_error("missing: amplitude[1].name")
+    amp=trim(doc%entry(k)%svalue)
+    allocate(native_pre(native_blocks))
+    do s=1,native_blocks
+      sp=indexed("step",s)
+      nb=doc%count_of(sp//".boundary")
+      if(nb<1) call native_error("step "//itoa(s)//": at least one [[step.boundary]] is required")
+      allocate(owner(3,native_points)); owner=0
+      allocate(cand(3*nb)); ncand=0
+      do b=1,nb
+        q=indexed(sp//".boundary",b)
+        k=key_index(q//".@table")
+        nm=string_value(q//".nset")
+        idx=0
+        do i=1,nn
+          if(trim(ns(i)%name)==nm) idx=i
+        enddo
+        if(idx==0) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined nset "//nm)
+        val=number(q//".value")
+        itc=0
+        kk=doc%find(q//".amplitude")
+        if(kk>0) then
+          if(string_value(q//".amplitude")/=amp) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined amplitude")
+          itc=1
+        endif
+        outf=1
+        kk=doc%find(q//".output_reactions")
+        if(kk>0) then
+          kk=key_index(q//".output_reactions")
+          if(doc%entry(kk)%kind /= TV_BOOL) call native_error("expected boolean: "//q//".output_reactions")
+          outf=merge(1,0,doc%entry(kk)%lvalue)
+        endif
+        nd=integer_value(q//".dof.count")
+        if(nd<1) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": empty dof list")
+        do d=1,nd
+          dn=string_value(indexed(q//".dof",d))
+          select case(dn)
+          case("ux"); dof=1
+          case("uy"); dof=2
+          case("uz"); dof=3
+          case("rx","ry","rz")
+            call native_error("rotational dof "//dn//" is not supported in the PRE pilot (step "//itoa(s)//" boundary "//itoa(b)//")")
+          case default
+            call native_error("unknown dof "//dn//" (expected ux, uy, uz) in step "//itoa(s)//" boundary "//itoa(b))
+          end select
+          if(dof>ndim_pre) call native_error("dof "//dn//" not available: mesh.dimension is "//itoa(ndim_pre))
+          do k=1,size(ns(idx)%nodes)
+            v=ns(idx)%nodes(k)
+            if(owner(dof,v)/=0) call native_error("duplicate constraint: step "//itoa(s)//" node "//itoa(v)//" dof "//dofname(dof)// &
+                 " (boundary "//itoa(owner(dof,v))//" and boundary "//itoa(b)//")")
+            owner(dof,v)=b
+          enddo
+          ncand=ncand+1
+          cand(ncand)=pre_cand_t(dof,idx,b,itc,outf,val)
+        enddo
+      enddo
+      ! canonical order (decision 7): dof ascending, then nset definition order
+      do i=2,ncand
+        t=cand(i); j=i-1
+        do while(j>=1)
+          if(cand(j)%dof<t%dof .or. (cand(j)%dof==t%dof .and. cand(j)%nset<t%nset)) exit
+          cand(j+1)=cand(j); j=j-1
+        enddo
+        cand(j+1)=t
+      enddo
+      allocate(native_pre(s)%sets(ncand))
+      do i=1,ncand
+        native_pre(s)%sets(i)%ifixvar=cand(i)%dof
+        native_pre(s)%sets(i)%itcurve=cand(i)%itcurve
+        native_pre(s)%sets(i)%outfix=cand(i)%outfix
+        native_pre(s)%sets(i)%value=cand(i)%val
+        native_pre(s)%sets(i)%nodes=ns(cand(i)%nset)%nodes
+      enddo
+      deallocate(owner,cand)
+    enddo
+  end subroutine
+
+  integer function native_pre_nfix(iblk) result(n)
+    integer, intent(in) :: iblk
+    if(.not.native_pre_toml) then
+      n=2
+    else
+      if(iblk<1 .or. iblk>size(native_pre)) call native_error("PRE: no boundary data for block "//itoa(iblk))
+      n=size(native_pre(iblk)%sets)
+    endif
+  end function
+
+  subroutine native_pre_head(iblk,iset,ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr)
+    integer, intent(in) :: iblk,iset
+    integer, intent(out) :: ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,nextr
+    real(real64), intent(out) :: gamawx
+    ifixvar=native_pre(iblk)%sets(iset)%ifixvar
+    nfixnods=size(native_pre(iblk)%sets(iset)%nodes)
+    itcurve=native_pre(iblk)%sets(iset)%itcurve
+    outfix=native_pre(iblk)%sets(iset)%outfix
+    tfixvar=0; jfixvar=0; gamawx=0._real64; nextr=0
+  end subroutine
+
+  subroutine native_pre_nodes(iblk,iset,list)
+    integer, intent(in) :: iblk,iset
+    integer, intent(out) :: list(:)
+    list=native_pre(iblk)%sets(iset)%nodes
+  end subroutine
+
+  subroutine native_pre_values(iblk,iset,vals)
+    integer, intent(in) :: iblk,iset
+    real(real64), intent(out) :: vals(:)
+    vals=native_pre(iblk)%sets(iset)%value
+  end subroutine
+
+  ! Receipt of what prescrib_set actually stored (read back from prescrib, not from TOML).
+  subroutine native_pre_receipt(iblk,n,ifixset,ifixvar,node,ldofix,itcurve,outfix,jfixvar,vdofix)
+    integer, intent(in) :: iblk,n,ifixset(n),ifixvar(n),node(n),ldofix(n),itcurve(n),outfix(n),jfixvar(n)
+    real(real64), intent(in) :: vdofix(n)
+    integer :: u,i
+    if(iblk==1) then
+      open(newunit=u,file="native-pre.txt",status="replace",action="write")
+      write(u,"(a)") "native-pre v1 mode="//trim(merge("toml    ","contract",native_pre_toml))
+    else
+      open(newunit=u,file="native-pre.txt",status="unknown",position="append",action="write")
+    endif
+    write(u,"(a,i0,a,i0)") "block=",iblk," ndofix=",n
+    write(u,"(a)") "ifixset ifixvar node ldofix itcurve outfix jfixvar value"
+    do i=1,n
+      write(u,"(7(i0,1x),es25.16)") ifixset(i),ifixvar(i),node(i),ldofix(i),itcurve(i),outfix(i),jfixvar(i),vdofix(i)
+    enddo
+    close(u)
+  end subroutine
+
   subroutine native_error(message)
     character(*), intent(in) :: message
     write(error_unit,'(a)') 'INVALID_INPUT TOML-03/04: '//message
@@ -238,16 +459,19 @@ contains
   subroutine expect_int(path,v)
     character(*), intent(in) :: path
     integer, intent(in) :: v
+    if(pre_owned(path)) return
     if(integer_value(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_real(path,v)
     character(*), intent(in) :: path
     real(real64), intent(in) :: v
+    if(pre_owned(path)) return
     if(number(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_str(path,v)
     character(*), intent(in) :: path,v
     integer :: k
+    if(pre_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_STR) call native_error('expected string: '//path)
     if(doc%entry(k)%svalue /= v) call native_error('unsupported value: '//path)
@@ -256,6 +480,7 @@ contains
     character(*), intent(in) :: path
     logical, intent(in) :: v
     integer :: k
+    if(pre_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_BOOL) call native_error('expected boolean: '//path)
     if(doc%entry(k)%lvalue .neqv. v) call native_error('unsupported value: '//path)

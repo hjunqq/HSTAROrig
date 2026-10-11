@@ -221,7 +221,7 @@
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(punit,*)text
        if(native_mode) then
-           nfixsets=2
+           nfixsets=native_pre_nfix(iblks)
            nline=0
        else
        read(punit,*)nfixsets,nline
@@ -231,8 +231,12 @@
           print *,'ifixset=',ifixset,'type_abc=',type_abc
           if (type_abc=='MIF')read(punit,*)ifixvar,ifixvar0,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr  !20230402
           if(native_mode) then
+              if(native_pre_toml) then
+                  call native_pre_head(iblks,ifixset,ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr)
+              else
               ifixvar=ifixset; nfixnods=native_nbc(ifixset); itcurve=merge(1,0,native_dam); tfixvar=0
               outfix=1; jfixvar=0; gamawx=0.; nextr=0
+              endif
           else
           if (type_abc/='MIF')read(punit,*)ifixvar,nfixnods,itcurve,tfixvar,outfix,jfixvar,gamawx,nextr ! 20230402
           endif
@@ -241,13 +245,21 @@
           ! tfixvar indicates the time  order of the input fixed value
           allocate(list_fix(nfixnods))
           if(native_mode) then
+              if(native_pre_toml) then
+                  call native_pre_nodes(iblks,ifixset,list_fix)
+              else
               list_fix(1:nfixnods)=native_bc(1:nfixnods,ifixset)
+              endif
           else
           read(punit,*)list_fix(1:nfixnods)
           endif
           allocate(val_fix(nfixnods))
           if(native_mode) then
+              if(native_pre_toml) then
+                  call native_pre_values(iblks,ifixset,val_fix)
+              else
               val_fix(1:nfixnods)=0.
+              endif
           else
           read(punit,*)val_fix(1:nfixnods)
           endif
@@ -398,6 +410,10 @@
        end do                        !!end do ifixset
    end if  !20231130     
        
+    if(native_mode.and.native_pre_receipt_on.and.ndofix>0) &
+       call native_pre_receipt(iblks,ndofix,prescrib(1:ndofix)%ifixset,prescrib(1:ndofix)%ifixvar,prescrib(1:ndofix)%nodfix, &
+            prescrib(1:ndofix)%ldofix,prescrib(1:ndofix)%itcurve,prescrib(1:ndofix)%outfix,prescrib(1:ndofix)%jfixvar, &
+            prescrib(1:ndofix)%vdofix)
      print *,'outind=',outind
     if (outind>0) then   !20231113
     ndofix0=ndofix
