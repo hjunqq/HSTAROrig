@@ -3,6 +3,7 @@ module native_input
   use iso_fortran_env, only: real64, error_unit
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use yl_authoring_toml
+  use yl_sets
   implicit none
   character(1024) :: native_mesh_prefix='1'
   logical :: native_mode = .false.
@@ -100,6 +101,10 @@ module native_input
   real(real64) :: native_ek(NATIVE_MAXG)=0._real64, native_etak(NATIVE_MAXG)=0._real64, native_etam(NATIVE_MAXG)=0._real64
   real(real64), parameter :: native_kelvin_etam=1.e30_real64
   integer, private :: man_receipt_n=0
+  ! SETS pilot (sets-pilot/DESIGN.md, S1-S10): [mesh] sets_file = "1.set" (needs HSTAR_NATIVE_GLB=toml).
+  ! Without it the inline [[nset]]/[[surface]] edges/[[elset]] element_count forms are still read for
+  ! one version, with a deprecation warning on stderr.
+  logical :: native_sets_on=.false.
 contains
   subroutine native_start()
     character(1024) :: flag, filename
@@ -248,6 +253,13 @@ contains
     if(native_loa_toml) call loa_check_used()
     if(native_tem_toml) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
+    if(native_sets_on) then
+      if(len(sets_first_unreferenced())>0) call native_error("SETS: unreferenced "//sets_first_unreferenced())
+      call sets_receipt("native-sets.txt")
+    elseif(native_glb_toml .and. (doc%count_of("nset")>0 .or. doc%count_of("surface")>0 .or. doc%count_of("elset")>0)) then
+      write(error_unit,'(a)') "warning: inline [[nset]]/[[surface]]/[[elset]] tables are deprecated; "// &
+        "move them to 1.set ([mesh] sets_file, sets-pilot S2)"
+    endif
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
     enddo
@@ -404,6 +416,19 @@ contains
     logical, allocatable :: nref(:)
     real(real64) :: val
     ndim_pre=native_ndim
+    if(native_sets_on) then
+      nn=0
+      do i=1,sets_n
+        if(sets(i)%kind==SK_NSET) nn=nn+1
+      enddo
+      if(nn<1) call native_error("SETS: at least one nset is required in 1.set")
+      allocate(ns(nn)); j=0
+      do i=1,sets_n
+        if(sets(i)%kind/=SK_NSET) cycle
+        j=j+1; ns(j)%name=sets(i)%name; ns(j)%nodes=sets(i)%m
+        if(any(ns(j)%nodes>native_points)) call native_error("node out of range 1.."//itoa(native_points)//" in nset "//trim(ns(j)%name))
+      enddo
+    else
     nn=doc%count_of("nset")
     if(nn<1) call native_error("at least one [[nset]] is required")
     allocate(ns(nn))
@@ -427,6 +452,7 @@ contains
         ns(i)%nodes(k)=v
       enddo
     enddo
+    endif
     allocate(nref(nn)); nref=.false.
     amp=""
     if(.not.native_loa_toml) then
@@ -451,6 +477,7 @@ contains
         enddo
         if(idx==0) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined nset "//nm)
         nref(idx)=.true.
+        if(native_sets_on) kk=sets_find(SK_NSET,nm)
         val=number(q//".value")
         itc=0
         kk=doc%find(q//".amplitude")
@@ -514,6 +541,7 @@ contains
       deallocate(owner,cand)
     enddo
     do i=1,nn
+      if(native_sets_on) exit             ! 1.set: one global unreferenced check at the end of native_start
       if(.not.nref(i) .and. .not.loa_nset_referenced(ns(i)%name)) call native_error("unreferenced nset: "//trim(ns(i)%name))
     enddo
   end subroutine
@@ -644,7 +672,10 @@ contains
         endif
       enddo
     enddo
-    ! ---- [[surface]] (edge sets, D5)
+    ! ---- [[surface]] (edge sets, D5); with 1.set: the "surface ... edge" sets, in file order
+    if(native_sets_on) then
+      call loa_surfaces_from_sets(ns)
+    else
     ns=doc%count_of("surface")
     allocate(native_surf(ns))
     total=0
@@ -689,6 +720,7 @@ contains
       enddo
       native_surf(i)%last=total
     enddo
+    endif
     ! ---- [[step]] loads
     if(doc%count_of("step")/=native_blocks) call native_error("LOA: number of [[step]] must be "//itoa(native_blocks))
     allocate(native_loa(native_blocks))
@@ -738,6 +770,7 @@ contains
           if(idx==0) call native_error("LOA: step "//itoa(s)//": undefined surface "//nm)
           if(srf_step(idx)) call native_error("LOA: step "//itoa(s)//": surface "//nm//" loaded twice")
           srf_step(idx)=.true.; native_surf(idx)%used=.true.
+          if(native_sets_on) i=sets_find(SK_SURFACE,nm)
           wl=number(q//".water_level"); bt=number(q//".bottom"); gw=number(q//".unit_weight")
           if(wl<=bt) call native_error("LOA: step "//itoa(s)//": water_level must be above bottom")
           if(gw<0 .or. gw>1.e6_real64) call native_error("LOA: step "//itoa(s)//": unit_weight out of range [0,1e6]")
@@ -768,12 +801,18 @@ contains
       k=key_index(p//".@table")
       if(string_value(p//".type")/="concentrated") call native_error("LOA: top-level [[load]] supports only type = ""concentrated""")
       nm=string_value(p//".nset")
+      loa_nset_refs(ip)=nm
+      if(native_sets_on) then
+        idx=sets_find(SK_NSET,nm)
+        if(idx==0) call native_error("LOA: load "//itoa(ip)//": undefined nset "//nm)
+        native_pl(ip)%nodes=sets(idx)%m
+        if(any(native_pl(ip)%nodes>native_points)) call native_error("LOA: node out of range in nset "//nm)
+      else
       idx=0
       do i=1,nnset
         if(string_value(indexed("nset",i)//".name")==nm) idx=i
       enddo
       if(idx==0) call native_error("LOA: load "//itoa(ip)//": undefined nset "//nm)
-      loa_nset_refs(ip)=nm
       k=key_index(indexed("nset",idx)//".@table")
       k=integer_value(indexed("nset",idx)//".nodes.count")
       if(k<1) call native_error("LOA: nset "//nm//" has no nodes")
@@ -783,6 +822,7 @@ contains
         if(ii<1 .or. ii>native_points) call native_error("LOA: node out of range in nset "//nm)
         native_pl(ip)%nodes(j)=ii
       enddo
+      endif
       if(integer_value(p//".components.count")/=native_ndim) call native_error("LOA: load "//itoa(ip)// &
         ": components must have mesh.dimension ("//itoa(native_ndim)//") entries")
       native_pl(ip)%comp=0
@@ -1075,7 +1115,11 @@ contains
       call parse_creep(p,nm,i)
     enddo
     do j=1,ng
-      ename(j)=string_value(indexed("elset",j)//".name")
+      if(native_sets_on) then
+        ename(j)=native_kname(j)
+      else
+        ename(j)=string_value(indexed("elset",j)//".name")
+      endif
     enddo
     used=.false.; covered=.false.
     do k=1,nsec
@@ -1094,6 +1138,7 @@ contains
         if(trim(ename(j))==el) g=j
       enddo
       if(g==0) call native_error("MAT: section "//nm//": undefined elset "//el)
+      if(native_sets_on) i=sets_find(SK_ELSET,el)
       if(covered(g)) call native_error("MAT: elset "//el//" is assigned by more than one section")
       covered(g)=.true.
       if(native_glb_toml) then
@@ -1364,6 +1409,87 @@ contains
     close(u)
   end function
 
+  ! ---- SETS pilot helpers -------------------------------------------------
+  subroutine sets_init()
+    character(:), allocatable :: f, h, msg, dir
+    integer :: j
+    if(.not.native_glb_toml) call native_error("SETS: mesh.sets_file needs HSTAR_NATIVE_GLB=toml")
+    if(doc%count_of("nset")>0) call native_error("SETS: inline [[nset]] is not allowed with mesh.sets_file (define it in 1.set)")
+    if(doc%count_of("surface")>0) call native_error("SETS: inline [[surface]] is not allowed with mesh.sets_file (define it in 1.set)")
+    if(doc%count_of("elset")>0) call native_error("SETS: inline [[elset]] is not allowed with mesh.sets_file (define it in 1.set)")
+    f=string_value('mesh.sets_file')
+    if(len(f)==0 .or. len(f)>64 .or. scan(f,'/'//achar(92))>0) &
+      call native_error('SETS: mesh.sets_file must be a plain file name next to the TOML (e.g. "1.set")')
+    if(present_key('mesh.sets_sha256')) then
+      h=string_value('mesh.sets_sha256')          ! checked by the Python tools (S8)
+      if(len(h)/=64 .or. verify(h,'0123456789abcdef')/=0) call native_error('SETS: mesh.sets_sha256 must be 64 lowercase hex digits')
+    endif
+    j=len_trim(native_mesh_prefix)-1
+    dir=native_mesh_prefix(1:j)
+    call sets_load(trim(native_mesh_prefix),dir//f,msg)
+    if(len(msg)>0) call native_error(msg)
+    native_sets_on=.true.
+  end subroutine
+
+  ! elsets of 1.set = element groups, in file order; each a contiguous range, together tiling 1..nelem
+  subroutine glb_elsets_from_sets(ng,ename,total)
+    integer, intent(out) :: ng, total
+    character(len=TOML_LEN_TEXT), intent(inout) :: ename(:)
+    integer :: i, j, k
+    character(:), allocatable :: nm
+    ng=0; total=0
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_ELSET) cycle
+      ng=ng+1
+      if(ng>NATIVE_MAXG) call native_error('GLB: need 1..'//itoa(NATIVE_MAXG)//' elsets')
+      nm=trim(sets(i)%name)
+      if(len(nm)>20) call native_error('GLB: elset name longer than 20 characters: '//nm)
+      do k=1,sets(i)%n
+        if(sets(i)%m(k)/=total+k) call native_error('SETS: elset '//nm//' must be the contiguous element range '// &
+          itoa(total+1)//'..'//itoa(total+sets(i)%n)//' (elsets follow the element order of 1.ele)')
+      enddo
+      ename(ng)=nm; native_kname(ng)=nm
+      native_elcounts(ng)=sets(i)%n
+      total=total+sets(i)%n
+    enddo
+    if(ng<1) call native_error('GLB: need 1..'//itoa(NATIVE_MAXG)//' elsets in 1.set')
+    j=0
+  end subroutine
+
+  subroutine loa_surfaces_from_sets(ns)
+    integer, intent(out) :: ns
+    integer :: i, j, k, total, ie, e(3)
+    character(:), allocatable :: nm
+    ns=0; total=0
+    do i=1,sets_n
+      if(sets(i)%kind==SK_SURFACE .and. sets(i)%sub==SS_EDGE) then
+        ns=ns+1; total=total+sets(i)%n
+      endif
+    enddo
+    allocate(native_surf(ns), native_loa_edges(3,max(total,1)))
+    native_loa_nedge=total
+    total=0; k=0
+    do i=1,sets_n
+      if(.not.(sets(i)%kind==SK_SURFACE .and. sets(i)%sub==SS_EDGE)) cycle
+      k=k+1; nm=trim(sets(i)%name)
+      native_surf(k)%name=nm
+      if(native_ndim/=2) call native_error("LOA: surface "//nm//": edge2 surfaces need mesh.dimension 2 (3D faces are deferred)")
+      native_surf(k)%first=total+1
+      do j=1,sets(i)%n
+        call sets_edge_nodes(sets(i)%m(2*j-1),sets(i)%m(2*j),e(1),e(2))
+        e(3)=sets(i)%m(2*j-1)
+        do ie=1,total
+          if((native_loa_edges(1,ie)==e(1).and.native_loa_edges(2,ie)==e(2)) .or. &
+             (native_loa_edges(1,ie)==e(2).and.native_loa_edges(2,ie)==e(1))) &
+            call native_error("LOA: duplicate edge "//itoa(e(1))//"-"//itoa(e(2))//" in surface "//nm)
+        enddo
+        total=total+1
+        native_loa_edges(:,total)=e
+      enddo
+      native_surf(k)%last=total
+    enddo
+  end subroutine
+
   subroutine parse_glb()
     character(:), allocatable :: s, p, q, nm, el
     character(len=TOML_LEN_TEXT) :: ename(NATIVE_MAXG)
@@ -1384,11 +1510,15 @@ contains
     if(s/='static') call native_error('GLB: analysis.type "'//s//'" is deferred in the GLB pilot (only static)')
     ! [mesh]
     k=key_index('mesh.@table')
-    call glb_check_keys('mesh','@table file format dimension','')
+    call glb_check_keys('mesh','@table file format dimension sets_file sets_sha256','')
     if(string_value('mesh.file')/='1') call native_error('GLB: mesh.file must be "1" (1.cor / 1.ele next to the TOML)')
     if(string_value('mesh.format')/='hstar-legacy-cor-ele') call native_error('GLB: mesh.format must be "hstar-legacy-cor-ele"')
     native_ndim=integer_value('mesh.dimension')
     if(native_ndim/=2 .and. native_ndim/=3) call native_error('GLB: mesh.dimension must be 2 or 3')
+    if(present_key('mesh.sets_file')) call sets_init()
+    if(native_sets_on) then
+      call glb_elsets_from_sets(ng,ename,total)
+    else
     ! [[elset]] (group order = element order in 1.ele, legacy rule)
     ng=doc%count_of('elset')
     if(ng<1 .or. ng>NATIVE_MAXG) call native_error('GLB: need 1..'//itoa(NATIVE_MAXG)//' [[elset]] tables')
@@ -1409,6 +1539,7 @@ contains
       if(native_elcounts(i)<1) call native_error('GLB: elset '//nm//': element_count must be >= 1')
       total=total+native_elcounts(i)
     enddo
+    endif
     native_materials=ng
     ! element type per elset from [[section]] (G7); MAT checks the rest of the section
     nsec=doc%count_of('section')
@@ -1466,6 +1597,7 @@ contains
           if(trim(ename(k))==q) g=k
         enddo
         if(g==0) call native_error('GLB: '//p//': undefined elset '//q//' in active_elsets')
+        if(native_sets_on) k=sets_find(SK_ELSET,q)
         if(act(g)) call native_error('GLB: '//p//': elset '//q//' listed twice in active_elsets')
         act(g)=.true.
       enddo
