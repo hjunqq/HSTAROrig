@@ -80,10 +80,20 @@ module native_input
   ! TEM minimal step (T1/M8): HSTAR_NATIVE_TEM=contract (default) | toml (no temperature loading allowed)
   logical :: native_tem_toml=.false., native_tem_receipt_on=.false.
   integer, private :: tem_receipt_n=0
+  ! CREEP pilot phase 1 (creep-tem-pilot/DESIGN.md, C1-C8): HSTAR_NATIVE_MAN=contract (default,
+  ! time_increment 1 / tolerances 1e-5) | toml (step[i].controls.time_increment, tolerance_force,
+  ! tolerance_dof from TOML). Creep (Kelvin/Burgers = legacy icreep=4) lives under [[material]].creep
+  ! with HSTAR_NATIVE_MAT=toml. Contract defaults equal the constants Fem.f90 used before the seam.
+  logical :: native_man_toml=.false., native_man_receipt_on=.false.
+  real(real64) :: native_ditime(2)=1._real64, native_tol_force(2)=1.e-5_real64, native_tol_dof(2)=1.e-5_real64
+  integer :: native_icreep(2)=0
+  real(real64) :: native_ek(2)=0._real64, native_etak(2)=0._real64, native_etam(2)=0._real64
+  real(real64), parameter :: native_kelvin_etam=1.e30_real64
+  integer, private :: man_receipt_n=0
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env, loa_env, mat_env, tem_env
+    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -131,6 +141,15 @@ contains
       case("contract"); native_tem_receipt_on=.true.
       case("toml"); native_tem_toml=.true.; native_tem_receipt_on=.true.
       case default; call native_error("HSTAR_NATIVE_TEM must be contract or toml")
+      end select
+    endif
+    call get_environment_variable("HSTAR_NATIVE_MAN",man_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_MAN too long")
+    if(ios==0 .and. len_trim(man_env)>0) then
+      select case(trim(man_env))
+      case("contract"); native_man_receipt_on=.true.
+      case("toml"); native_man_toml=.true.; native_man_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_MAN must be contract or toml")
       end select
     endif
     call toml_read(trim(filename),doc)
@@ -191,6 +210,7 @@ contains
       if(native_substeps(i)<1 .or. native_substeps(i)>100) call native_error('substeps out of range [1,100]')
       if(native_iterations(i)<1 .or. native_iterations(i)>100) call native_error('max_iterations out of range [1,100]')
     enddo
+    if(native_man_toml) call parse_man()
     if(native_loa_toml) call parse_loa()
     if(native_pre_toml) call parse_pre()
     if(native_loa_toml) call loa_check_used()
@@ -933,7 +953,7 @@ contains
     character(len=TOML_LEN_PATH) :: rest
     character(:), allocatable :: seg
     integer :: i, n, d
-    character(*), parameter :: deferred = "creep plasticity plastic wetting liquefaction contact gap curve "// &
+    character(*), parameter :: deferred = "plasticity plastic wetting liquefaction contact gap curve "// &
       "stress_strain hardening damage duncan_chang goodman concrete cam_clay clay_pz sand_pz soil_pz "// &
       "fluid heat conductivity specific_heat geometry viscoelastic spring"
     n=len(p)+1
@@ -979,7 +999,8 @@ contains
       enddo
       mname(i)=nm
       call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
-        "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient","material "//nm)
+        "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient creep.@table creep.model "// &
+        "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity","material "//nm)
       s=string_value(p//".model")
       if(s=="elastic_isotropic") call native_error("MAT: material "//nm// &
         ': model "elastic_isotropic" is the contract spelling; with HSTAR_NATIVE_MAT=toml use "linear_elastic"')
@@ -1000,6 +1021,7 @@ contains
         if(native_alfa(i)<0 .or. native_alfa(i)>1.e-2_real64) &
           call native_error("MAT: material "//nm//": expansion_coefficient out of range [0,1e-2] 1/K")
       endif
+      call parse_creep(p,nm,i)
     enddo
     do j=1,ng
       ename(j)=string_value(indexed("elset",j)//".name")
@@ -1048,6 +1070,116 @@ contains
     do i=1,nmat
       if(.not.used(i)) call native_error("MAT: unreferenced material "//trim(mname(i)))
     enddo
+  end subroutine
+
+  ! [[material]].creep (phase 1, C2): model "kelvin" | "burgers" -> legacy icreep=4
+  ! (Ek, etak, etam). Kelvin stores etam = native_kelvin_etam (no Maxwell dashpot). Every
+  ! other creep form (legacy icreep 1/2/3) is a hard error.
+  subroutine parse_creep(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    character(:), allocatable :: s
+    native_icreep(i)=0
+    if(.not.present_key(p//".creep.model")) then
+      if(present_key(p//".creep.@table") .or. present_key(p//".creep.kelvin_modulus") .or. &
+         present_key(p//".creep.kelvin_viscosity") .or. present_key(p//".creep.maxwell_viscosity")) &
+        call native_error("MAT: material "//nm//": missing creep.model (kelvin or burgers)")
+      return
+    endif
+    s=string_value(p//".creep.model")
+    select case(s)
+    case("kelvin","burgers")
+    case default
+      call native_error("MAT: material "//nm//": creep model "//s//" is deferred (creep pilot phase 1 "// &
+        "supports only kelvin and burgers; legacy icreep 1/2/3 forms use the legacy .mat)")
+    end select
+    native_icreep(i)=4
+    native_ek(i)=number(p//".creep.kelvin_modulus")
+    if(native_ek(i)<=0 .or. native_ek(i)>1.e15_real64) &
+      call native_error("MAT: material "//nm//": creep.kelvin_modulus out of range (0,1e15] Pa")
+    native_etak(i)=number(p//".creep.kelvin_viscosity")
+    if(native_etak(i)<=0 .or. native_etak(i)>1.e25_real64) &
+      call native_error("MAT: material "//nm//": creep.kelvin_viscosity out of range (0,1e25] Pa*time")
+    if(s=="kelvin") then
+      if(present_key(p//".creep.maxwell_viscosity")) call native_error("MAT: material "//nm// &
+        ": creep.maxwell_viscosity is not allowed for model kelvin (use model burgers)")
+      native_etam(i)=native_kelvin_etam
+    else
+      native_etam(i)=number(p//".creep.maxwell_viscosity")
+      if(native_etam(i)<=0 .or. native_etam(i)>1.e25_real64) &
+        call native_error("MAT: material "//nm//": creep.maxwell_viscosity out of range (0,1e25] Pa*time")
+    endif
+  end subroutine
+
+  ! Appended to native-mat.txt from the stored props(imat)%mechanical%solid%creep fields.
+  subroutine native_creep_receipt(i,ek,etak,etam)
+    integer, intent(in) :: i
+    real(real64), intent(in) :: ek,etak,etam
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    write(u,"(a,es25.16)") "creep_Ek=",ek
+    write(u,"(a,es25.16)") "creep_etak=",etak
+    write(u,"(a,es25.16)") "creep_etam=",etam
+    close(u)
+  end subroutine
+
+  ! ---------------------------------------------------------------------------
+  ! MAN seam (phase 1, C4): HSTAR_NATIVE_MAN=toml owns step[i].controls.time_increment,
+  ! tolerance_force, tolerance_dof (static_U increment card: ditime, toler_force, toler_var).
+  ! ---------------------------------------------------------------------------
+  logical function man_owned(path)
+    character(*), intent(in) :: path
+    integer :: d
+    man_owned=.false.
+    if(.not.native_man_toml) return
+    if(index(path,"step[")/=1) return
+    d=index(path,"].controls.")
+    if(d==0) return
+    man_owned = in_list(trim(path(d+11:)),"time_increment tolerance_force tolerance_dof")
+  end function
+
+  subroutine parse_man()
+    integer :: i
+    character(:), allocatable :: p
+    do i=1,native_blocks
+      p=indexed("step",i)//".controls"
+      native_ditime(i)=number(p//".time_increment")
+      if(native_ditime(i)<=0 .or. native_ditime(i)>1.e6_real64) &
+        call native_error("MAN: "//p//".time_increment out of range (0,1e6]")
+      native_tol_force(i)=number(p//".tolerance_force")
+      if(native_tol_force(i)<=0 .or. native_tol_force(i)>1._real64) &
+        call native_error("MAN: "//p//".tolerance_force out of range (0,1]")
+      native_tol_dof(i)=number(p//".tolerance_dof")
+      if(native_tol_dof(i)<=0 .or. native_tol_dof(i)>1._real64) &
+        call native_error("MAN: "//p//".tolerance_dof out of range (0,1]")
+    enddo
+  end subroutine
+
+  subroutine native_man_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("MAN: "//what//" is deferred in the creep pilot and cannot be driven by TOML")
+  end subroutine
+
+  ! Written from the stored static_U increment variables (Fem.f90), once per increment card.
+  subroutine native_man_receipt(iblk,iincs,miter,ditime,nstep,inc_step,noutn,noutf,toler_force,toler_var)
+    integer, intent(in) :: iblk,iincs,miter,nstep,inc_step,noutn,noutf
+    real(real64), intent(in) :: ditime,toler_force,toler_var(:)
+    integer :: u
+    if(.not.native_man_receipt_on) return
+    man_receipt_n=man_receipt_n+1
+    if(man_receipt_n==1) then
+      open(newunit=u,file="native-man.txt",status="replace",action="write")
+      write(u,"(a)") "native-man v1 mode="//trim(merge("toml    ","contract",native_man_toml))
+    else
+      open(newunit=u,file="native-man.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,a,i0,a,i0,a,i0,a,i0,a,i0,a,i0)") "block=",iblk," incr=",iincs," miter=",miter," nstep=",nstep, &
+      " inc_step=",inc_step," noutn=",noutn," noutf=",noutf
+    write(u,"(a,es25.16)") "ditime=",ditime
+    write(u,"(a,es25.16)") "toler_force=",toler_force
+    write(u,"(a,*(es25.16))") "toler_var=",toler_var
+    close(u)
   end subroutine
 
   subroutine native_mat_deferred(what)
@@ -1169,19 +1301,19 @@ contains
   subroutine expect_int(path,v)
     character(*), intent(in) :: path
     integer, intent(in) :: v
-    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path) .or. man_owned(path)) return
     if(integer_value(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_real(path,v)
     character(*), intent(in) :: path
     real(real64), intent(in) :: v
-    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path) .or. man_owned(path)) return
     if(number(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_str(path,v)
     character(*), intent(in) :: path,v
     integer :: k
-    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path) .or. man_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_STR) call native_error('expected string: '//path)
     if(doc%entry(k)%svalue /= v) call native_error('unsupported value: '//path)
@@ -1190,7 +1322,7 @@ contains
     character(*), intent(in) :: path
     logical, intent(in) :: v
     integer :: k
-    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path) .or. man_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_BOOL) call native_error('expected boolean: '//path)
     if(doc%entry(k)%lvalue .neqv. v) call native_error('unsupported value: '//path)

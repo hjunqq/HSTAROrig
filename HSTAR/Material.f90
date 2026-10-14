@@ -325,7 +325,7 @@
                         e=native_e(imat)
                         nu=native_nu(imat)
                         alfa=native_alfa(imat)
-                        icreep=0
+                        icreep=native_icreep(imat)
                         kind_wt=0
                         jliqu=0
                     else
@@ -431,10 +431,17 @@
                             props(imat)%mechanical%solid%creep%m3 =m3
                         endif
                     else if (icreep==4) then  !20180630
-                        if(native_mode) call native_mat_deferred('creep icreep=4')
                         !print *,'icreepxx=',icreep
                         allocate(props(imat)%mechanical%solid%creep)
+                        if(native_mode) then
+                            props(imat)%mechanical%solid%creep%Ek=native_ek(imat)
+                            props(imat)%mechanical%solid%creep%etak=native_etak(imat)
+                            props(imat)%mechanical%solid%creep%etam=native_etam(imat)
+                        else
                         read(munit,*)props(imat)%mechanical%solid%creep%Ek,props(imat)%mechanical%solid%creep%etak,props(imat)%mechanical%solid%creep%etam
+                        endif
+                        if(native_mode) call native_creep_receipt(imat,props(imat)%mechanical%solid%creep%Ek, &
+                            props(imat)%mechanical%solid%creep%etak,props(imat)%mechanical%solid%creep%etam)
 
                     endif
                     !! end for creep

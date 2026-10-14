@@ -3608,7 +3608,7 @@
     do iincs=1,lincs
         if(native_mode) then
             miter=native_iterations(iblks)
-            ditime=1.
+            ditime=native_ditime(iblks)
             noutn=1
             noutf=1
             nstep=native_substeps(iblks)
@@ -3620,8 +3620,8 @@
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=1.e-5_irk
-            toler_var(1:mdofn)=1.e-5_irk
+            toler_force=native_tol_force(iblks)
+            toler_var(1:mdofn)=native_tol_dof(iblks)
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -3649,7 +3649,7 @@
 
         if(native_mode) then
             miter=native_iterations(iblks)
-            ditime=1.
+            ditime=native_ditime(iblks)
             noutn=1
             noutf=1
             nstep=native_substeps(iblks)
@@ -3661,8 +3661,8 @@
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=1.e-5_irk
-            toler_var(1:mdofn)=1.e-5_irk
+            toler_force=native_tol_force(iblks)
+            toler_var(1:mdofn)=native_tol_dof(iblks)
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -3670,8 +3670,11 @@
             props(1)%mechanical%solid%density,props(1)%mechanical%solid%alfa,gravy,nstep,miter)
         if(native_mode) call native_stage_receipt(iblks,appear,group(1:ngroup)%matno,uinitial(iblks), &
             gravy,nstep,miter,edge_load_group,tcurvegravity)
+        if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
+            toler_force,toler_var(1:mdofn))
 
         if(cwater/=0.and.delgroup>0)then
+            if(native_mode) call native_man_deferred('water-level coefficients (cwater/=0)')
             allocate(coef_water(delgroup,nstep))
             do idelgroup=1,delgroup
                 read(mainunit,*)i0,coef_water(idelgroup,:)
@@ -3680,6 +3683,7 @@
 
 
         if(Qstatic/=0) then !20221104
+            if(native_mode) call native_man_deferred('quasi-static seismic force (Qstatic/=0)')
             if(native_mode) text='TOML-03'
             if(.not.native_mode) read(mainunit,*)text  !20221104
             allocate(qstatic_force)  !20221104
