@@ -36,10 +36,45 @@ module native_input
     real(real64) :: val
   end type
   type(pre_step_t), allocatable, private :: native_pre(:)
+  ! LOA pilot: HSTAR_NATIVE_LOA=contract (default, profile constants) | toml (load data from TOML)
+  logical :: native_loa_toml=.false., native_loa_receipt_on=.false., native_pre_curve1=.false.
+  logical, private :: pre_used_curve1=.false.
+  type :: loa_amp_t
+    character(len=TOML_LEN_TEXT) :: name=""
+    real(real64), allocatable :: t(:), f(:)
+    logical :: used=.false.
+  end type
+  type(loa_amp_t), allocatable :: native_amp(:)
+  type, private :: loa_surf_t
+    character(len=TOML_LEN_TEXT) :: name=""
+    integer :: first=0, last=0
+    logical :: used=.false.
+  end type
+  type(loa_surf_t), allocatable, private :: native_surf(:)
+  integer :: native_loa_nedge=0
+  integer, allocatable :: native_loa_edges(:,:)
+  type :: loa_hyd_t
+    integer :: first, last, itcurve
+    real(real64) :: cor0, cor1, p0, p1, fact
+  end type
+  type :: loa_step_t
+    real(real64) :: g=0, dir(2)=0, fdir(2)=0
+    integer :: gamp=0
+    type(loa_hyd_t), allocatable :: hyd(:)
+  end type
+  type(loa_step_t), allocatable :: native_loa(:)
+  type :: loa_pl_t
+    integer :: itcurve=0
+    real(real64) :: comp(2)=0
+    integer, allocatable :: nodes(:)
+  end type
+  type(loa_pl_t), allocatable :: native_pl(:)
+  integer, private :: loa_edge_group=0
+  character(len=TOML_LEN_TEXT), allocatable, private :: loa_nset_refs(:)
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env
+    character(256) :: pre_env, loa_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -60,6 +95,15 @@ contains
       case("contract"); native_pre_receipt_on=.true.
       case("toml"); native_pre_toml=.true.; native_pre_receipt_on=.true.
       case default; call native_error("HSTAR_NATIVE_PRE must be contract or toml")
+      end select
+    endif
+    call get_environment_variable("HSTAR_NATIVE_LOA",loa_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_LOA too long")
+    if(ios==0 .and. len_trim(loa_env)>0) then
+      select case(trim(loa_env))
+      case("contract"); native_loa_receipt_on=.true.
+      case("toml"); native_loa_toml=.true.; native_loa_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_LOA must be contract or toml")
       end select
     endif
     call toml_read(trim(filename),doc)
@@ -97,7 +141,7 @@ contains
         native_edges(:,i)=[1009+17*(i-1),1026+17*(i-1),961+16*(i-1)]
       enddo
       native_edges(1,1)=997
-      native_pressure=number('step[2].load[2].distribution.scale')
+      if(.not.native_loa_toml) native_pressure=number('step[2].load[2].distribution.scale')
       if(native_pressure<0 .or. native_pressure>1.e6_real64) call native_error('pressure scale out of range [0,1e6]')
     case default
       call native_error('unsupported case.name')
@@ -111,14 +155,17 @@ contains
       if(native_density(i)<=0 .or. native_density(i)>1.e6_real64) call native_error('density out of range (0,1e6]')
     enddo
     do i=1,native_blocks
-      native_gravity(i)=number(indexed('step',i)//'.load[1].magnitude')
+      if(.not.native_loa_toml) native_gravity(i)=number(indexed('step',i)//'.load[1].magnitude')
       native_substeps(i)=integer_value(indexed('step',i)//'.controls.substeps')
       native_iterations(i)=integer_value(indexed('step',i)//'.controls.max_iterations')
-      if(native_gravity(i)<=0 .or. native_gravity(i)>1.e4_real64) call native_error('gravity out of range (0,1e4]')
+      if(.not.native_loa_toml .and. (native_gravity(i)<=0 .or. native_gravity(i)>1.e4_real64)) call native_error('gravity out of range (0,1e4]')
       if(native_substeps(i)<1 .or. native_substeps(i)>100) call native_error('substeps out of range [1,100]')
       if(native_iterations(i)<1 .or. native_iterations(i)>100) call native_error('max_iterations out of range [1,100]')
     enddo
+    if(native_loa_toml) call parse_loa()
     if(native_pre_toml) call parse_pre()
+    if(native_loa_toml) call loa_check_used()
+    native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
     enddo
@@ -268,6 +315,7 @@ contains
     character(*), parameter :: dofname(3)=["ux","uy","uz"]
     character(:), allocatable :: p, q, sp, nm, dn, amp
     integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre
+    logical, allocatable :: nref(:)
     real(real64) :: val
     ndim_pre=2
     nn=doc%count_of("nset")
@@ -293,9 +341,13 @@ contains
         ns(i)%nodes(k)=v
       enddo
     enddo
-    k=doc%find("amplitude[1].name")
-    if(k==0) call native_error("missing: amplitude[1].name")
-    amp=trim(doc%entry(k)%svalue)
+    allocate(nref(nn)); nref=.false.
+    amp=""
+    if(.not.native_loa_toml) then
+      k=doc%find("amplitude[1].name")
+      if(k==0) call native_error("missing: amplitude[1].name")
+      amp=trim(doc%entry(k)%svalue)
+    endif
     allocate(native_pre(native_blocks))
     do s=1,native_blocks
       sp=indexed("step",s)
@@ -312,12 +364,18 @@ contains
           if(trim(ns(i)%name)==nm) idx=i
         enddo
         if(idx==0) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined nset "//nm)
+        nref(idx)=.true.
         val=number(q//".value")
         itc=0
         kk=doc%find(q//".amplitude")
         if(kk>0) then
-          if(string_value(q//".amplitude")/=amp) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined amplitude")
-          itc=1
+          if(native_loa_toml) then
+            itc=amp_ref(q//".amplitude")
+          else
+            if(string_value(q//".amplitude")/=amp) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined amplitude")
+            itc=1
+            pre_used_curve1=.true.
+          endif
         endif
         outf=1
         kk=doc%find(q//".output_reactions")
@@ -368,6 +426,9 @@ contains
         native_pre(s)%sets(i)%nodes=ns(cand(i)%nset)%nodes
       enddo
       deallocate(owner,cand)
+    enddo
+    do i=1,nn
+      if(.not.nref(i) .and. .not.loa_nset_referenced(ns(i)%name)) call native_error("unreferenced nset: "//trim(ns(i)%name))
     enddo
   end subroutine
 
@@ -423,6 +484,400 @@ contains
     close(u)
   end subroutine
 
+  ! ---------------------------------------------------------------------------
+  ! LOA pilot (HSTAR_NATIVE_LOA=toml): curves, point loads, edges, hydrostatic and
+  ! gravity come from validated TOML instead of the profile constants.
+  ! Design: docs/fortran-interface/loa-pilot/DESIGN.md (decisions D1-D9, confirmed).
+  ! ---------------------------------------------------------------------------
+  logical function loa_owned(path)
+    character(*), intent(in) :: path
+    loa_owned=.false.
+    if(.not.native_loa_toml) return
+    loa_owned = index(path,"amplitude[")==1 .or. index(path,"surface[")==1 .or. &
+                index(path,"load[")==1 .or. index(path,".load[")>0
+  end function
+
+  integer function amp_by_name(nm) result(k)
+    character(*), intent(in) :: nm
+    integer :: i
+    k=0
+    do i=1,size(native_amp)
+      if(trim(native_amp(i)%name)==trim(nm)) k=i
+    enddo
+  end function
+
+  integer function amp_ref(path) result(k)
+    character(*), intent(in) :: path
+    character(:), allocatable :: nm
+    nm=string_value(path)
+    k=amp_by_name(nm)
+    if(k==0) call native_error("undefined amplitude "//nm//" ("//path//")")
+    native_amp(k)%used=.true.
+  end function
+
+  logical function present_key(path)
+    character(*), intent(in) :: path
+    present_key = doc%find(path)>0
+  end function
+
+  subroutine parse_loa()
+    character(:), allocatable :: p, q, sp, nm, typ
+    integer :: na, i, j, k, n, s, nl, l, ns, ie, total, ng, nh, ip, ii, nnset, idx
+    integer :: e(3)
+    real(real64) :: wl, bt, gw, g, d(2), fd(2)
+    type(loa_hyd_t), allocatable :: tmp(:)
+    logical, allocatable :: srf_step(:)
+    ! ---- [[amplitude]]
+    na=doc%count_of("amplitude")
+    if(na<1) call native_error("LOA: at least one [[amplitude]] is required")
+    allocate(native_amp(na))
+    do i=1,na
+      p=indexed("amplitude",i)
+      k=key_index(p//".@table")
+      nm=string_value(p//".name")
+      if(len(nm)==0) call native_error("LOA: empty amplitude name: "//p)
+      if(amp_by_name(nm)/=0) call native_error("LOA: duplicate amplitude name: "//nm)
+      native_amp(i)%name=nm
+      typ=string_value(p//".type")
+      if(typ/="linear") call native_error("LOA: amplitude "//nm//": type "//typ//" is not supported in the LOA pilot (only linear)")
+      if(.not.present_key(p//".before_first")) call native_error("LOA: amplitude "//nm//": before_first is required (only ""zero"")")
+      if(string_value(p//".before_first")/="zero") call native_error("LOA: amplitude "//nm//": before_first must be ""zero""")
+      n=integer_value(p//".points.count")
+      if(n<2 .or. n>1000) call native_error("LOA: amplitude "//nm//": points must have 2..1000 entries")
+      allocate(native_amp(i)%t(n),native_amp(i)%f(n))
+      do j=1,n
+        q=indexed(p//".points",j)
+        if(integer_value(q//".count")/=2) call native_error("LOA: amplitude "//nm//": each point is [time, factor]")
+        native_amp(i)%t(j)=number(q//"[1]")
+        native_amp(i)%f(j)=number(q//"[2]")
+        if(abs(native_amp(i)%f(j))>1.e6_real64 .or. abs(native_amp(i)%t(j))>1.e9_real64) &
+          call native_error("LOA: amplitude "//nm//": value out of range")
+        if(j>1) then
+          if(native_amp(i)%t(j)<=native_amp(i)%t(j-1)) call native_error("LOA: amplitude "//nm//": time must be strictly increasing")
+        endif
+      enddo
+    enddo
+    ! ---- [[surface]] (edge sets, D5)
+    ns=doc%count_of("surface")
+    allocate(native_surf(ns))
+    total=0
+    do i=1,ns
+      p=indexed("surface",i)
+      total=total+integer_value(p//".edges.count")
+    enddo
+    allocate(native_loa_edges(3,max(total,1)))
+    native_loa_nedge=total
+    total=0
+    do i=1,ns
+      p=indexed("surface",i)
+      k=key_index(p//".@table")
+      nm=string_value(p//".name")
+      if(len(nm)==0) call native_error("LOA: empty surface name: "//p)
+      do j=1,i-1
+        if(trim(native_surf(j)%name)==nm) call native_error("LOA: duplicate surface name: "//nm)
+      enddo
+      native_surf(i)%name=nm
+      if(string_value(p//".kind")/="edge2") call native_error("LOA: surface "//nm//": kind must be edge2")
+      n=integer_value(p//".edges.count")
+      if(n<1) call native_error("LOA: surface "//nm//" has no edges")
+      native_surf(i)%first=total+1
+      do j=1,n
+        q=indexed(p//".edges",j)
+        if(integer_value(q//".count")/=3) call native_error("LOA: surface "//nm//": edge is [node1, node2, element]")
+        do k=1,3
+          e(k)=integer_value(q//"["//itoa(k)//"]")
+        enddo
+        if(e(1)<1 .or. e(1)>native_points .or. e(2)<1 .or. e(2)>native_points) &
+          call native_error("LOA: surface "//nm//": node out of range 1.."//itoa(native_points))
+        if(e(1)==e(2)) call native_error("LOA: surface "//nm//": degenerate edge")
+        if(e(3)<1 .or. e(3)>native_elements) call native_error("LOA: surface "//nm//": element out of range 1.."//itoa(native_elements))
+        do ie=1,total
+          if((native_loa_edges(1,ie)==e(1).and.native_loa_edges(2,ie)==e(2)) .or. &
+             (native_loa_edges(1,ie)==e(2).and.native_loa_edges(2,ie)==e(1))) &
+            call native_error("LOA: duplicate edge "//itoa(e(1))//"-"//itoa(e(2))//" in surface "//nm)
+        enddo
+        total=total+1
+        native_loa_edges(:,total)=e
+      enddo
+      native_surf(i)%last=total
+    enddo
+    ! ---- [[step]] loads
+    if(doc%count_of("step")/=native_blocks) call native_error("LOA: number of [[step]] must be "//itoa(native_blocks))
+    allocate(native_loa(native_blocks))
+    allocate(srf_step(max(ns,1)))
+    do s=1,native_blocks
+      sp=indexed("step",s)
+      nl=doc%count_of(sp//".load")
+      allocate(tmp(max(nl,1)))
+      ng=0; nh=0; srf_step=.false.
+      do l=1,nl
+        q=indexed(sp//".load",l)
+        k=key_index(q//".@table")
+        typ=string_value(q//".type")
+        select case(typ)
+        case("gravity")
+          ng=ng+1
+          if(ng>1) call native_error("LOA: step "//itoa(s)//": only one gravity load per step")
+          g=number(q//".magnitude")
+          if(g<=0 .or. g>1.e4_real64) call native_error('gravity out of range (0,1e4]')
+          if(integer_value(q//".direction.count")/=2) call native_error("LOA: step "//itoa(s)//": gravity direction needs 2 components")
+          d(1)=number(q//".direction[1]"); d(2)=number(q//".direction[2]")
+          if(sum(d**2)==0) call native_error("LOA: step "//itoa(s)//": zero gravity direction")
+          fd=d
+          if(present_key(q//".fluid_direction.count")) then
+            if(integer_value(q//".fluid_direction.count")/=2) call native_error("LOA: step "//itoa(s)//": fluid_direction needs 2 components")
+            fd(1)=number(q//".fluid_direction[1]"); fd(2)=number(q//".fluid_direction[2]")
+          endif
+          if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": gravity amplitude is required")
+          native_loa(s)%gamp=amp_ref(q//".amplitude")
+          if(string_value(q//".apply_to")/="all") call native_error("LOA: step "//itoa(s)//": gravity apply_to must be ""all""")
+          native_loa(s)%g=g; native_loa(s)%dir=d; native_loa(s)%fdir=fd
+          native_gravity(s)=g
+        case("hydrostatic")
+          nm=string_value(q//".surface")
+          idx=0
+          do i=1,ns
+            if(trim(native_surf(i)%name)==nm) idx=i
+          enddo
+          if(idx==0) call native_error("LOA: step "//itoa(s)//": undefined surface "//nm)
+          if(srf_step(idx)) call native_error("LOA: step "//itoa(s)//": surface "//nm//" loaded twice")
+          srf_step(idx)=.true.; native_surf(idx)%used=.true.
+          wl=number(q//".water_level"); bt=number(q//".bottom"); gw=number(q//".unit_weight")
+          if(wl<=bt) call native_error("LOA: step "//itoa(s)//": water_level must be above bottom")
+          if(gw<0 .or. gw>1.e6_real64) call native_error("LOA: step "//itoa(s)//": unit_weight out of range [0,1e6]")
+          if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": hydrostatic amplitude is required")
+          nh=nh+1
+          tmp(nh)=loa_hyd_t(native_surf(idx)%first,native_surf(idx)%last,amp_ref(q//".amplitude"),wl,bt,0._real64,wl-bt,gw)
+        case("pressure")
+          call native_error("LOA: step "//itoa(s)//": load type pressure is not accepted with HSTAR_NATIVE_LOA=toml; use hydrostatic")
+        case("concentrated")
+          call native_error("LOA: step "//itoa(s)//": concentrated loads are global in HSTAR; define them in top-level [[load]]")
+        case default
+          call native_error("LOA: step "//itoa(s)//": unsupported load type "//typ)
+        end select
+      enddo
+      if(ng==0) call native_error("LOA: step "//itoa(s)//": one gravity load is required")
+      native_loa(s)%hyd=tmp(1:nh)
+      deallocate(tmp)
+    enddo
+    do i=1,ns
+      if(.not.native_surf(i)%used) call native_error("LOA: unreferenced surface "//trim(native_surf(i)%name))
+    enddo
+    ! ---- top-level [[load]]: concentrated (global over the whole analysis, legacy semantics)
+    nnset=doc%count_of("nset")
+    n=doc%count_of("load")
+    allocate(native_pl(n), loa_nset_refs(n))
+    do ip=1,n
+      p=indexed("load",ip)
+      k=key_index(p//".@table")
+      if(string_value(p//".type")/="concentrated") call native_error("LOA: top-level [[load]] supports only type = ""concentrated""")
+      nm=string_value(p//".nset")
+      idx=0
+      do i=1,nnset
+        if(string_value(indexed("nset",i)//".name")==nm) idx=i
+      enddo
+      if(idx==0) call native_error("LOA: load "//itoa(ip)//": undefined nset "//nm)
+      loa_nset_refs(ip)=nm
+      k=key_index(indexed("nset",idx)//".@table")
+      k=integer_value(indexed("nset",idx)//".nodes.count")
+      if(k<1) call native_error("LOA: nset "//nm//" has no nodes")
+      allocate(native_pl(ip)%nodes(k))
+      do j=1,k
+        ii=integer_value(indexed(indexed("nset",idx)//".nodes",j))
+        if(ii<1 .or. ii>native_points) call native_error("LOA: node out of range in nset "//nm)
+        native_pl(ip)%nodes(j)=ii
+      enddo
+      if(integer_value(p//".components.count")/=2) call native_error("LOA: load "//itoa(ip)//": components must have mesh.dimension (2) entries")
+      native_pl(ip)%comp(1)=number(p//".components[1]"); native_pl(ip)%comp(2)=number(p//".components[2]")
+      if(maxval(abs(native_pl(ip)%comp))>1.e12_real64) call native_error("LOA: load "//itoa(ip)//": component out of range")
+      if(.not.present_key(p//".amplitude")) call native_error("LOA: load "//itoa(ip)//": amplitude is required")
+      native_pl(ip)%itcurve=amp_ref(p//".amplitude")
+    enddo
+    ! ---- PRE contract mode uses curve 1 for every boundary amplitude (D9 plan b, static part)
+    if(.not.native_pre_toml) then
+      do s=1,native_blocks
+        sp=indexed("step",s)
+        do l=1,doc%count_of(sp//".boundary")
+          q=indexed(sp//".boundary",l)
+          if(present_key(q//".amplitude")) then
+            k=amp_ref(q//".amplitude")
+            if(k/=1) call native_error("LOA: boundary amplitude must be the first [[amplitude]] while HSTAR_NATIVE_PRE is contract")
+            if(any(native_amp(1)%f/=1._real64) .or. native_amp(1)%t(1)>0) &
+              call native_error("LOA: amplitude "//trim(native_amp(1)%name)//" used by contract-mode boundaries must be constant 1")
+          endif
+        enddo
+      enddo
+    endif
+  end subroutine
+
+  subroutine loa_check_used()
+    integer :: i
+    do i=1,size(native_amp)
+      if(.not.native_amp(i)%used) call native_error("LOA: unreferenced amplitude "//trim(native_amp(i)%name))
+    enddo
+  end subroutine
+
+  logical function loa_nset_referenced(nm)
+    character(*), intent(in) :: nm
+    integer :: i
+    loa_nset_referenced=.false.
+    if(.not.allocated(loa_nset_refs)) return
+    do i=1,size(loa_nset_refs)
+      if(trim(loa_nset_refs(i))==trim(nm)) loa_nset_referenced=.true.
+    enddo
+  end function
+
+  ! ---- accessors used by Load.f90 (contract branch = the former profile constants)
+  integer function native_loa_ncurves() result(n)
+    n=1
+    if(native_loa_toml) n=size(native_amp)
+  end function
+
+  subroutine native_loa_curve_head(ic,ntime,type_curve,nstoch,nline)
+    integer, intent(in) :: ic
+    integer, intent(out) :: ntime,nstoch,nline
+    character(*), intent(out) :: type_curve
+    ntime=2; type_curve='LINEAR'; nstoch=0; nline=2
+    if(native_loa_toml) ntime=size(native_amp(ic)%t)
+  end subroutine
+
+  subroutine native_loa_curve_times(ic,t)
+    integer, intent(in) :: ic
+    real(real64), intent(out) :: t(:)
+    if(native_loa_toml) then
+      t=native_amp(ic)%t
+    else
+      t=[0._real64,1._real64]
+    endif
+  end subroutine
+
+  subroutine native_loa_curve_facts(ic,f)
+    integer, intent(in) :: ic
+    real(real64), intent(out) :: f(:)
+    if(native_loa_toml) then
+      f=native_amp(ic)%f
+    else
+      f=1._real64
+    endif
+  end subroutine
+
+  ! D9 plan b (runtime part): when .pre data still use curve 1 implicitly, curve 1 must be constant 1.
+  subroutine native_check_pre_curve1(type_curve,t,f)
+    character(*), intent(in) :: type_curve
+    real(real64), intent(in) :: t(:), f(:)
+    if(.not.native_pre_curve1) return
+    if(trim(type_curve)/='LINEAR' .or. any(f/=1._real64) .or. t(1)>0) &
+      call native_error("PRE/LOA: curve 1 referenced by boundary data is not constant 1")
+  end subroutine
+
+  subroutine native_loa_pload_head(n,kpload)
+    integer, intent(out) :: n,kpload
+    n=0; kpload=0
+    if(native_loa_toml) then
+      n=size(native_pl)
+      if(n>0) kpload=1
+    endif
+  end subroutine
+
+  integer function native_loa_nedges() result(n)
+    if(native_loa_toml) then
+      n=native_loa_nedge
+    else
+      n=merge(40,0,native_dam)
+    endif
+    loa_edge_group=0
+  end function
+
+  subroutine native_loa_edge_group(sedge,nnode,index,vdimn)
+    integer, intent(out) :: sedge,nnode,index,vdimn
+    sedge=40; nnode=2; index=1; vdimn=0
+    if(native_loa_toml) then
+      loa_edge_group=loa_edge_group+1
+      sedge=native_surf(loa_edge_group)%last-native_surf(loa_edge_group)%first+1
+    endif
+  end subroutine
+
+  subroutine native_loa_edge(tedge,lnode,aelem)
+    integer, intent(in) :: tedge
+    integer, intent(out) :: lnode(:),aelem
+    if(native_loa_toml) then
+      lnode=native_loa_edges(1:2,tedge); aelem=native_loa_edges(3,tedge)
+    else
+      lnode=native_edges(1:2,tedge); aelem=native_edges(3,tedge)
+    endif
+  end subroutine
+
+  subroutine native_loa_edge_load_head(iblk,nedgeload,ngroups)
+    integer, intent(in) :: iblk
+    integer, intent(out) :: nedgeload,ngroups
+    integer :: i
+    nedgeload=0; ngroups=0
+    if(native_loa_toml) then
+      ngroups=size(native_loa(iblk)%hyd)
+      do i=1,ngroups
+        nedgeload=nedgeload+native_loa(iblk)%hyd(i)%last-native_loa(iblk)%hyd(i)%first+1
+      enddo
+    elseif(native_dam .and. iblk==2) then
+      nedgeload=40; ngroups=1
+    endif
+  end subroutine
+
+  subroutine native_loa_hyd_head(iblk,ig,b,e,itc,water,code_load)
+    integer, intent(in) :: iblk,ig
+    integer, intent(out) :: b,e,itc,water,code_load
+    b=1; e=40; itc=1; water=2; code_load=0
+    if(native_loa_toml) then
+      b=native_loa(iblk)%hyd(ig)%first; e=native_loa(iblk)%hyd(ig)%last; itc=native_loa(iblk)%hyd(ig)%itcurve
+    endif
+  end subroutine
+
+  subroutine native_loa_hyd_values(iblk,ig,c0,c1,p0,p1,fact)
+    integer, intent(in) :: iblk,ig
+    real(real64), intent(out) :: c0,c1,p0,p1,fact
+    if(native_loa_toml) then
+      c0=native_loa(iblk)%hyd(ig)%cor0; c1=native_loa(iblk)%hyd(ig)%cor1
+      p0=native_loa(iblk)%hyd(ig)%p0; p1=native_loa(iblk)%hyd(ig)%p1; fact=native_loa(iblk)%hyd(ig)%fact
+    else
+      c0=50._real64; c1=0._real64; p0=0._real64; p1=50._real64; fact=native_pressure
+    endif
+  end subroutine
+
+  subroutine native_loa_gravity_dirs(iblk,fg,ff)
+    integer, intent(in) :: iblk
+    real(real64), intent(out) :: fg(:),ff(:)
+    if(native_loa_toml) then
+      fg=native_loa(iblk)%dir; ff=native_loa(iblk)%fdir
+    else
+      fg=[0._real64,-1._real64]; ff=[0._real64,-1._real64]
+    endif
+  end subroutine
+
+  subroutine native_loa_gravity_curves(iblk,tcg)
+    integer, intent(in) :: iblk
+    integer, intent(out) :: tcg(:)
+    integer :: k
+    k=1
+    if(native_loa_toml) k=native_loa(iblk)%gamp
+    tcg=k
+    if(native_dam) tcg=merge(k,0,native_appearance(1:size(tcg),iblk)>0)
+  end subroutine
+
+  subroutine native_loa_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("LOA: "//what//" is deferred in the LOA pilot and cannot be driven by TOML")
+  end subroutine
+
+  subroutine native_loa_open(u,iblk)
+    integer, intent(out) :: u
+    integer, intent(in) :: iblk
+    if(iblk==0) then
+      open(newunit=u,file="native-loa.txt",status="replace",action="write")
+      write(u,"(a)") "native-loa v1 mode="//trim(merge("toml    ","contract",native_loa_toml))
+    else
+      open(newunit=u,file="native-loa.txt",status="old",position="append",action="write")
+    endif
+  end subroutine
+
   subroutine native_error(message)
     character(*), intent(in) :: message
     write(error_unit,'(a)') 'INVALID_INPUT TOML-03/04: '//message
@@ -459,19 +914,19 @@ contains
   subroutine expect_int(path,v)
     character(*), intent(in) :: path
     integer, intent(in) :: v
-    if(pre_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path)) return
     if(integer_value(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_real(path,v)
     character(*), intent(in) :: path
     real(real64), intent(in) :: v
-    if(pre_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path)) return
     if(number(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_str(path,v)
     character(*), intent(in) :: path,v
     integer :: k
-    if(pre_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_STR) call native_error('expected string: '//path)
     if(doc%entry(k)%svalue /= v) call native_error('unsupported value: '//path)
@@ -480,7 +935,7 @@ contains
     character(*), intent(in) :: path
     logical, intent(in) :: v
     integer :: k
-    if(pre_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_BOOL) call native_error('expected boolean: '//path)
     if(doc%entry(k)%lvalue .neqv. v) call native_error('unsupported value: '//path)

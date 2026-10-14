@@ -142,7 +142,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(loadunit,*)text
     if(native_mode) then
-        ntcurve=1
+        ntcurve=native_loa_ncurves()
     else
     read(loadunit,*)ntcurve
     endif
@@ -154,10 +154,7 @@
         !print *,'itcurve=',itcurve
 
        if(native_mode) then
-           ntime=2
-           type_curve='LINEAR'
-           nstoch_curve=0
-           nline=2
+           call native_loa_curve_head(itcurve,ntime,type_curve,nstoch_curve,nline)
        else
        read(loadunit,*)ntime,type_curve,nstoch_curve,nline
        endif
@@ -171,6 +168,7 @@
        
        if(nstoch_curve/=0)then
         allocate(tcurves(itcurve)%order_stoch_parameter(nstoch_curve))
+        if(native_mode) call native_loa_deferred('stochastic curve parameters')
         read(loadunit,*)tcurves(itcurve)%order_stoch_parameter
        endif
 
@@ -178,20 +176,25 @@
        case('HARMONIC') 
        allocate(tcurves(itcurve)%a0sin,tcurves(itcurve)%asin,tcurves(itcurve)%wsin,tcurves(itcurve)%w0sin,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend)
        !read(loadunit,*)text
+       if(native_mode) call native_loa_deferred('HARMONIC curve')
        read(loadunit,*)tcurves(itcurve)%a0sin,tcurves(itcurve)%asin,tcurves(itcurve)%wsin,tcurves(itcurve)%w0sin,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend
        case('FOURIERSERIES') 
            
         allocate(tcurves(itcurve)%NFS,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend)
       
+        if(native_mode) call native_loa_deferred('FOURIERSERIES curve')
         read(loadunit,*)tcurves(itcurve)%NFS,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend   
         
        allocate(tcurves(itcurve)%AI(tcurves(itcurve)%NFS),tcurves(itcurve)%omega(tcurves(itcurve)%NFS))   
         
+        if(native_mode) call native_loa_deferred('FOURIERSERIES curve')
         read(loadunit,*)tcurves(itcurve)%AI(:)
+        if(native_mode) call native_loa_deferred('FOURIERSERIES curve')
         read(loadunit,*)tcurves(itcurve)%omega(:)
        case('WATERLEVEL')
        allocate(tcurves(itcurve)%ttime_curve(ntime))
        do i0=1,ntime
+       if(native_mode) call native_loa_deferred('WATERLEVEL curve')
        if(native_mode) then
            tcurves(itcurve)%ttime_curve(i0)=i0-1
            tcurves(itcurve)%dfact_curve(i0)=1.
@@ -201,21 +204,25 @@
        end do
        case('SEISMIC')
        allocate(tcurves(itcurve)%dtrec,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend,tcurves(itcurve)%ample)
+       if(native_mode) call native_loa_deferred('SEISMIC curve')
        read(loadunit,*)tcurves(itcurve)%dtrec,tcurves(itcurve)%dtbegin,tcurves(itcurve)%dtend,&
        tcurves(itcurve)%ample
        case('EXTRAPOLATION')
        allocate(tcurves(itcurve)%Nextr,tcurves(itcurve)%ca,tcurves(itcurve)%dx)
+       if(native_mode) call native_loa_deferred('EXTRAPOLATION curve')
        read(loadunit,*)tcurves(itcurve)%nextr,tcurves(itcurve)%ca,tcurves(itcurve)%dx
        print *,'extra',tcurves(itcurve)%nextr,tcurves(itcurve)%ca,tcurves(itcurve)%dx
        case('ARCLENGTH')
        arc_curve=itcurve
        allocate(tcurves(itcurve)%time_begin,tcurves(itcurve)%detal,tcurves(itcurve)%fact_inc, &
        tcurves(itcurve)%nalgo     ,tcurves(itcurve)%piter,tcurves(itcurve)%giter)
+       if(native_mode) call native_loa_deferred('ARCLENGTH curve')
        read(loadunit,*)tcurves(itcurve)%time_begin,tcurves(itcurve)%fact_inc,  &
        tcurves(itcurve)%nalgo,                                 &
        tcurves(itcurve)%giter
        if (tcurves(itcurve)%nalgo==2)then
           allocate(tcurves(itcurve)%ncdis)
+          if(native_mode) call native_loa_deferred('ARCLENGTH control node')
           read(loadunit,*)inode,idofn
           ncdis=nodfn(idofn,inode)
           tcurves(itcurve)%ncdis=ncdis
@@ -226,12 +233,13 @@
        case default
        allocate(tcurves(itcurve)%ttime_curve(ntime))
        if(native_mode) then
-           tcurves(itcurve)%ttime_curve(1:ntime)=[0.,1.]
+           call native_loa_curve_times(itcurve,tcurves(itcurve)%ttime_curve(1:ntime))
        else
        read(loadunit,*)tcurves(itcurve)%ttime_curve(1:ntime)
        endif
        end select
        if (type_curve=='SEISMIC') then
+        if(native_mode) call native_loa_deferred('SEISMIC curve')
         read(loadunit,*)tcurves(itcurve)%dfact_curve
    
        !    do i1=1,ntime
@@ -240,7 +248,7 @@
        elseif (type_curve/='ARCLENGTH'.and.type_curve/='EXTRAPOLATION'   &
            .and.type_curve/='HARMONIC'.and.type_curve/='WATERLEVEL') then
         if(native_mode) then
-            tcurves(itcurve)%dfact_curve(1:ntime)=1.
+            call native_loa_curve_facts(itcurve,tcurves(itcurve)%dfact_curve(1:ntime))
         else
         read(loadunit,*)tcurves(itcurve)%dfact_curve(1:ntime) !!one record 
         endif
@@ -248,14 +256,17 @@
        lineload=lineload+nline
     end do
 print *,'ok waterlevel'
+    if(native_mode .and. ntcurve>=1) then
+        if(associated(tcurves(1)%ttime_curve)) call native_check_pre_curve1(tcurves(1)%type_curve, &
+            tcurves(1)%ttime_curve,tcurves(1)%dfact_curve)
+    endif
     !! set of point_load structure in the iblks-th BLOCK
 
     if (allocated(pload)) deallocate(pload)
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(loadunit,*)text
     if(native_mode) then
-        nplgroup=0
-        kpload=0
+        call native_loa_pload_head(nplgroup,kpload)
     else
     read(loadunit,*)nplgroup,kpload
     endif
@@ -265,9 +276,16 @@ print *,'ok waterlevel'
 if(kpload==1)then !20210502
     allocate(pload(nplgroup))
     do iplgroup=1,nplgroup
+       if(native_mode) then
+           pload(iplgroup)%order_time_curve=native_pl(iplgroup)%itcurve
+           pload(iplgroup)%nudofn=2
+           pload(iplgroup)%npload=size(native_pl(iplgroup)%nodes)
+           nline=3
+       else
        read(loadunit,*)pload(iplgroup)%order_time_curve,             &
                        pload(iplgroup)%nudofn,                       &
                        pload(iplgroup)%npload,nline
+       endif
        lineload=lineload+1
 
        nudofn=pload(iplgroup)%nudofn
@@ -275,11 +293,19 @@ if(kpload==1)then !20210502
 
        allocate(pload(iplgroup)%pxyz(nudofn))
        allocate(pload(iplgroup)%list(npload))
+       if(native_mode) then
+           pload(iplgroup)%pxyz(1:nudofn)=native_pl(iplgroup)%comp(1:nudofn)
+       else
        read(loadunit,*)pload(iplgroup)%pxyz(1:nudofn)
+       endif
 
        type_curve=tcurves(pload(iplgroup)%order_time_curve)%type_curve
        if (type_curve/='EXTRAPOLATION')then
+          if(native_mode) then
+              pload(iplgroup)%list(1:npload)=native_pl(iplgroup)%nodes
+          else
           read(loadunit,*)pload(iplgroup)%list(1:npload)
+          endif
           !steel 2006
           do ip=1,npload
              ipoin=pload(iplgroup)%list(ip)
@@ -303,10 +329,12 @@ if(kpload==1)then !20210502
        elseif(type_curve=='EXTRAPOLATION')then
           nextr=tcurves(pload(iplgroup)%order_time_curve)%nextr
           allocate(pload(iplgroup)%listep(npload,2*nextr+1))
+          if(native_mode) call native_loa_deferred('EXTRAPOLATION point load')
           if(native_mode) text='TOML-03'
           if(.not.native_mode) read(loadunit,*)text
           do i0=1,npload
              !read(loadunit,*)i1,pload(iplgroup)%list(i0),pload(iplgroup)%listep(i0,1:2*nextr+1)
+             if(native_mode) call native_loa_deferred('EXTRAPOLATION point load')
              read(loadunit,*)i1,pload(iplgroup)%listep(i0,1:2*nextr+1)
              pload(iplgroup)%list(i0)=pload(iplgroup)%listep(i0,1)
           end do
@@ -321,12 +349,16 @@ elseif(kpload==2)then !20210502
 
 Do iplgroup=1,nplgroup
     
+ if(native_mode) call native_loa_deferred('kpload==2 point load')
  read(loadunit,*)order_time_curve,nudofn  !,npload
+ if(native_mode) call native_loa_deferred('kpload==2 point load')
  read(loadunit,*)appear_group_pload
  lineload=lineload+2
 
 allocate(pxyz(nudofn))
+if(native_mode) call native_loa_deferred('kpload==2 point load')
 read(loadunit,*)pxyz(1:nudofn)
+if(native_mode) call native_loa_deferred('kpload==2 point load')
 read(loadunit,*)corlist(:)
  lineload=lineload+2
 
@@ -383,7 +415,7 @@ endif  !kpload=1  20210502
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(loadunit,*)text
     if(native_mode) then
-        nedge=merge(40,0,native_dam)
+        nedge=native_loa_nedges()
     else
     read(loadunit,*)nedge
     endif
@@ -396,7 +428,7 @@ endif  !kpload=1  20210502
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(loadunit,*)text                               !4
        if(native_mode) then
-           sedge=40; nnode=2; index=1; vdimn=0
+           call native_loa_edge_group(sedge,nnode,index,vdimn)
        else
        read(loadunit,*)sedge,nnode,index,vdimn  !20211028
        endif
@@ -409,8 +441,7 @@ endif  !kpload=1  20210502
           allocate(edges(tedge)%lnode(nnode))
           if(native_mode) then
               i0=tedge
-              edges(tedge)%lnode(1:nnode)=native_edges(1:2,tedge)
-              edges(tedge)%aelem=native_edges(3,tedge)
+              call native_loa_edge(tedge,edges(tedge)%lnode(1:nnode),edges(tedge)%aelem)
           else
           read(loadunit,*)i0,edges(tedge)%lnode(1:nnode),edges(tedge)%aelem
           endif
@@ -501,6 +532,7 @@ endif  !kpload=1  20210502
 
  
 22  continue
+    if(native_mode .and. native_loa_receipt_on) call loa_receipt_1
     print *, 'iblks=',iblks,'lineload=',lineload
 
     contains
@@ -756,6 +788,48 @@ end subroutine element_in_out
      
   !!!!!!!!!
   
+    ! LOA pilot receipt: what the readers actually stored (not the TOML text).
+    subroutine loa_receipt_1
+    integer(ink) u,i,j
+    call native_loa_open(u,0)
+    write(u,'(a,i0)') 'curves=',ntcurve
+    do i=1,ntcurve
+       write(u,'(a,i0,1x,a,1x,i0)') 'curve ',i,trim(tcurves(i)%type_curve),tcurves(i)%ntime
+       do j=1,tcurves(i)%ntime
+          write(u,'(2es25.16)') tcurves(i)%ttime_curve(j),tcurves(i)%dfact_curve(j)
+       end do
+    end do
+    write(u,'(a,i0)') 'ploads=',nplgroup
+    do i=1,nplgroup
+       write(u,'(a,4(1x,i0))') 'pload',i,pload(i)%order_time_curve,pload(i)%nudofn,pload(i)%npload
+       write(u,'(*(es25.16))') pload(i)%pxyz
+       write(u,'(*(1x,i0))') pload(i)%list
+    end do
+    write(u,'(a,i0)') 'edges=',nedge
+    do i=1,nedge
+       write(u,'(a,*(1x,i0))') 'edge',i,edges(i)%lnode,edges(i)%aelem,edges(i)%index,edges(i)%vdimn
+    end do
+    close(u)
+    end subroutine loa_receipt_1
+
+    subroutine loa_receipt_2
+    integer(ink) u,i
+    call native_loa_open(u,iblks)
+    write(u,'(a,i0)') 'block=',iblks
+    write(u,'(a,*(es25.16))') 'gravity ',gravy,factg(1:ndimn),factf(1:ndimn)
+    write(u,'(a,*(1x,i0))') 'gravity_curves',tcurvegravity(1:ngroup)
+    write(u,'(a,2(1x,i0))') 'edge_load',edge_load_group,delgroup
+    do i=1,delgroup
+       write(u,'(a,1x,i0,1x,i0,5es25.16)') 'hydro',i,gpwater(i)%water,gpwater(i)%cor0,gpwater(i)%cor1, &
+           gpwater(i)%p0,gpwater(i)%p1,gpwater(i)%fact
+    end do
+    do i=1,edge_load_group
+       write(u,'(a,4(1x,i0))') 'edgeload',i,edgeload(i)%iedge,edgeload(i)%idelgroup,edgeload(i)%itcurve
+    end do
+    write(u,'(a,2(1x,i0))') 'beam_plate',nbeamload,nplateload
+    close(u)
+    end subroutine loa_receipt_2
+
     subroutine external_load_2
 
     character(20) text,type_curve
@@ -786,12 +860,7 @@ end subroutine element_in_out
     if(.not.native_mode) read(loadunit,*)text
     print *,text
     if(native_mode) then
-        edge_load_group=0
-        delgroup=0
-        if(native_dam.and.iblks==2) then
-            edge_load_group=40
-            delgroup=1
-        endif
+        call native_loa_edge_load_head(iblks,edge_load_group,delgroup)
     else
     read(loadunit,*)edge_load_group,delgroup
     endif
@@ -806,7 +875,7 @@ end subroutine element_in_out
     jedge=0
     do ipegroup=1,delgroup
        if(native_mode) then
-           begin_edge=1; end_edge=40; itcurve=1; water=2; code_load=0
+           call native_loa_hyd_head(iblks,ipegroup,begin_edge,end_edge,itcurve,water,code_load)
        else
        read(loadunit,*)begin_edge,end_edge,itcurve,water,code_load
        endif
@@ -815,7 +884,7 @@ end subroutine element_in_out
        !!
        if (water/=0) then
           if(native_mode) then
-              cor0=50._irk; cor1=0._irk; p0=0._irk; p1=50._irk; fact=native_pressure
+              call native_loa_hyd_values(iblks,ipegroup,cor0,cor1,p0,p1,fact)
           else
           read(loadunit,*)cor0,cor1,p0,p1,fact
           endif
@@ -830,6 +899,7 @@ end subroutine element_in_out
           lineload=lineload+1
        endif
           if (code_load/=0) then !20211031  ，默认正侧部分，增加负侧部分
+          if(native_mode) call native_loa_deferred('code_load edge load')
           read(loadunit,*)cor01,cor11,p01,p11,fact1
           lineload=lineload+1
            endif
@@ -927,6 +997,7 @@ end subroutine element_in_out
 !! end of special considering
           else
              press=0.
+             if(native_mode) call native_loa_deferred('per-edge pressure (water==0)')
              read(loadunit,*)i0,(press(edimn+1,inode),inode=1,nnode)   !(press(1:edimn+1,inode),inode=1,nnode)
              lineload=lineload+1
           endif
@@ -963,8 +1034,7 @@ end subroutine element_in_out
     if(.not.native_mode) read (loadunit,*) text
     if(native_mode) then
         gravy=native_gravity(iblks)
-        factg(1:ndimn)=[0.,-1.]
-        factf(1:ndimn)=[0.,-1.]
+        call native_loa_gravity_dirs(iblks,factg(1:ndimn),factf(1:ndimn))
     else
     read (loadunit,*) gravy,factg(1:ndimn),factf(1:ndimn)
     endif
@@ -980,8 +1050,7 @@ end subroutine element_in_out
     read(loadunit,*)text,nline
     endif
     if(native_mode) then
-        tcurvegravity(1:ngroup)=1
-        if(native_dam) tcurvegravity(1:ngroup)=native_appearance(1:ngroup,iblks)
+        call native_loa_gravity_curves(iblks,tcurvegravity(1:ngroup))
     else
     read(loadunit,*)tcurvegravity(1:ngroup)
     endif
@@ -1007,6 +1076,7 @@ print *,'tcurv=',tcurvegravity(1:ngroup)
        rload(nevab),rload1(nevab),gloc(ndimn),trotx(nevab,nevab))
        do ibeamload=1,nbeamload
           allocate(beamload(ibeamload)%edload(nevab))
+          if(native_mode) call native_loa_deferred('beam load')
           read(loadunit,*)i0,aelem,itcurve,gloc(1:ndimn),cc
           !read(loadunit,*)i0,aelem,itcurve,gloc(1:ndimn)
           !cc=dl
@@ -1081,6 +1151,7 @@ print *,'tcurv=',tcurvegravity(1:ngroup)
     read (loadunit,*) nplateload
     endif
     
+    if(native_mode .and. native_loa_receipt_on) call loa_receipt_2
     if(nplateload==0)return
     nevab=24    !20200113
     if (allocated(plateload))deallocate(plateload)
@@ -1091,8 +1162,10 @@ print *,'tcurv=',tcurvegravity(1:ngroup)
     do while (iplateload<nplateload)
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read (loadunit,*) text
+       if(native_mode) call native_loa_deferred('plate load')
        read (loadunit,*) igroup,itcurve,water
        tplateload=group(igroup)%nelgroup
+       if(native_mode) call native_loa_deferred('plate load')
        read(loadunit,*)cor0,cor1,p0,p1,fact
        lineload=lineload+3
        do iedge=1,group(igroup)%nelgroup
