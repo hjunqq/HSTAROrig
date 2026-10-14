@@ -71,10 +71,19 @@ module native_input
   type(loa_pl_t), allocatable :: native_pl(:)
   integer, private :: loa_edge_group=0
   character(len=TOML_LEN_TEXT), allocatable, private :: loa_nset_refs(:)
+  ! MAT pilot: HSTAR_NATIVE_MAT=contract (default, profile constants) | toml (material/section data from TOML)
+  ! Contract defaults equal the constants Material.f90 used before the seam (ratio=1, thickness=1, alfa=1e-5).
+  logical :: native_mat_toml=.false., native_mat_receipt_on=.false.
+  real(real64) :: native_alfa(2)=1.e-5_real64, native_thick(2)=1._real64, native_ratio(2)=1._real64
+  integer :: native_group_mat(2)=[1,2]
+  integer, private :: mat_receipt_n=0
+  ! TEM minimal step (T1/M8): HSTAR_NATIVE_TEM=contract (default) | toml (no temperature loading allowed)
+  logical :: native_tem_toml=.false., native_tem_receipt_on=.false.
+  integer, private :: tem_receipt_n=0
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env, loa_env
+    character(256) :: pre_env, loa_env, mat_env, tem_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -104,6 +113,24 @@ contains
       case("contract"); native_loa_receipt_on=.true.
       case("toml"); native_loa_toml=.true.; native_loa_receipt_on=.true.
       case default; call native_error("HSTAR_NATIVE_LOA must be contract or toml")
+      end select
+    endif
+    call get_environment_variable("HSTAR_NATIVE_MAT",mat_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_MAT too long")
+    if(ios==0 .and. len_trim(mat_env)>0) then
+      select case(trim(mat_env))
+      case("contract"); native_mat_receipt_on=.true.
+      case("toml"); native_mat_toml=.true.; native_mat_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_MAT must be contract or toml")
+      end select
+    endif
+    call get_environment_variable("HSTAR_NATIVE_TEM",tem_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_TEM too long")
+    if(ios==0 .and. len_trim(tem_env)>0) then
+      select case(trim(tem_env))
+      case("contract"); native_tem_receipt_on=.true.
+      case("toml"); native_tem_toml=.true.; native_tem_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_TEM must be contract or toml")
       end select
     endif
     call toml_read(trim(filename),doc)
@@ -146,7 +173,9 @@ contains
     case default
       call native_error('unsupported case.name')
     end select
+    if(native_mat_toml) call parse_mat()
     do i=1,native_materials
+      if(native_mat_toml) exit
       native_e(i)=number(indexed('material',i)//'.E')
       native_nu(i)=number(indexed('material',i)//'.nu')
       native_density(i)=number(indexed('material',i)//'.density')
@@ -165,6 +194,7 @@ contains
     if(native_loa_toml) call parse_loa()
     if(native_pre_toml) call parse_pre()
     if(native_loa_toml) call loa_check_used()
+    if(native_tem_toml) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
@@ -878,6 +908,231 @@ contains
     endif
   end subroutine
 
+  ! ---------------------------------------------------------------------------
+  ! MAT pilot (HSTAR_NATIVE_MAT=toml): [[material]] (linear_elastic only) referenced by
+  ! name from [[section]]. Design: docs/fortran-interface/mat-pilot/DESIGN.md (M1-M9).
+  ! Material index (legacy imat) = [[material]] definition order (M3); thickness and
+  ! gravity_factor (legacy ratio) live on [[section]] (M4); alfa optional, default 1e-5 (M5).
+  ! ---------------------------------------------------------------------------
+  logical function mat_owned(path)
+    character(*), intent(in) :: path
+    mat_owned=.false.
+    if(.not.native_mat_toml) return
+    mat_owned = index(path,"material[")==1 .or. index(path,"section[")==1
+  end function
+
+  logical function in_list(seg,list)
+    character(*), intent(in) :: seg, list
+    in_list = index(" "//list//" "," "//seg//" ")>0
+  end function
+
+  ! Every key under one [[material]]/[[section]] table must be known; deferred features
+  ! get a "deferred" message instead of the generic unsupported-key one.
+  subroutine mat_check_keys(p,allowed,what)
+    character(*), intent(in) :: p, allowed, what
+    character(len=TOML_LEN_PATH) :: rest
+    character(:), allocatable :: seg
+    integer :: i, n, d
+    character(*), parameter :: deferred = "creep plasticity plastic wetting liquefaction contact gap curve "// &
+      "stress_strain hardening damage duncan_chang goodman concrete cam_clay clay_pz sand_pz soil_pz "// &
+      "fluid heat conductivity specific_heat geometry viscoelastic spring"
+    n=len(p)+1
+    do i=1,doc%n
+      if(len_trim(doc%entry(i)%path)<=n) cycle
+      if(doc%entry(i)%path(1:n)/=p//".") cycle
+      rest=doc%entry(i)%path(n+1:)
+      if(in_list(trim(rest),allowed)) then
+        if(index(rest,"@table")>0) seen(i)=.true.
+        cycle
+      endif
+      d=index(rest,".")
+      seg=trim(rest); if(d>0) seg=rest(1:d-1)
+      if(in_list(seg,deferred)) call native_error("MAT: "//what//": "//seg// &
+        " is deferred in the MAT pilot (only linear_elastic); use the legacy .mat")
+      if(in_list(trim(rest),"E nu thermal_expansion")) call native_error("MAT: unsupported key: "// &
+        trim(doc%entry(i)%path)//" (contract spelling; with HSTAR_NATIVE_MAT=toml use elastic.youngs_modulus,"// &
+        " elastic.poisson_ratio, thermal.expansion_coefficient)")
+      call native_error("MAT: unsupported key: "//trim(doc%entry(i)%path))
+    enddo
+  end subroutine
+
+  subroutine parse_mat()
+    character(:), allocatable :: p, nm, s, el
+    integer :: nmat, nsec, i, j, k, g, ng
+    logical :: used(2), covered(2)
+    character(len=TOML_LEN_TEXT) :: mname(2), ename(2), sname(2)
+    real(real64) :: v
+    ng=native_materials
+    nmat=doc%count_of("material")
+    nsec=doc%count_of("section")
+    if(nmat/=ng) call native_error("MAT: this profile needs exactly "//itoa(ng)// &
+      " [[material]] table(s) (one per element set), found "//itoa(nmat))
+    if(nsec/=ng) call native_error("MAT: this profile needs exactly "//itoa(ng)// &
+      " [[section]] table(s) (one per element set), found "//itoa(nsec))
+    do i=1,nmat
+      p=indexed("material",i)
+      k=key_index(p//".@table")
+      nm=string_value(p//".name")
+      if(len(nm)==0) call native_error("MAT: empty material name: "//p)
+      do j=1,i-1
+        if(trim(mname(j))==nm) call native_error("MAT: duplicate material name: "//nm)
+      enddo
+      mname(i)=nm
+      call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
+        "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient","material "//nm)
+      s=string_value(p//".model")
+      if(s=="elastic_isotropic") call native_error("MAT: material "//nm// &
+        ': model "elastic_isotropic" is the contract spelling; with HSTAR_NATIVE_MAT=toml use "linear_elastic"')
+      if(s/="linear_elastic") call native_error("MAT: material "//nm//": model "//s// &
+        " is deferred in the MAT pilot (only linear_elastic); use the legacy .mat")
+      native_density(i)=number(p//".density")
+      if(native_density(i)<=0 .or. native_density(i)>1.e6_real64) &
+        call native_error("MAT: material "//nm//": density out of range (0,1e6] kg/m^3")
+      native_e(i)=number(p//".elastic.youngs_modulus")
+      if(native_e(i)<=0 .or. native_e(i)>1.e15_real64) &
+        call native_error("MAT: material "//nm//": youngs_modulus out of range (0,1e15] Pa")
+      native_nu(i)=number(p//".elastic.poisson_ratio")
+      if(native_nu(i)<=-1 .or. native_nu(i)>=0.5_real64) &
+        call native_error("MAT: material "//nm//": poisson_ratio out of range (-1,0.5)")
+      native_alfa(i)=1.e-5_real64
+      if(present_key(p//".thermal.expansion_coefficient")) then
+        native_alfa(i)=number(p//".thermal.expansion_coefficient")
+        if(native_alfa(i)<0 .or. native_alfa(i)>1.e-2_real64) &
+          call native_error("MAT: material "//nm//": expansion_coefficient out of range [0,1e-2] 1/K")
+      endif
+    enddo
+    do j=1,ng
+      ename(j)=string_value(indexed("elset",j)//".name")
+    enddo
+    used=.false.; covered=.false.
+    do k=1,nsec
+      p=indexed("section",k)
+      i=key_index(p//".@table")
+      nm=string_value(p//".name")
+      if(len(nm)==0) call native_error("MAT: empty section name: "//p)
+      do j=1,k-1
+        if(trim(sname(j))==nm) call native_error("MAT: duplicate section name: "//nm)
+      enddo
+      sname(k)=nm
+      call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor","section "//nm)
+      el=string_value(p//".elset")
+      g=0
+      do j=1,ng
+        if(trim(ename(j))==el) g=j
+      enddo
+      if(g==0) call native_error("MAT: section "//nm//": undefined elset "//el)
+      if(covered(g)) call native_error("MAT: elset "//el//" is assigned by more than one section")
+      covered(g)=.true.
+      if(string_value(p//".element")/="Q4") call native_error("MAT: section "//nm//': only element "Q4" in this profile')
+      if(string_value(p//".formulation")/="plane_strain") &
+        call native_error("MAT: section "//nm//': only formulation "plane_strain" in this profile')
+      s=string_value(p//".material")
+      i=0
+      do j=1,nmat
+        if(trim(mname(j))==s) i=j
+      enddo
+      if(i==0) call native_error("MAT: section "//nm//": undefined material "//s)
+      if(used(i)) call native_error("MAT: material "//s// &
+        " is referenced by more than one section (one material per element set in the MAT pilot)")
+      used(i)=.true.
+      native_group_mat(g)=i
+      v=1._real64
+      if(present_key(p//".thickness")) v=number(p//".thickness")
+      if(v<=0 .or. v>1.e3_real64) call native_error("MAT: section "//nm//": thickness out of range (0,1e3] m")
+      native_thick(i)=v
+      v=1._real64
+      if(present_key(p//".gravity_factor")) v=number(p//".gravity_factor")
+      if(v<0 .or. v>1.e3_real64) call native_error("MAT: section "//nm//": gravity_factor out of range [0,1e3]")
+      native_ratio(i)=v
+    enddo
+    do i=1,nmat
+      if(.not.used(i)) call native_error("MAT: unreferenced material "//trim(mname(i)))
+    enddo
+  end subroutine
+
+  subroutine native_mat_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("MAT: "//what//" is deferred in the MAT pilot and cannot be driven by TOML")
+  end subroutine
+
+  ! Written from the stored props(imat)%mechanical%solid fields (Material.f90).
+  subroutine native_mat_receipt(i,material,rho,ratio,thick,e,nu,alfa,icreep,kind_wt,jliqu,ie,inu,rho_w)
+    integer, intent(in) :: i,icreep,kind_wt,jliqu,ie,inu
+    character(*), intent(in) :: material
+    real(real64), intent(in) :: rho,ratio,thick,e,nu,alfa,rho_w
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    mat_receipt_n=mat_receipt_n+1
+    if(mat_receipt_n==1) then
+      open(newunit=u,file="native-mat.txt",status="replace",action="write")
+      write(u,"(a)") "native-mat v1 mode="//trim(merge("toml    ","contract",native_mat_toml))
+    else
+      open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,1x,a)") "material ",i,trim(material)
+    write(u,"(a,es25.16)") "density=",rho
+    write(u,"(a,es25.16)") "ratio=",ratio
+    write(u,"(a,es25.16)") "thickness=",thick
+    write(u,"(a,es25.16)") "E=",e
+    write(u,"(a,es25.16)") "nu=",nu
+    write(u,"(a,es25.16)") "alfa=",alfa
+    write(u,"(a,5(1x,i0))") "icreep,kind_wt,jliqu,iE,iNu=",icreep,kind_wt,jliqu,ie,inu
+    write(u,"(a,es25.16)") "density_w=",rho_w
+    close(u)
+  end subroutine
+
+  ! Written from the stored group(igroup)%matno (Global.f90).
+  subroutine native_mat_group_receipt(igroup,matno)
+    integer, intent(in) :: igroup, matno
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    if(igroup==1) then
+      open(newunit=u,file="native-mat-groups.txt",status="replace",action="write")
+    else
+      open(newunit=u,file="native-mat-groups.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,a,i0)") "group ",igroup," matno=",matno
+    close(u)
+  end subroutine
+
+  ! ---------------------------------------------------------------------------
+  ! TEM minimal step (HSTAR_NATIVE_TEM=toml, decisions T1/M8): a TOML case may not carry
+  ! any temperature loading; the receipt records the counts boundt actually stored.
+  ! ---------------------------------------------------------------------------
+  subroutine parse_tem()
+    integer :: i
+    character(len=TOML_LEN_PATH) :: p
+    do i=1,doc%n
+      p=doc%entry(i)%path
+      if(index(p,"material[")==1) cycle
+      if(index(p,"thermal")==1 .or. index(p,"initial_temperature")==1 .or. index(p,"temperature_field")==1 &
+         .or. index(p,".thermal")>0 .or. index(p,"temperature")>0) &
+        call native_error("TEM: temperature loading ("//trim(p)//") is deferred; HSTAR_NATIVE_TEM=toml "// &
+          "only accepts a case without temperature loading (use the legacy .tem)")
+    enddo
+  end subroutine
+
+  subroutine native_tem_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("TEM: "//what//" is deferred (TEM minimal step) and cannot be driven by TOML")
+  end subroutine
+
+  subroutine native_tem_receipt(nsurf,nedge,nelgroup,npipe,ecwpipe,outintr)
+    integer, intent(in) :: nsurf,nedge,nelgroup,npipe,ecwpipe,outintr
+    integer :: u
+    if(.not.native_tem_receipt_on) return
+    tem_receipt_n=tem_receipt_n+1
+    if(tem_receipt_n==1) then
+      open(newunit=u,file="native-tem.txt",status="replace",action="write")
+      write(u,"(a)") "native-tem v1 mode="//trim(merge("toml    ","contract",native_tem_toml))
+    else
+      open(newunit=u,file="native-tem.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,6(a,i0))") "call=",tem_receipt_n," ntemp_surface=",nsurf," ntedge=",nedge, &
+      " ntelgroup=",nelgroup," npipe=",npipe," ecwpipe=",ecwpipe," outintr=",outintr
+    close(u)
+  end subroutine
+
   subroutine native_error(message)
     character(*), intent(in) :: message
     write(error_unit,'(a)') 'INVALID_INPUT TOML-03/04: '//message
@@ -914,19 +1169,19 @@ contains
   subroutine expect_int(path,v)
     character(*), intent(in) :: path
     integer, intent(in) :: v
-    if(pre_owned(path) .or. loa_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
     if(integer_value(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_real(path,v)
     character(*), intent(in) :: path
     real(real64), intent(in) :: v
-    if(pre_owned(path) .or. loa_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
     if(number(path) /= v) call native_error('unsupported value: '//path)
   end subroutine
   subroutine expect_str(path,v)
     character(*), intent(in) :: path,v
     integer :: k
-    if(pre_owned(path) .or. loa_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_STR) call native_error('expected string: '//path)
     if(doc%entry(k)%svalue /= v) call native_error('unsupported value: '//path)
@@ -935,7 +1190,7 @@ contains
     character(*), intent(in) :: path
     logical, intent(in) :: v
     integer :: k
-    if(pre_owned(path) .or. loa_owned(path)) return
+    if(pre_owned(path) .or. loa_owned(path) .or. mat_owned(path)) return
     k=key_index(path)
     if(doc%entry(k)%kind /= TV_BOOL) call native_error('expected boolean: '//path)
     if(doc%entry(k)%lvalue .neqv. v) call native_error('unsupported value: '//path)

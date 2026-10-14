@@ -1169,7 +1169,7 @@
     print *,text
     do iblk=1,nblks
         if(native_mode) then
-            matno_process(1:ngroup,iblk)=[(i0,i0=1,ngroup)]
+            matno_process(1:ngroup,iblk)=native_group_mat(1:ngroup)
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)matno_process(1:ngroup,iblk)
         endif
@@ -1560,7 +1560,8 @@
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
             group(igroup)%nelgroup=native_elcounts(igroup)
-            group(igroup)%matno=igroup
+            group(igroup)%matno=native_group_mat(igroup)
+            call native_mat_group_receipt(igroup,int(group(igroup)%matno))
             group(igroup)%type_nalgo=0
             group(igroup)%type_stiff=1
             group(igroup)%type_ecoint=1

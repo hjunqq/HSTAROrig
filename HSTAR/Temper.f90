@@ -73,6 +73,7 @@
     	! equiv pipecooling 考虑通水冷却【等效算法】
          print *,'ecwpipe=',ecwpipe,'iblks=',iblks,'lblks+1=',lblks+1
     if(ecwpipe>=1)then   !20200221
+	if(native_mode) call native_tem_deferred('equivalent pipe cooling (ecwpipe>=1)')
 	do igroup=1,ngroup
         allocate(group(igroup)%water_pipe)
         group(igroup)%water_pipe%pipecooling=0
@@ -98,6 +99,7 @@
     endif
     
     if(outintr<0)then   !20200226
+	if(native_mode) call native_tem_deferred('initial temperature per group (outintr<0)')
 	do igroup=1,ngroup
         allocate(group(igroup)%temp_pre)
          if(native_mode) text='TOML-03'
@@ -130,6 +132,7 @@
     read(tunit,*)ntemp_surface  !20230402
     endif
     if(ntemp_surface/=0)then
+    if(native_mode) call native_tem_deferred('surface temperature field (ntemp_surface>0)')
     !read(tunit,*)text
     allocate(temp_surface(ntemp_surface))
     
@@ -171,6 +174,7 @@
     allocate(tedges(ntedge))
     tedge=0
     do while(tedge<ntedge)
+       if(native_mode) call native_tem_deferred('convection edges (ntedge>0)')
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(tunit,*)text                               !4
        read(tunit,*)sedge,nnode,index,beta_bar,ibeta_bar
@@ -265,6 +269,7 @@
     allocate(tedgeload(ntelgroup))
     tedge=0
     do while(tedge<ntelgroup)
+       if(native_mode) call native_tem_deferred('convection edge loads (ntelgroup>0)')
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(tunit,*)text                               !4
        read(tunit,*)sedge,itcurve,nline
@@ -338,6 +343,7 @@ linet=linet+3
      allocate(pipeinfo(npipe))     
 
 	 do ipipe=1,npipe
+	 if(native_mode) call native_tem_deferred('cooling pipes (npipe>0)')
 	 if(algo_pipe==1)then
      read(tunit,*) nline,igroup,nnodc,coef  !nelocal
      print *,'nline,nelocal,nnodc=',nline,nelocal,nnodc
@@ -501,6 +507,7 @@ linet=linet+3
  
     
 32    continue
+    if(native_mode) call native_tem_receipt(int(ntemp_surface),int(ntedge),int(ntelgroup),int(npipe),int(ecwpipe),int(outintr))
     
     
     

@@ -246,6 +246,7 @@
     endif
     if (nscurve.ne.0)allocate(scurves(nscurve))
     do iscurve=1,nscurve
+        if(native_mode) call native_mat_deferred('stress-strain curves (nscurve>0)')
 
         read(munit,*)npoints,type_curve   !20200220
 
@@ -319,11 +320,11 @@
                     if(native_mode) then
                         material='ELASTIC_ISOTROPIC'
                         density=native_density(imat)
-                        ratio=1.
-                        thickness=1.
+                        ratio=native_ratio(imat)
+                        thickness=native_thick(imat)
                         e=native_e(imat)
                         nu=native_nu(imat)
-                        alfa=1.e-5_irk
+                        alfa=native_alfa(imat)
                         icreep=0
                         kind_wt=0
                         jliqu=0
@@ -354,9 +355,17 @@
                     props(imat)%mechanical%solid%iNu   =iNu
                     props(imat)%mechanical%solid%kind_wt   =kind_wt
                     props(imat)%mechanical%solid%jliqu   =jliqu
+                    if(native_mode) call native_mat_receipt(imat,props(imat)%mechanical%solid%material, &
+                        props(imat)%mechanical%solid%density,props(imat)%mechanical%solid%ratio, &
+                        props(imat)%mechanical%solid%thickness,props(imat)%mechanical%solid%e, &
+                        props(imat)%mechanical%solid%nu,props(imat)%mechanical%solid%alfa, &
+                        int(props(imat)%mechanical%solid%icreep),int(props(imat)%mechanical%solid%kind_wt), &
+                        int(props(imat)%mechanical%solid%jliqu),int(props(imat)%mechanical%solid%iE), &
+                        int(props(imat)%mechanical%solid%iNu),props(imat)%mechanical%solid%density_w)
 
                     !! for parameters of anti-liquifaction
                     if(jliqu.ne.0) then  !20220713
+                        if(native_mode) call native_mat_deferred('anti-liquefaction parameters (jliqu/=0)')
                         allocate(props(imat)%mechanical%solid%scycl)
                         read(munit,*)nalfa,ncycl
                         props(imat)%mechanical%solid%scycl%nalfa=nalfa
@@ -384,6 +393,7 @@
                     !! for creep
                     !print *,'icreep=',icreep
                     if (icreep>0.and.icreep<=2) then  !20220422
+                        if(native_mode) call native_mat_deferred('creep icreep=1/2')
                         allocate(props(imat)%mechanical%solid%creep)
                         read(munit,*)nr,a,b,cvstrain     !nzw 2006-05-21 for vstrain
                         props(imat)%mechanical%solid%creep%nr=nr
@@ -403,6 +413,7 @@
                                 props(imat)%mechanical%solid%creep%k
                         endif
                     else if (icreep==3) then  !2013510
+                        if(native_mode) call native_mat_deferred('creep icreep=3')
                         !print *,'icreepxx=',icreep
                         allocate(props(imat)%mechanical%solid%creep)
                         read(munit,*)nr,alfas,bs,ds
@@ -420,6 +431,7 @@
                             props(imat)%mechanical%solid%creep%m3 =m3
                         endif
                     else if (icreep==4) then  !20180630
+                        if(native_mode) call native_mat_deferred('creep icreep=4')
                         !print *,'icreepxx=',icreep
                         allocate(props(imat)%mechanical%solid%creep)
                         read(munit,*)props(imat)%mechanical%solid%creep%Ek,props(imat)%mechanical%solid%creep%etak,props(imat)%mechanical%solid%creep%etam
@@ -429,6 +441,7 @@
 
                     !! for wetting deformation
                     if (kind_wt>0) then  !20220409
+                        if(native_mode) call native_mat_deferred('wetting deformation (kind_wt>0)')
                         allocate(props(imat)%mechanical%solid%wetting_def)
                         !1.沈珠江Cw-Dw模型(沈珠江,王剑平:土质心墙坝填筑及蓄水的数值模拟，水利水运科学研究，1988（4）：47-63）
                         !        strain_vs=Cw;Gama_s=Dw*SL/（1-SL)
@@ -445,6 +458,7 @@
                             props(imat)%mechanical%solid%wetting_def%b, &
                             props(imat)%mechanical%solid%wetting_def%c
                     endif  !20220409
+                    if(native_mode .and. name=='CONTACT') call native_mat_deferred('CONTACT material (igap0)')
                     if (name=='CONTACT') &
                         read(munit,*)props(imat)%mechanical%solid%igap0, &
                         props(imat)%mechanical%solid%gap0,  &
@@ -452,6 +466,7 @@
                         props(imat)%mechanical%solid%icft
                     igap0=props(imat)%mechanical%solid%igap0
                     if(igap0==2)then !20231006
+                        if(native_mode) call native_mat_deferred('contact gap definition (igap0=2)')
                         allocate(props(imat)%mechanical%solid%gap_define)  !20231006
                         read(munit,*)props(imat)%mechanical%solid%gap_define%gap_kind,  &
                             ngapx
@@ -477,14 +492,21 @@
                     end if !igap0==2 !20231006
 
                     if (name=='NOLINORMK')then
+                        if(native_mode) call native_mat_deferred('NOLINORMK normal-stiffness table')
                         read(munit,*)np
                         props(imat)%mechanical%solid%np=np
                         allocate(props(imat)%mechanical%solid%normalstress(np),props(imat)%mechanical%solid%normale(np))
                         read(munit,*)props(imat)%mechanical%solid%normalstress
                         read(munit,*)props(imat)%mechanical%solid%normale
                     endif
+                    ! MAT pilot (M7): only ELASTIC_ISOTROPIC may be reached from TOML. The ClayPZ/SandPZ/SoilPZ
+                    ! 'if(native_mode) text=...' lines below only skip comment records; their data reads are
+                    ! not guarded, so every non-elastic case also starts with native_mat_deferred.
+                    if(native_mode .and. trim(material)/='ELASTIC_ISOTROPIC') &
+                        call native_mat_deferred('material model '//trim(material))
                     material_select: select case(material)                       ! select 3
                     case('PLANE_LOWFT')
+                        if(native_mode) call native_mat_deferred('material model PLANE_LOWFT')
 
                         allocate(props(imat)%mechanical%solid%Plane_lowft)
                         allocate(props(imat)%mechanical%solid%Plane_lowft%point(2*(ndimn-1)),props(imat)%mechanical%solid%Plane_lowft%ft(ndimn-1) )
@@ -494,6 +516,7 @@
                     case('ELASTIC_ISOTROPIC')
                     case('ELASTIC_FRICTIONLESS')
                     case('ELASTIC_SPRING')
+                        if(native_mode) call native_mat_deferred('material model ELASTIC_SPRING')
                         allocate(props(imat)%mechanical%solid%Elastic_Spring)
                         read(munit,*)props(imat)%mechanical%solid%Elastic_Spring%a,      &
                             props(imat)%mechanical%solid%Elastic_Spring%b,      &
@@ -502,6 +525,7 @@
                             props(imat)%mechanical%solid%Elastic_Spring%l0
 
                     case('ELASTIC_EP') !ep2010
+                        if(native_mode) call native_mat_deferred('material model ELASTIC_EP')
 
                         allocate(props(imat)%mechanical%solid%ELASTIC_EP)
                         read(munit,*)np
@@ -512,6 +536,7 @@
                         read(munit,*)props(imat)%mechanical%solid%ELASTIC_EP%p
                         read(munit,*)props(imat)%mechanical%solid%ELASTIC_EP%Es
                     case('STEEL_EP') !20211125
+                        if(native_mode) call native_mat_deferred('material model STEEL_EP')
 
                         allocate(props(imat)%mechanical%solid%STEEL_EP)
                         read(munit,*)np,props(imat)%mechanical%solid%STEEL_EP%csigma
@@ -522,12 +547,14 @@
                         read(munit,*)props(imat)%mechanical%solid%STEEL_EP%sig
                         read(munit,*)props(imat)%mechanical%solid%STEEL_EP%Es
                     case('STEEL_SP') !20211125
+                        if(native_mode) call native_mat_deferred('material model STEEL_SP')
 
                         allocate(props(imat)%mechanical%solid%STEEL_SP)
                         allocate(props(imat)%mechanical%solid%STEEL_SP%kxyz(ndimn))
                         read(munit,*)props(imat)%mechanical%solid%STEEL_SP%kxyz,props(imat)%mechanical%solid%STEEL_SP%ktheta1,props(imat)%mechanical%solid%STEEL_SP%ktheta2
 
                     case('DUNCANCHANG')
+                        if(native_mode) call native_mat_deferred('material model DUNCANCHANG')
 
                         allocate(props(imat)%mechanical%solid%DuncanChang)
                         read(munit,*)props(imat)%mechanical%solid%DuncanChang%model, &
@@ -571,6 +598,7 @@
                         endif
                         !  goodman
                     case('GOODMAN')
+                        if(native_mode) call native_mat_deferred('material model GOODMAN')
 
                         allocate(props(imat)%mechanical%solid%Goodman)
                         read(munit,*)model,props(imat)%mechanical%solid%Goodman%point1,  & !2007
@@ -645,6 +673,7 @@
                             !write(7,*)'imat=',imat,'kns0=',props(imat)%mechanical%solid%Goodman%fcmp%kns0
                         endif
                     case('CLASSICALEP')
+                        if(native_mode) call native_mat_deferred('material model CLASSICALEP')
                         allocate(props(imat)%mechanical%solid%ClassicalEP)
                         read(munit,*)props(imat)%mechanical%solid%ClassicalEP%criteria, &
                             props(imat)%mechanical%solid%ClassicalEP%sigma0,   &
@@ -682,6 +711,7 @@
                             props(imat)%mechanical%solid%ClassicalEP%sigmat,    &
                             props(imat)%mechanical%solid%ClassicalEP%csigmat
                     case('CAMCLAY')
+                        if(native_mode) call native_mat_deferred('material model CAMCLAY')
                         allocate(props(imat)%mechanical%solid%CamClay)
                         read(munit,*)props(imat)%mechanical%solid%CamClay%Pc,           &
                             props(imat)%mechanical%solid%CamClay%lamda,        &
@@ -691,6 +721,7 @@
                             props(imat)%mechanical%solid%CamClay%D1,           &
                             props(imat)%mechanical%solid%CamClay%gamma
                     case('CONCRETE')
+                        if(native_mode) call native_mat_deferred('material model CONCRETE')
                         allocate(props(imat)%mechanical%solid%Concrete)
                         read(munit,*)props(imat)%mechanical%solid%Concrete%A,           &
                             props(imat)%mechanical%solid%Concrete%B,           &
@@ -765,6 +796,7 @@
                             props(imat)%mechanical%solid%Concrete%efc=efc
                         endif
                     case('ClayPZ')
+                        if(native_mode) call native_mat_deferred('material model ClayPZ')
                         allocate(props(imat)%mechanical%solid%ClayPZ)
                         if(native_mode) text='TOML-03'
                         if(.not.native_mode) read(munit,*)text
@@ -798,6 +830,7 @@
                         pzunit=64
 
                     case('SandPZ')
+                        if(native_mode) call native_mat_deferred('material model SandPZ')
                         allocate(props(imat)%mechanical%solid%SandPZ)
                         props(imat)%mechanical%solid%SandPZ%d=0.0d0
                         props(imat)%mechanical%solid%SandPZ%humidification=0
@@ -898,6 +931,7 @@
 
 
                     case('SoilPZ')
+                        if(native_mode) call native_mat_deferred('material model SoilPZ')
                         allocate(props(imat)%mechanical%solid%SoilPZ)
                         allocate(d(24))
                         !
@@ -1003,6 +1037,7 @@
                     end select material_select
 
                 case('FLUID')
+                    if(native_mode) call native_mat_deferred('FLUID phase')
                     allocate(props(imat)%mechanical%fluid)
                     read(munit,*)density,ratio,bulkw  !,cx
                     print *,'density,ratio,bulkw,c=',density,ratio,bulkw ,cx
@@ -1052,6 +1087,7 @@
 
             end do     !! for nphase
         case ('HEAT')   !20200221 modified from chengjing
+            if(native_mode) call native_mat_deferred('HEAT property')
 
             allocate(props(imat)%heat)
             allocate(props(imat)%heat%alfa(ndimn))
@@ -1072,6 +1108,7 @@
 
 
         case ('GEOMETRY')
+            if(native_mode) call native_mat_deferred('GEOMETRY property')
             allocate(props(imat)%geometry)
 
             read(munit,*)props(imat)%geometry%aera,  &
