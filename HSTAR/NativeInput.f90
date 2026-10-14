@@ -52,13 +52,14 @@ module native_input
   logical, private :: pre_used_curve1=.false.
   type :: loa_amp_t
     character(len=TOML_LEN_TEXT) :: name=""
+    character(len=10) :: typ="LINEAR"
     real(real64), allocatable :: t(:), f(:)
     logical :: used=.false.
   end type
   type(loa_amp_t), allocatable :: native_amp(:)
   type, private :: loa_surf_t
     character(len=TOML_LEN_TEXT) :: name=""
-    integer :: first=0, last=0
+    integer :: first=0, last=0, kind=2           ! kind 2 = edge2 (LOA edges), 4 = face4 (TEM faces)
     logical :: used=.false.
   end type
   type(loa_surf_t), allocatable, private :: native_surf(:)
@@ -105,10 +106,49 @@ module native_input
   ! Without it the inline [[nset]]/[[surface]] edges/[[elset]] element_count forms are still read for
   ! one version, with a deprecation warning on stderr.
   logical :: native_sets_on=.false.
+  ! TEMPERATURE pilot phase 2 (creep-tem-pilot/DESIGN.md section 9, T1-T8 confirmed). analysis.type =
+  ! "transient_heat" under HSTAR_NATIVE_GLB=toml: B8 temperature field (dof 10, legacy type_problem S),
+  ! time_dependent .man increments ([[step.increment]]), PARDISO (.sol implied), HEAT material, DABT curve,
+  ! convection on face4 surfaces, cooling pipes (algo 3) and [[tie]] (HSTAR_NATIVE_NRT=toml, .nrt TRAL).
+  logical :: native_heat=.false.
+  logical :: native_nrt_toml=.false., native_nrt_receipt_on=.false.
+  integer, parameter :: NATIVE_MAXI=100
+  integer :: native_ninc(NATIVE_MAXB)=0
+  real(real64) :: native_inc_dt(NATIVE_MAXI,NATIVE_MAXB)=0._real64, native_inc_tol(NATIVE_MAXI,NATIVE_MAXB)=0._real64
+  integer :: native_inc_nstep(NATIVE_MAXI,NATIVE_MAXB)=0, native_inc_miter(NATIVE_MAXI,NATIVE_MAXB)=0
+  logical :: native_mat_heat(NATIVE_MAXG)=.false.
+  real(real64) :: native_diff(3,NATIVE_MAXG)=0._real64
+  integer :: native_src_curve(NATIVE_MAXG)=0, native_place_curve(NATIVE_MAXG)=0
+  character(len=TOML_LEN_TEXT), private :: mat_src_name(NATIVE_MAXG)='', mat_place_name(NATIVE_MAXG)=''
+  integer :: native_nface=0
+  integer, allocatable :: native_faces(:,:)          ! (5,nface): 4 face nodes + element
+  type :: tem_conv_t
+    integer :: first=0, last=0, itcurve=0, surf=0
+    real(real64) :: beta=0._real64
+  end type
+  type :: tem_step_t
+    type(tem_conv_t), allocatable :: conv(:)
+  end type
+  type(tem_step_t), allocatable :: native_tem_step(:)
+  type :: tem_pipe_t
+    integer :: igroup=0, twcurve=0
+    real(real64) :: coef=1._real64, qw=0._real64, lamda=0._real64, dens=0._real64, cw=0._real64, t0=0._real64, t1=0._real64
+    integer, allocatable :: seg(:,:)
+  end type
+  type(tem_pipe_t), allocatable :: native_pipe(:)
+  integer :: native_pipe_algo=3
+  type :: nrt_tie_t
+    integer :: slave=0
+    integer, allocatable :: masters(:)
+    real(real64), allocatable :: weights(:)
+  end type
+  type(nrt_tie_t), allocatable :: native_tie(:)
+  integer, private :: tem_face_blk=0, tem_conv_grp=0, tem_receipt2_n=0
+  integer, allocatable, private :: mesh_ele(:,:)       ! (8,nelem) kept by validate_mesh_general for face checks
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env, glb_env
+    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env, glb_env, nrt_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -168,6 +208,15 @@ contains
       case default; call native_error("HSTAR_NATIVE_MAN must be contract or toml")
       end select
     endif
+    call get_environment_variable("HSTAR_NATIVE_NRT",nrt_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_NRT too long")
+    if(ios==0 .and. len_trim(nrt_env)>0) then
+      select case(trim(nrt_env))
+      case("contract"); native_nrt_receipt_on=.true.
+      case("toml"); native_nrt_toml=.true.; native_nrt_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_NRT must be contract or toml")
+      end select
+    endif
     call get_environment_variable("HSTAR_NATIVE_GLB",glb_env,status=ios)
     if(ios==-1) call native_error("HSTAR_NATIVE_GLB too long")
     if(ios==0 .and. len_trim(glb_env)>0) then
@@ -196,7 +245,10 @@ contains
       if(native_tem_receipt_on .and. .not.native_tem_toml) &
         call native_error("GLB: HSTAR_NATIVE_GLB=toml requires HSTAR_NATIVE_TEM = toml or unset")
       call parse_glb()
+      if(native_heat .and. .not.native_tem_toml) call native_error("GLB: analysis.type ""transient_heat"" "// &
+        "requires HSTAR_NATIVE_TEM = toml (convection, pipes and ECWPIPE come from the TOML)")
     else
+    if(native_nrt_toml) call native_error("NRT: HSTAR_NATIVE_NRT=toml requires HSTAR_NATIVE_GLB=toml")
     i=key_index('case.name')
     if(doc%entry(i)%kind/=TV_STR) call native_error('expected string: case.name')
     select case(trim(doc%entry(i)%svalue))
@@ -240,6 +292,7 @@ contains
       if(native_density(i)<=0 .or. native_density(i)>1.e6_real64) call native_error('density out of range (0,1e6]')
     enddo
     do i=1,native_blocks
+      if(native_heat) exit                 ! transient_heat: increments come from [[step.increment]] (parse_man)
       if(.not.native_loa_toml) native_gravity(i)=number(indexed('step',i)//'.load[1].magnitude')
       native_substeps(i)=integer_value(indexed('step',i)//'.controls.substeps')
       native_iterations(i)=integer_value(indexed('step',i)//'.controls.max_iterations')
@@ -250,8 +303,10 @@ contains
     if(native_man_toml) call parse_man()
     if(native_loa_toml) call parse_loa()
     if(native_pre_toml) call parse_pre()
+    if(native_heat) call heat_resolve()
+    if(native_nrt_toml) call parse_nrt()
     if(native_loa_toml) call loa_check_used()
-    if(native_tem_toml) call parse_tem()
+    if(native_tem_toml .and. .not.native_heat) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
     if(native_sets_on) then
       if(len(sets_first_unreferenced())>0) call native_error("SETS: unreferenced "//sets_first_unreferenced())
@@ -271,7 +326,9 @@ contains
     native_mode=.true.
     print *, 'Native TOML input accepted (mesh relative to TOML file)'
     print *, 'TOML material E,nu,density:',native_e(1:native_materials),native_nu(1:native_materials),native_density(1:native_materials)
-    print *, 'TOML gravity,substeps,max_iterations:',native_gravity(1:native_blocks),native_substeps(1:native_blocks),native_iterations(1:native_blocks)
+    if(.not.native_heat) print *, 'TOML gravity,substeps,max_iterations:',native_gravity(1:native_blocks), &
+      native_substeps(1:native_blocks),native_iterations(1:native_blocks)
+    if(native_heat) print *, 'TOML transient_heat: blocks, increments:',native_blocks,native_ninc(1:native_blocks)
   end subroutine
 
   function indexed(name,i) result(path)
@@ -410,7 +467,7 @@ contains
     type(pre_cand_t), allocatable :: cand(:)
     type(pre_cand_t) :: t
     integer, allocatable :: owner(:,:)
-    character(*), parameter :: dofname(3)=["ux","uy","uz"]
+    character(*), parameter :: dofname(10)=["ux","uy","uz","r4","r5","r6","p7","w8","a9","T "]
     character(:), allocatable :: p, q, sp, nm, dn, amp
     integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre
     logical, allocatable :: nref(:)
@@ -421,7 +478,7 @@ contains
       do i=1,sets_n
         if(sets(i)%kind==SK_NSET) nn=nn+1
       enddo
-      if(nn<1) call native_error("SETS: at least one nset is required in 1.set")
+      if(nn<1 .and. .not.native_heat) call native_error("SETS: at least one nset is required in 1.set")
       allocate(ns(nn)); j=0
       do i=1,sets_n
         if(sets(i)%kind/=SK_NSET) cycle
@@ -430,8 +487,8 @@ contains
       enddo
     else
     nn=doc%count_of("nset")
-    if(nn<1) call native_error("at least one [[nset]] is required")
-    allocate(ns(nn))
+    if(nn<1 .and. .not.native_heat) call native_error("at least one [[nset]] is required")
+    allocate(ns(max(nn,1)))
     do i=1,nn
       p=indexed("nset",i)
       k=key_index(p//".@table")
@@ -464,9 +521,9 @@ contains
     do s=1,native_blocks
       sp=indexed("step",s)
       nb=doc%count_of(sp//".boundary")
-      if(nb<1) call native_error("step "//itoa(s)//": at least one [[step.boundary]] is required")
-      allocate(owner(3,native_points)); owner=0
-      allocate(cand(3*nb)); ncand=0
+      if(nb<1 .and. .not.native_heat) call native_error("step "//itoa(s)//": at least one [[step.boundary]] is required")
+      allocate(owner(10,native_points)); owner=0
+      allocate(cand(max(3*nb,1))); ncand=0
       do b=1,nb
         q=indexed(sp//".boundary",b)
         k=key_index(q//".@table")
@@ -502,18 +559,23 @@ contains
         do d=1,nd
           dn=string_value(indexed(q//".dof",d))
           select case(dn)
-          case("ux"); dof=1
-          case("uy"); dof=2
-          case("uz"); dof=3
+          case("ux","uy","uz")
+            if(native_heat) call native_error("dof "//dn//" not available in a transient_heat analysis (only T) "// &
+              "(step "//itoa(s)//" boundary "//itoa(b)//")")
+            dof=index("xyz",dn(2:2))
+          case("T")
+            if(.not.native_heat) call native_error("dof T needs analysis.type ""transient_heat"" (step "//itoa(s)// &
+              " boundary "//itoa(b)//")")
+            dof=10
           case("rx","ry","rz")
             call native_error("rotational dof "//dn//" is not supported in the PRE pilot (step "//itoa(s)//" boundary "//itoa(b)//")")
           case default
-            call native_error("unknown dof "//dn//" (expected ux, uy, uz) in step "//itoa(s)//" boundary "//itoa(b))
+            call native_error("unknown dof "//dn//" (expected ux, uy, uz or T) in step "//itoa(s)//" boundary "//itoa(b))
           end select
-          if(dof>ndim_pre) call native_error("dof "//dn//" not available: mesh.dimension is "//itoa(ndim_pre))
+          if(dof<=3 .and. dof>ndim_pre) call native_error("dof "//dn//" not available: mesh.dimension is "//itoa(ndim_pre))
           do k=1,size(ns(idx)%nodes)
             v=ns(idx)%nodes(k)
-            if(owner(dof,v)/=0) call native_error("duplicate constraint: step "//itoa(s)//" node "//itoa(v)//" dof "//dofname(dof)// &
+            if(owner(dof,v)/=0) call native_error("duplicate constraint: step "//itoa(s)//" node "//itoa(v)//" dof "//trim(dofname(dof))// &
                  " (boundary "//itoa(owner(dof,v))//" and boundary "//itoa(b)//")")
             owner(dof,v)=b
           enddo
@@ -654,7 +716,21 @@ contains
       if(amp_by_name(nm)/=0) call native_error("LOA: duplicate amplitude name: "//nm)
       native_amp(i)%name=nm
       typ=string_value(p//".type")
-      if(typ/="linear") call native_error("LOA: amplitude "//nm//": type "//typ//" is not supported in the LOA pilot (only linear)")
+      if(typ=="dabt") then
+        ! T1: legacy DABT d(f)=a*b/(b+t)**2, theta(t)=a*t/(b+t); a=ttime_curve(1), b=dfact_curve(1)
+        if(.not.native_heat) call native_error("LOA: amplitude "//nm//": type dabt needs analysis.type 'transient_heat'")
+        native_amp(i)%typ="DABT"
+        allocate(native_amp(i)%t(1),native_amp(i)%f(1))
+        native_amp(i)%t(1)=number(p//".final_rise")
+        native_amp(i)%f(1)=number(p//".half_time")
+        if(native_amp(i)%t(1)<=0 .or. native_amp(i)%t(1)>1.e3_real64) &
+          call native_error("LOA: amplitude "//nm//": final_rise out of range (0,1e3]")
+        if(native_amp(i)%f(1)<=0 .or. native_amp(i)%f(1)>1.e6_real64) &
+          call native_error("LOA: amplitude "//nm//": half_time out of range (0,1e6]")
+        cycle
+      endif
+      if(typ/="linear") call native_error("LOA: amplitude "//nm//": type "//typ//" is not supported (only linear"// &
+        trim(merge(", dabt",repeat(" ",6),native_heat))//")")
       if(.not.present_key(p//".before_first")) call native_error("LOA: amplitude "//nm//": before_first is required (only ""zero"")")
       if(string_value(p//".before_first")/="zero") call native_error("LOA: amplitude "//nm//": before_first must be ""zero""")
       n=integer_value(p//".points.count")
@@ -673,7 +749,11 @@ contains
       enddo
     enddo
     ! ---- [[surface]] (edge sets, D5); with 1.set: the "surface ... edge" sets, in file order
-    if(native_sets_on) then
+    if(native_heat .and. .not.native_sets_on) call native_error("TEM: a transient_heat analysis needs [mesh] sets_file "// &
+      "(convection faces are face sets in 1.set; T9)")
+    if(native_sets_on .and. native_heat) then
+      call heat_surfaces_from_sets(ns)
+    elseif(native_sets_on) then
       call loa_surfaces_from_sets(ns)
     else
     ns=doc%count_of("surface")
@@ -730,6 +810,12 @@ contains
       nl=doc%count_of(sp//".load")
       allocate(tmp(max(nl,1)))
       ng=0; nh=0; srf_step=.false.
+      if(native_heat) then
+        call heat_step_loads(s,sp,nl,ns,srf_step)
+        native_loa(s)%hyd=tmp(1:0)
+        deallocate(tmp)
+        cycle
+      endif
       do l=1,nl
         q=indexed(sp//".load",l)
         k=key_index(q//".@table")
@@ -878,7 +964,10 @@ contains
     integer, intent(out) :: ntime,nstoch,nline
     character(*), intent(out) :: type_curve
     ntime=2; type_curve='LINEAR'; nstoch=0; nline=2
-    if(native_loa_toml) ntime=size(native_amp(ic)%t)
+    if(native_loa_toml) then
+      ntime=size(native_amp(ic)%t)
+      type_curve=native_amp(ic)%typ
+    endif
   end subroutine
 
   subroutine native_loa_curve_times(ic,t)
@@ -922,6 +1011,7 @@ contains
   integer function native_loa_nedges() result(n)
     if(native_loa_toml) then
       n=native_loa_nedge
+      if(native_heat) n=0                ! face4 surfaces belong to TEM (convection), not to .loa edges
     else
       n=merge(40,0,native_dam)
     endif
@@ -1089,6 +1179,14 @@ contains
         if(trim(mname(j))==nm) call native_error("MAT: duplicate material name: "//nm)
       enddo
       mname(i)=nm
+      if(native_heat) then
+        call mat_check_keys(p,"@table name model diffusivity.count diffusivity[1] diffusivity[2] diffusivity[3] "// &
+          "heat_source_curve placement_temperature_curve","material "//nm)
+        if(string_value(p//".model")/="heat") call native_error("MAT: material "//nm// &
+          ': a transient_heat analysis needs model "heat"')
+        call parse_heat_mat(p,nm,i)
+        cycle
+      endif
       call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
         "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient creep.@table creep.model "// &
         "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity","material "//nm)
@@ -1159,6 +1257,8 @@ contains
         " is referenced by more than one section (one material per element set in the MAT pilot)")
       used(i)=.true.
       native_group_mat(g)=i
+      if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
+        call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
       v=1._real64
       if(present_key(p//".thickness")) v=number(p//".thickness")
       if(present_key(p//".thickness") .and. native_ndim/=2) &
@@ -1173,6 +1273,44 @@ contains
     do i=1,nmat
       if(.not.used(i)) call native_error("MAT: unreferenced material "//trim(mname(i)))
     enddo
+  end subroutine
+
+  ! [[material]] model = "heat" (T2): legacy 'HEAT' card alfa(1:ndimn), source_curve, place_curve,
+  ! pipe_cooling=0 (equivalent pipe cooling deferred), ialfa=0. Curve names are resolved in heat_resolve.
+  subroutine parse_heat_mat(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    integer :: j
+    native_mat_heat(i)=.true.
+    if(integer_value(p//".diffusivity.count")/=native_ndim) call native_error("MAT: material "//nm// &
+      ": diffusivity needs mesh.dimension ("//itoa(native_ndim)//") entries")
+    do j=1,native_ndim
+      native_diff(j,i)=number(indexed(p//".diffusivity",j))
+      if(native_diff(j,i)<=0 .or. native_diff(j,i)>1.e3_real64) call native_error("MAT: material "//nm// &
+        ": diffusivity out of range (0,1e3] m^2/time")
+    enddo
+    mat_src_name(i)=string_value(p//".heat_source_curve")
+    mat_place_name(i)=string_value(p//".placement_temperature_curve")
+    native_density(i)=0; native_e(i)=0; native_nu(i)=0
+  end subroutine
+
+  ! Appended to native-mat.txt from the stored props(imat)%heat fields (Material.f90).
+  subroutine native_heat_mat_receipt(i,alfa,src,place,pipe,ialfa)
+    integer, intent(in) :: i,src,place,pipe,ialfa
+    real(real64), intent(in) :: alfa(:)
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    mat_receipt_n=mat_receipt_n+1
+    if(mat_receipt_n==1) then
+      open(newunit=u,file="native-mat.txt",status="replace",action="write")
+      write(u,"(a)") "native-mat v1 mode="//trim(merge("toml    ","contract",native_mat_toml))
+    else
+      open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,a)") "material ",i," HEAT"
+    write(u,"(a,*(es25.16))") "diffusivity=",alfa
+    write(u,"(a,4(1x,i0))") "source_curve,place_curve,pipe_cooling,ialfa=",src,place,pipe,ialfa
+    close(u)
   end subroutine
 
   ! [[material]].creep (phase 1, C2): model "kelvin" | "burgers" -> legacy icreep=4
@@ -1242,9 +1380,38 @@ contains
     man_owned = in_list(trim(path(d+11:)),"time_increment tolerance_force tolerance_dof")
   end function
 
+  ! transient_heat (T3): [[step.increment]] = one legacy time_dependent increment card.
+  subroutine parse_man_heat()
+    integer :: i, j, n, k
+    character(:), allocatable :: p, q
+    do i=1,native_blocks
+      p=indexed("step",i)
+      n=doc%count_of(p//".increment")
+      if(n<1 .or. n>NATIVE_MAXI) call native_error("MAN: "//p//" needs 1.."//itoa(NATIVE_MAXI)//" [[step.increment]] tables")
+      native_ninc(i)=n
+      do j=1,n
+        q=indexed(p//".increment",j)
+        k=key_index(q//".@table")
+        call glb_check_keys(q,"@table time_increment substeps max_iterations tolerance","")
+        native_inc_dt(j,i)=number(q//".time_increment")
+        if(native_inc_dt(j,i)<=0 .or. native_inc_dt(j,i)>1.e6_real64) call native_error("MAN: "//q//".time_increment out of range (0,1e6]")
+        native_inc_nstep(j,i)=integer_value(q//".substeps")
+        if(native_inc_nstep(j,i)<1 .or. native_inc_nstep(j,i)>100000) call native_error("MAN: "//q//".substeps out of range [1,100000]")
+        native_inc_miter(j,i)=integer_value(q//".max_iterations")
+        if(native_inc_miter(j,i)<1 .or. native_inc_miter(j,i)>100) call native_error("MAN: "//q//".max_iterations out of range [1,100]")
+        native_inc_tol(j,i)=number(q//".tolerance")
+        if(native_inc_tol(j,i)<=0 .or. native_inc_tol(j,i)>1._real64) call native_error("MAN: "//q//".tolerance out of range (0,1]")
+      enddo
+    enddo
+  end subroutine
+
   subroutine parse_man()
     integer :: i
     character(:), allocatable :: p
+    if(native_heat) then
+      call parse_man_heat()
+      return
+    endif
     do i=1,native_blocks
       p=indexed("step",i)//".controls"
       native_ditime(i)=number(p//".time_increment")
@@ -1456,6 +1623,33 @@ contains
     j=0
   end subroutine
 
+  ! transient_heat: the "surface ... face" sets of 1.set (B8 faces, canonical node order of yl_sets) in file order
+  subroutine heat_surfaces_from_sets(ns)
+    integer, intent(out) :: ns
+    integer :: i, j, k, total, f(4)
+    ns=0; total=0
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_SURFACE) cycle
+      if(sets(i)%sub/=SS_FACE) call native_error("TEM: surface "//trim(sets(i)%name)// &
+        ": a transient_heat analysis takes face surfaces only")
+      ns=ns+1; total=total+sets(i)%n
+    enddo
+    if(native_ndim/=3) call native_error("TEM: face surfaces need mesh.dimension 3")
+    allocate(native_surf(ns), native_faces(5,max(total,1)), native_loa_edges(3,1))
+    native_loa_nedge=0; native_nface=0; k=0
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_SURFACE) cycle
+      k=k+1
+      native_surf(k)%name=sets(i)%name; native_surf(k)%kind=4; native_surf(k)%first=native_nface+1
+      do j=1,sets(i)%n
+        call sets_face_nodes(sets(i)%m(2*j-1),sets(i)%m(2*j),f)
+        native_nface=native_nface+1
+        native_faces(1:4,native_nface)=f; native_faces(5,native_nface)=sets(i)%m(2*j-1)
+      enddo
+      native_surf(k)%last=native_nface
+    enddo
+  end subroutine
+
   subroutine loa_surfaces_from_sets(ns)
     integer, intent(out) :: ns
     integer :: i, j, k, total, ie, e(3)
@@ -1507,7 +1701,11 @@ contains
     k=key_index('analysis.@table')
     call glb_check_keys('analysis','@table type','')
     s=string_value('analysis.type')
-    if(s/='static') call native_error('GLB: analysis.type "'//s//'" is deferred in the GLB pilot (only static)')
+    if(s=='transient_heat') then
+      native_heat=.true.                  ! temperature pilot phase 2 (T1-T8)
+    elseif(s/='static') then
+      call native_error('GLB: analysis.type "'//s//'" is deferred (static, transient_heat)')
+    endif
     ! [mesh]
     k=key_index('mesh.@table')
     call glb_check_keys('mesh','@table file format dimension sets_file sets_sha256','')
@@ -1556,13 +1754,18 @@ contains
       select case(s)
       case('Q4')
         if(native_ndim/=2) call native_error('GLB: section '//p//': element Q4 needs mesh.dimension 2')
+        if(native_heat) call native_error('GLB: section '//p//': transient_heat with Q4 is deferred (only B8)')
         if(string_value(p//'.formulation')/='plane_strain') &
           call native_error('GLB: section '//p//': 2D Q4 supports only formulation "plane_strain"')
         native_gname(g)='Q4'; native_gindex(g)=5; native_gnnode(g)=4
       case('B8')
         if(native_ndim/=3) call native_error('GLB: section '//p//': element B8 needs mesh.dimension 3')
-        if(string_value(p//'.formulation')/='solid') &
+        if(native_heat) then
+          if(string_value(p//'.formulation')/='heat') &
+            call native_error('GLB: section '//p//': a transient_heat analysis needs formulation "heat"')
+        elseif(string_value(p//'.formulation')/='solid') then
           call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
+        endif
         native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
       case default
         call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8)')
@@ -1576,17 +1779,24 @@ contains
     do i=1,nb
       p=indexed('step',i)
       k=key_index(p//'.@table')
-      k=key_index(p//'.controls.@table')
+      if(.not.native_heat) k=key_index(p//'.controls.@table')
       if(len(string_value(p//'.name'))==0) call native_error('GLB: empty step name: '//p)
       s=string_value(p//'.procedure')
-      if(s/='static') call native_error('GLB: '//p//'.procedure "'//s//'" is deferred (only static)')
+      if(native_heat) then
+        if(s/='transient_heat') call native_error('GLB: '//p//'.procedure must be "transient_heat" (analysis.type)')
+      elseif(s/='static') then
+        call native_error('GLB: '//p//'.procedure "'//s//'" is deferred (only static)')
+      endif
       if(string_value(p//'.load_mode')/='load') call native_error('GLB: '//p//'.load_mode must be "load"')
       k=key_index(p//'.reset_state')
       if(doc%entry(k)%kind/=TV_BOOL) call native_error('expected boolean: '//p//'.reset_state')
       native_reset(i)=merge(1,0,doc%entry(k)%lvalue)
+      if(native_heat .and. native_reset(i)/=0) call native_error('GLB: '//p//'.reset_state must be false in a transient_heat analysis')
+      if(.not.native_heat) then
       if(integer_value(p//'.controls.increments')/=1) call native_error('GLB: '//p//'.controls.increments must be 1')
       if(string_value(p//'.controls.stiffness_update')/='first_iteration') &
         call native_error('GLB: '//p//'.controls.stiffness_update must be "first_iteration"')
+      endif
       n=integer_value(p//'.active_elsets.count')
       if(n<1) call native_error('GLB: '//p//': active_elsets is empty')
       act=.false.
@@ -1607,9 +1817,22 @@ contains
     k=key_index('solver.@table')
     call glb_check_keys('solver','@table linear','')
     s=string_value('solver.linear')
-    if(s/='profile') call native_error('GLB: solver.linear "'//s//'" is deferred (only profile; .sol 0 0 1 1 is implied)')
+    if(native_heat) then
+      ! T6 option A: PARDISO, no environment variables; .sol (mtype 11 nonsymmetric) is implied
+      if(s/='pardiso') call native_error('GLB: a transient_heat analysis needs solver.linear "pardiso" '// &
+        '(nonsymmetric pipe advection; .sol mtype 11 is implied)')
+    elseif(s/='profile') then
+      call native_error('GLB: solver.linear "'//s//'" is deferred for static (only profile; .sol 0 0 1 1 is implied)')
+    endif
     ! [output] (G6)
     k=key_index('output.@table')
+    if(native_heat) then
+      call glb_check_keys('output','@table format','field')
+      if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
+      if(integer_value('output.field.count')/=1) call native_error('GLB: transient_heat output.field must be ["T"]')
+      if(string_value('output.field[1]')/='T') call native_error('GLB: transient_heat output.field must be ["T"]')
+      native_gid_f=0
+    else
     call glb_check_keys('output','@table format stress_averaging','field')
     if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
     if(string_value('output.stress_averaging')/='direct') call native_error('GLB: output.stress_averaging must be "direct"')
@@ -1628,6 +1851,7 @@ contains
     enddo
     if(.not.(has(1) .and. has(2))) call native_error('GLB: output.field must contain "u" and "s"')
     native_gid_f=merge(1,0,has(3))
+    endif
     ! derived mesh counts (G4); full checks in validate_mesh_general
     native_points=glb_count_rows(trim(native_mesh_prefix)//'.cor')
     native_elements=glb_count_rows(trim(native_mesh_prefix)//'.ele')
@@ -1637,6 +1861,11 @@ contains
     do g=1,ng
       if(.not.seen_el(g)) native_gnnode(g)=4   ! MAT reports the missing section
     enddo
+  end subroutine
+
+  subroutine native_nrt_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("NRT: "//what//" is deferred (temperature pilot: only TRAL ties from 1.set)")
   end subroutine
 
   subroutine native_glb_deferred(what)
@@ -1654,6 +1883,9 @@ contains
     character(1024) :: row
     nd=native_ndim
     allocate(xyz(3,native_points), used(native_points)); xyz=0; used=.false.
+    if(native_heat) then
+      allocate(mesh_ele(8,native_elements)); mesh_ele=0
+    endif
     open(newunit=u,file=trim(native_mesh_prefix)//'.cor',status='old',action='read',iostat=ios)
     if(ios /= 0) call native_error('cannot open mesh 1.cor')
     do k=1,native_points
@@ -1699,6 +1931,7 @@ contains
         if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node')
       enddo
       used(nodes(1:nn))=.true.
+      if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
       if(nn==4) then
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
@@ -1712,6 +1945,37 @@ contains
     close(u)
     do k=1,native_points
       if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
+    enddo
+    if(native_heat) call heat_check_mesh_refs()
+  end subroutine
+
+  ! face4 rows must be a face of their B8 element; pipe segments must be an element edge of their elset.
+  subroutine heat_check_mesh_refs()
+    integer, parameter :: fc(4,6)=reshape([1,2,3,4, 5,6,7,8, 1,2,6,5, 2,3,7,6, 3,4,8,7, 4,1,5,8],[4,6])
+    integer :: t, e, k, j, ip, ie, g, first, last
+    logical :: ok
+    do t=1,native_nface
+      e=native_faces(5,t); ok=.false.
+      do k=1,6
+        if(all([(any(native_faces(1:4,t)==mesh_ele(fc(j,k),e)),j=1,4)])) ok=.true.
+      enddo
+      if(.not.ok) call native_error('TEM: face '//itoa(t)//' (nodes '//itoa(native_faces(1,t))//' '//itoa(native_faces(2,t))// &
+        ' '//itoa(native_faces(3,t))//' '//itoa(native_faces(4,t))//') is not a face of element '//itoa(e))
+    enddo
+    if(.not.allocated(native_pipe)) return
+    do ip=1,size(native_pipe)
+      g=native_pipe(ip)%igroup
+      first=sum(native_elcounts(1:g-1))+1; last=first+native_elcounts(g)-1
+      do ie=1,size(native_pipe(ip)%seg,2)
+        ok=.false.
+        do e=first,last
+          if(any(mesh_ele(1:8,e)==native_pipe(ip)%seg(1,ie)) .and. any(mesh_ele(1:8,e)==native_pipe(ip)%seg(2,ie))) then
+            ok=.true.; exit
+          endif
+        enddo
+        if(.not.ok) call native_error('TEM: pipe '//itoa(ip)//' segment '//itoa(ie)//': nodes do not share an element of elset '// &
+          trim(native_kname(g)))
+      enddo
     enddo
   end subroutine
 
@@ -1753,6 +2017,307 @@ contains
       dmin=min(dmin,a(1)*b(2)-a(2)*b(1))
     enddo
   end function
+
+  ! ---------------------------------------------------------------------------
+  ! TEMPERATURE pilot phase 2 (creep-tem-pilot/DESIGN.md section 9, T1-T8 confirmed)
+  ! ---------------------------------------------------------------------------
+
+  ! transient_heat step loads: only type = "convection" (T4); gravity is not part of a heat step. The
+  ! legacy gravity record is implied (9.81 along -mesh axis ndim, curve 0 for every group = no gravity).
+  subroutine heat_step_loads(s,sp,nl,ns,srf_step)
+    integer, intent(in) :: s, nl, ns
+    character(*), intent(in) :: sp
+    logical, intent(inout) :: srf_step(:)
+    character(:), allocatable :: q, typ, nm
+    integer :: l, k, idx, i, nc
+    type(tem_conv_t), allocatable :: cv(:)
+    real(real64) :: b
+    if(.not.allocated(native_tem_step)) allocate(native_tem_step(native_blocks))
+    allocate(cv(max(nl,1))); nc=0
+    do l=1,nl
+      q=indexed(sp//".load",l)
+      k=key_index(q//".@table")
+      typ=string_value(q//".type")
+      select case(typ)
+      case("convection")
+        nm=string_value(q//".surface")
+        idx=0
+        do i=1,ns
+          if(trim(native_surf(i)%name)==nm) idx=i
+        enddo
+        if(idx==0) call native_error("TEM: step "//itoa(s)//": undefined surface "//nm)
+        if(srf_step(idx)) call native_error("TEM: step "//itoa(s)//": surface "//nm//" loaded twice")
+        srf_step(idx)=.true.; native_surf(idx)%used=.true.
+        i=sets_find(SK_SURFACE,nm)
+        b=number(q//".film_coefficient")
+        if(b<=0 .or. b>1.e6_real64) call native_error("TEM: step "//itoa(s)//": film_coefficient out of range (0,1e6]")
+        if(.not.present_key(q//".ambient_temperature")) &
+          call native_error("TEM: step "//itoa(s)//": convection ambient_temperature (amplitude name) is required")
+        nc=nc+1
+        cv(nc)%surf=idx; cv(nc)%first=native_surf(idx)%first; cv(nc)%last=native_surf(idx)%last
+        cv(nc)%beta=b
+        cv(nc)%itcurve=amp_ref(q//".ambient_temperature")
+        if(native_amp(cv(nc)%itcurve)%typ/="LINEAR") call native_error("TEM: step "//itoa(s)// &
+          ": convection ambient_temperature must be a linear amplitude")
+      case("gravity")
+        call native_error("TEM: step "//itoa(s)//": a transient_heat step takes no gravity load")
+      case default
+        call native_error("TEM: step "//itoa(s)//": unsupported load type "//typ//" in a transient_heat step (only convection)")
+      end select
+    enddo
+    native_tem_step(s)%conv=cv(1:nc)
+    native_loa(s)%g=9.81_real64; native_loa(s)%dir=0; native_loa(s)%dir(native_ndim)=-1._real64
+    native_loa(s)%fdir=native_loa(s)%dir; native_loa(s)%gamp=0
+    native_gravity(s)=9.81_real64
+  end subroutine
+
+  ! After LOA/PRE: material curve references, [[pipe]] (T5) and the face4/active-set consistency.
+  subroutine heat_resolve()
+    integer :: i, k, np, j, n, g
+    character(:), allocatable :: p, q, nm
+    do i=1,native_materials
+      if(.not.native_mat_heat(i)) cycle
+      k=amp_by_name(trim(mat_src_name(i)))
+      if(k==0) call native_error("MAT: undefined amplitude "//trim(mat_src_name(i))//" (heat_source_curve)")
+      if(native_amp(k)%typ/="DABT") call native_error("MAT: heat_source_curve "//trim(mat_src_name(i))//" must be a dabt amplitude")
+      native_amp(k)%used=.true.; native_src_curve(i)=k
+      k=amp_by_name(trim(mat_place_name(i)))
+      if(k==0) call native_error("MAT: undefined amplitude "//trim(mat_place_name(i))//" (placement_temperature_curve)")
+      if(native_amp(k)%typ/="LINEAR") call native_error("MAT: placement_temperature_curve "//trim(mat_place_name(i))// &
+        " must be a linear amplitude")
+      native_amp(k)%used=.true.; native_place_curve(i)=k
+    enddo
+    ! [[pipe]] (T5): one table per legacy pipe record; algo 3 only (advection along the pipe segments)
+    np=doc%count_of("pipe")
+    allocate(native_pipe(np))
+    do i=1,np
+      p=indexed("pipe",i)
+      k=key_index(p//".@table")
+      call glb_check_keys(p,"@table algorithm elset coefficient flow_rate water_conductivity water_density "// &
+        "water_specific_heat begin_time end_time water_temperature","segments")
+      if(integer_value(p//".algorithm")/=3) call native_error("TEM: pipe "//itoa(i)//": only algorithm 3 is supported "// &
+        "(legacy algo_pipe 1/2/4 are deferred)")
+      nm=string_value(p//".elset")
+      g=0
+      do j=1,native_materials
+        if(trim(native_kname(j))==nm) g=j
+      enddo
+      if(g==0) call native_error("TEM: pipe "//itoa(i)//": undefined elset "//nm)
+      if(native_sets_on) j=sets_find(SK_ELSET,nm)
+      native_pipe(i)%igroup=g
+      native_pipe(i)%coef=number(p//".coefficient")
+      native_pipe(i)%qw=number(p//".flow_rate")
+      native_pipe(i)%lamda=number(p//".water_conductivity")
+      native_pipe(i)%dens=number(p//".water_density")
+      native_pipe(i)%cw=number(p//".water_specific_heat")
+      native_pipe(i)%t0=number(p//".begin_time")
+      native_pipe(i)%t1=number(p//".end_time")
+      if(native_pipe(i)%coef<=0 .or. native_pipe(i)%coef>1.e3_real64) call native_error("TEM: pipe "//itoa(i)//": coefficient out of range (0,1e3]")
+      if(native_pipe(i)%qw<=0 .or. native_pipe(i)%qw>1.e9_real64) call native_error("TEM: pipe "//itoa(i)//": flow_rate out of range (0,1e9]")
+      if(native_pipe(i)%lamda<=0 .or. native_pipe(i)%lamda>1.e12_real64) &
+        call native_error("TEM: pipe "//itoa(i)//": water_conductivity out of range (0,1e12]")
+      if(native_pipe(i)%dens<=0 .or. native_pipe(i)%dens>1.e5_real64) call native_error("TEM: pipe "//itoa(i)//": water_density out of range (0,1e5]")
+      if(native_pipe(i)%cw<=0 .or. native_pipe(i)%cw>1.e7_real64) &
+        call native_error("TEM: pipe "//itoa(i)//": water_specific_heat out of range (0,1e7]")
+      if(native_pipe(i)%t1<native_pipe(i)%t0) call native_error("TEM: pipe "//itoa(i)//": end_time before begin_time")
+      native_pipe(i)%twcurve=amp_ref(p//".water_temperature")
+      n=integer_value(p//".segments.count")
+      if(n<1 .or. n>100000) call native_error("TEM: pipe "//itoa(i)//": segments must have 1..100000 entries")
+      allocate(native_pipe(i)%seg(2,n))
+      do j=1,n
+        q=indexed(p//".segments",j)
+        if(integer_value(q//".count")/=2) call native_error("TEM: pipe "//itoa(i)//": a segment is [node1, node2]")
+        native_pipe(i)%seg(1,j)=integer_value(q//"[1]")
+        native_pipe(i)%seg(2,j)=integer_value(q//"[2]")
+        if(any(native_pipe(i)%seg(:,j)<1) .or. any(native_pipe(i)%seg(:,j)>native_points)) &
+          call native_error("TEM: pipe "//itoa(i)//": segment node out of range 1.."//itoa(native_points))
+        if(native_pipe(i)%seg(1,j)==native_pipe(i)%seg(2,j)) call native_error("TEM: pipe "//itoa(i)//": degenerate segment "//itoa(j))
+      enddo
+    enddo
+  end subroutine
+
+  ! [[tie]] (T7, HSTAR_NATIVE_NRT=toml): legacy .nrt TRAL constraint T(slave) = sum(weights*T(masters)).
+  subroutine parse_nrt()
+    ! [[tie]] (T7, HSTAR_NATIVE_NRT=toml): set = name of a tie set in 1.set, dof = "T".
+    ! Legacy .nrt TRAL: T(slave) = sum(weights*T(masters)); slave/chain/weight checks are done by yl_sets.
+    integer :: n, i, j, k, r, nt, o1, o2
+    character(:), allocatable :: p, nm
+    integer, allocatable :: idx(:)
+    n=doc%count_of("tie")
+    if(.not.native_heat .and. n>0) call native_error("NRT: [[tie]] needs analysis.type 'transient_heat' (T field) in this pilot")
+    if(n>0 .and. .not.native_sets_on) call native_error("NRT: [[tie]] needs [mesh] sets_file (ties are tie sets in 1.set)")
+    allocate(idx(n)); nt=0
+    do i=1,n
+      p=indexed("tie",i)
+      k=key_index(p//".@table")
+      call glb_check_keys(p,"@table set dof","")
+      if(string_value(p//".dof")/="T") call native_error("NRT: tie "//itoa(i)//": dof must be ""T"" (the active field)")
+      nm=string_value(p//".set")
+      idx(i)=sets_find(SK_TIE,nm)
+      if(idx(i)==0) call native_error("NRT: tie "//itoa(i)//": undefined tie set "//nm)
+      do j=1,i-1
+        if(idx(j)==idx(i)) call native_error("NRT: tie set "//nm//" listed twice")
+      enddo
+      nt=nt+sets(idx(i))%n
+    enddo
+    allocate(native_tie(nt)); k=0
+    do i=1,n
+      do r=1,sets(idx(i))%n
+        k=k+1
+        o1=sets(idx(i))%off(r); o2=sets(idx(i))%off(r+1)-1
+        native_tie(k)%slave=sets(idx(i))%m(o1)
+        native_tie(k)%masters=sets(idx(i))%m(o1+1:o2)
+        native_tie(k)%weights=sets(idx(i))%w(o1+1:o2)
+        if(native_tie(k)%slave>native_points .or. any(native_tie(k)%masters>native_points)) &
+          call native_error("NRT: tie set "//trim(sets(idx(i))%name)//": node out of range")
+      enddo
+    enddo
+  end subroutine
+
+  ! ---- accessors (Temper.f90 boundt, Fem.f90 time_dependent, Global.f90 read_nrt_constraints, Solver.f90 PARDISO)
+  integer function native_tem_nedge() result(n)
+    n=0
+    if(native_heat) n=native_nface
+    tem_face_blk=0
+  end function
+
+  subroutine native_tem_face_block(iblk,sedge,nnode,index,beta,ibeta)
+    integer, intent(in) :: iblk
+    integer, intent(out) :: sedge,nnode,index,ibeta
+    real(real64), intent(out) :: beta
+    integer :: i
+    do
+      tem_face_blk=tem_face_blk+1
+      if(native_surf(tem_face_blk)%kind==4) exit
+    enddo
+    sedge=native_surf(tem_face_blk)%last-native_surf(tem_face_blk)%first+1
+    nnode=4; index=5; ibeta=0; beta=0._real64
+    do i=1,size(native_tem_step(iblk)%conv)
+      if(native_tem_step(iblk)%conv(i)%surf==tem_face_blk) beta=native_tem_step(iblk)%conv(i)%beta
+    enddo
+  end subroutine
+
+  subroutine native_tem_face(tedge,lnode,aelem)
+    integer, intent(in) :: tedge
+    integer, intent(out) :: lnode(:),aelem
+    lnode=native_faces(1:4,tedge); aelem=native_faces(5,tedge)
+  end subroutine
+
+  integer function native_tem_ntelgroup(iblk) result(n)
+    integer, intent(in) :: iblk
+    integer :: i
+    n=0
+    tem_conv_grp=0
+    if(.not.native_heat) return
+    do i=1,size(native_tem_step(iblk)%conv)
+      n=n+native_tem_step(iblk)%conv(i)%last-native_tem_step(iblk)%conv(i)%first+1
+    enddo
+  end function
+
+  subroutine native_tem_conv_group(iblk,sedge,itcurve,nline,b,e)
+    integer, intent(in) :: iblk
+    integer, intent(out) :: sedge,itcurve,nline,b,e
+    tem_conv_grp=tem_conv_grp+1
+    b=native_tem_step(iblk)%conv(tem_conv_grp)%first
+    e=native_tem_step(iblk)%conv(tem_conv_grp)%last
+    sedge=e-b+1; itcurve=native_tem_step(iblk)%conv(tem_conv_grp)%itcurve; nline=0
+  end subroutine
+
+  subroutine native_tem_pipes(npipe,algo)
+    integer, intent(out) :: npipe,algo
+    npipe=0; algo=3
+    if(native_heat) npipe=size(native_pipe)
+  end subroutine
+
+  subroutine native_tem_pipe_head(ip,nline,igroup,coef)
+    integer, intent(in) :: ip
+    integer, intent(out) :: nline,igroup
+    real(real64), intent(out) :: coef
+    nline=size(native_pipe(ip)%seg,2); igroup=native_pipe(ip)%igroup; coef=native_pipe(ip)%coef
+  end subroutine
+
+  subroutine native_tem_pipe_props(ip,qw,lamda,dens,cw,t0,t1,twc)
+    integer, intent(in) :: ip
+    real(real64), intent(out) :: qw,lamda,dens,cw,t0,t1
+    integer, intent(out) :: twc
+    qw=native_pipe(ip)%qw; lamda=native_pipe(ip)%lamda; dens=native_pipe(ip)%dens; cw=native_pipe(ip)%cw
+    t0=native_pipe(ip)%t0; t1=native_pipe(ip)%t1; twc=native_pipe(ip)%twcurve
+  end subroutine
+
+  subroutine native_tem_pipe_seg(ip,ie,i0,n1,n2)
+    integer, intent(in) :: ip,ie
+    integer, intent(out) :: i0,n1,n2
+    i0=ie; n1=native_pipe(ip)%seg(1,ie); n2=native_pipe(ip)%seg(2,ie)
+  end subroutine
+
+  ! Appended to native-tem.txt from what boundt stored (tedges, tedgeload, pipeinfo).
+  subroutine native_tem_heat_receipt(iblk,nedge,beta_sum,nload,itc_list,npipe,nseg,coef_sum)
+    integer, intent(in) :: iblk,nedge,nload,npipe,nseg,itc_list(:)
+    real(real64), intent(in) :: beta_sum,coef_sum
+    integer :: u
+    if(.not.native_tem_receipt_on) return
+    open(newunit=u,file="native-tem.txt",status="old",position="append",action="write")
+    write(u,"(a,i0,a,i0,a,es25.16,a,i0,a,i0,a,i0)") "heat block=",iblk," faces=",nedge," beta_sum=",beta_sum, &
+      " loaded_faces=",nload," npipe=",npipe," segments=",nseg
+    write(u,"(a,es25.16)") "pipe_edstif_coef_sum=",coef_sum
+    if(size(itc_list)>0) write(u,"(a,*(1x,i0))") "load_curves=",itc_list
+    close(u)
+  end subroutine
+
+  integer function native_man_nincs(iblk) result(n)
+    integer, intent(in) :: iblk
+    n=native_ninc(iblk)
+  end function
+
+  subroutine native_man_inc(iblk,i,miter,ditime,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef,tolf,tolv)
+    integer, intent(in) :: iblk,i
+    integer, intent(out) :: miter,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef
+    real(real64), intent(out) :: ditime,tolf,tolv(:)
+    miter=native_inc_miter(i,iblk); ditime=native_inc_dt(i,iblk); nstep=native_inc_nstep(i,iblk)
+    noutn=1; noutf=1; inc_step=1; nresta=1; nmcon=0; nbasef=0     ! validated implied values (T3)
+    tolf=native_inc_tol(i,iblk); tolv=native_inc_tol(i,iblk)
+  end subroutine
+
+  integer function native_nrt_ntie() result(n)
+    n=0
+    if(native_nrt_toml) n=size(native_tie)
+  end function
+
+  subroutine native_nrt_tie(i,title,ipoin,nintf)
+    integer, intent(in) :: i
+    character(*), intent(out) :: title
+    integer, intent(out) :: ipoin,nintf
+    title='TRAL'; ipoin=native_tie(i)%slave; nintf=size(native_tie(i)%masters)
+  end subroutine
+
+  subroutine native_nrt_tie_data(i,listf,rintf)
+    integer, intent(in) :: i
+    integer, intent(out) :: listf(:)
+    real(real64), intent(out) :: rintf(:)
+    listf=native_tie(i)%masters; rintf=native_tie(i)%weights
+  end subroutine
+
+  ! Written from the stored trans(:) table (Global.f90 read_nrt_constraints).
+  subroutine native_nrt_receipt(nties,ndof,sum_w)
+    integer, intent(in) :: nties,ndof
+    real(real64), intent(in) :: sum_w
+    integer :: u
+    if(.not.native_nrt_receipt_on) return
+    open(newunit=u,file="native-nrt.txt",status="replace",action="write")
+    write(u,"(a)") "native-nrt v1 mode="//trim(merge("toml    ","contract",native_nrt_toml))
+    write(u,"(a,i0,a,i0,a,es25.16)") "ties=",nties," constrained_dofs=",ndof," weight_sum=",sum_w
+    close(u)
+  end subroutine
+
+  ! .sol for PARDISO (G5 analogue, T6 option A): implied record, nonsymmetric real matrix (mtype 11).
+  subroutine native_sol_pardiso(mtype,ncpu,msglvl,isdefault,reducing_order,precgs,permutation,maxiter,out_of_core, &
+                                eps_pivot,iparm11,iparm13)
+    integer, intent(out) :: mtype,ncpu,msglvl,isdefault,reducing_order,precgs,permutation,maxiter,out_of_core, &
+                            eps_pivot,iparm11,iparm13
+    if(.not.native_heat) call native_glb_deferred('MAIN_PARDISO (.sol) outside transient_heat')
+    mtype=11; ncpu=2; msglvl=0; isdefault=1
+    reducing_order=2; precgs=0; permutation=0; maxiter=20; out_of_core=0; eps_pivot=20; iparm11=0; iparm13=0
+  end subroutine
 
   subroutine native_error(message)
     character(*), intent(in) :: message

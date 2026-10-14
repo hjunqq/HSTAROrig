@@ -919,6 +919,10 @@
         outinp=0
         outintr=0
         outintw=0
+        if(native_heat) then          ! transient_heat (T3/T6): nonsymmetric PARDISO, no .oit file
+            nonsym=1
+            outintw=-1
+        endif
         neuman=0
         equvs=0
         type_ABC='FIX'
@@ -976,6 +980,11 @@
         Bparameter=0
         balgor=0
         upliftin=0
+        if(native_heat) then          ! legacy temperature deck: type_problem S, PARDISO, type_nl 10
+            type_problem='S'
+            type_solver='PARDISO'
+            type_nl=10
+        endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
     endif
@@ -1024,6 +1033,16 @@
         NGRAV=1
         nflow=0
         ECWPIPE=0
+        if(native_heat) then          ! T5: ECWPIPE=2 (0 leaves group%water_pipe unallocated); no mass/stiffness tables
+            nmass=999
+            nsmat=999
+            nhmat=999
+            nqmat=999
+            nldfl=999
+            nswkw=999
+            NGRAV=999
+            ECWPIPE=2
+        endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nmass,nsmat,nhmat,nqmat,nldfl,kgmat,nswkw,uwcpl,NGRAV,nflow,ECWPIPE  !20200220
     endif
@@ -1080,6 +1099,7 @@
         'text',text)
     if(native_mode) then
         mdofn=native_ndim
+        if(native_heat) mdofn=10      ! dof list Ux Uy Uz Thxy Thyz Thzx P W A T; only T active
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
     endif
@@ -1088,6 +1108,10 @@
     allocate(lmdofn(mdofn),lcdofn(mdofn),order_time_mdofn(mdofn))
     if(native_mode) then
         lmdofn(1:mdofn)=1
+        if(native_heat) then
+            lmdofn(1:mdofn)=0
+            lmdofn(10)=1
+        endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
     endif
@@ -1095,6 +1119,7 @@
         'lmdofn(1:mdofn)',text)
     if(native_mode) then
         order_time_mdofn(1:mdofn)=0
+        if(native_heat) order_time_mdofn(10)=1
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
     endif
@@ -1108,6 +1133,7 @@
         beeta1=0.5
         beeta2=0.25
         theta1=1.0
+        if(native_heat) theta1=0.5    ! Crank-Nicolson, as the legacy temperature decks
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)beeta1,beeta2,theta1
     endif
@@ -1221,6 +1247,7 @@
         'text',text)
     if(native_mode) then
         average_appear(1:ngroup)=2
+        if(native_heat) average_appear(1:ngroup)=0
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
     endif
@@ -1251,6 +1278,11 @@
         gid_wh=0
         gid_wv=0
         gid_bcs=0
+        if(native_heat) then          ! output.field = ["T"]
+            gid_u=0
+            gid_s=0
+            gid_T=1
+        endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
@@ -1281,6 +1313,7 @@
         res_Ss=0
         res_Tv=0
         res_Pa=0
+        if(native_heat) res_T=1
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)res_u,res_s,res_ms,res_f,res_rot,res_v,res_a,res_T,res_P,   &
         res_Pv,res_ep,res_Y,res_FC,res_Ns,res_Ss,res_Tv,res_Pa   !20210324
@@ -1565,6 +1598,7 @@
             group(igroup)%class='CO'
             group(igroup)%nrfields=1
             group(igroup)%fieldid='U'
+            if(native_heat) group(igroup)%fieldid='T'
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
             group(igroup)%nelgroup=native_elcounts(igroup)
@@ -1616,6 +1650,7 @@
         !write(7,*)'group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta=',group(igroup)%type_mass(1:nrfields),group(igroup)%alfa,group(igroup)%beta
         if(native_mode) then
             group(igroup)%order_time=0
+            if(native_heat) group(igroup)%order_time(2,1)=1
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
         endif
@@ -1635,6 +1670,7 @@
         do ifield=1,nrfields
             if(native_mode) then
                 nfdof=native_ndim
+                if(native_heat) nfdof=1
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
             endif
@@ -1646,6 +1682,7 @@
             allocate(group(igroup)%dof(ifield)%listdof_f(nfdof))
             if(native_mode) then
                 group(igroup)%dof(ifield)%listdof_f=native_dof_list(1:nfdof)
+                if(native_heat) group(igroup)%dof(ifield)%listdof_f=10
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
             endif
@@ -1919,6 +1956,8 @@
         ' type_load='//trim(type_load)//' outplot='//trim(outplot)
     write(u,'(a,i0,a,i0,a,i0,a,i0)') 'type_nl=',type_nl,' nonsym=',nonsym,' stab_matde=',stab_matde,' ifswater=',ifswater
     write(u,'(a,i0,a,i0,a,i0)') 'gid_u=',gid_u,' gid_s=',gid_s,' gid_f=',gid_f
+    if(native_heat) write(u,'(a,i0,a,i0,a,i0,a,i0,a,f6.3,a,*(i0))') 'gid_T=',gid_T,' res_T=',res_T,' ecwpipe=',ecwpipe, &
+        ' outintw=',outintw,' theta1=',theta1,' lmdofn=',lmdofn
     do ig=1,ngroup
         write(u,'(a,i0,a)',advance='no') 'group ',ig,' name='//trim(group(ig)%name)//' kname='//trim(group(ig)%kname)
         write(u,'(a,i0,a)',advance='no') ' index=',group(ig)%index,' class='//trim(group(ig)%class)// &
@@ -2081,19 +2120,33 @@
     if(.not.native_mode) read(nrtunit,*)text
     if(native_mode) then
         transgroup=0
+        if(native_nrt_ntie()>0) transgroup=1      ! T7: one TRAL group from [[tie]]
     else
     read(nrtunit,*)transgroup
     endif
     do itransgroup=1,transgroup
+        if(native_mode) then
+            ntransnode=native_nrt_ntie()
+            translg=0
+        else
         read(nrtunit,*)ntransnode,translg
+        endif
         print *, 'ntransnode,translg=',ntransnode,translg
         if (translg==0) then
             do itrans=1,ntransnode
+                if(native_mode) then
+                    call native_nrt_tie(itrans,title_intp,ipoin,nintf)
+                else
                 read(nrtunit,*)title_intp,ipoin,nintf  !20200220
+                endif
                 allocate(listf(nintf),rintf(nintf))
                 if(title_intp(1:4)=='TRAL')then  !20200220
+                    if(native_mode) then
+                        call native_nrt_tie_data(itrans,listf,rintf)
+                    else
                     read(nrtunit,*)listf
-                    read(nrtunit,*)rintf
+                    endif
+                    if(.not.native_mode) read(nrtunit,*)rintf
 
                     do idofn=1,mdofn
                         if (lmdofn(idofn)/=0)then
@@ -2111,6 +2164,7 @@
             end do
 
         elseif(translg==99)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=99')
             do itrans=1,ntransnode
                 read(nrtunit,*)ipoin,nintf
                 allocate(listf(nintf),rintf(nintf))
@@ -2129,6 +2183,7 @@
             end do
             ! by zhao 2005/12/27 , special for WuDongde
         elseif(translg==88)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=88')
             do itrans=1,ntransnode
                 read(nrtunit,*)title_intp,ipoin,nintf
                 if(title_intp(1:4)=='TRAL')then
@@ -2207,6 +2262,7 @@
             end do
             ! by LTC 2020/01/12 , 桩作为梁单元处理，作为从节点处理。
         elseif(translg==-10)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=-10')
 
             do itrans=1,ntransnode
                 read(nrtunit,*)ipoin,nintf
@@ -2225,6 +2281,7 @@
                 deallocate(listf,rintf)
             end do
         elseif(translg==10)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=10')
             !*******for plate to body elements
             do itrans=1,ntransnode
                 read(nrtunit,*)i0,ipoin,jpoin,idfn(1:2),jdfn(1:2),f12(1:2)
@@ -2272,6 +2329,7 @@
                 end do
             end do
         elseif(translg==20)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=20')
             !*******for beam to body element nodes
 
             do itrans=1,ntransnode
@@ -2289,6 +2347,7 @@
                 end do
             end do
         elseif(translg==30)then
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=30')
 
             !*******for beam to internal beam element  nodes
 
@@ -2308,6 +2367,7 @@
             end do
 
         elseif(translg==40)then  !20231008
+            if(native_mode) call native_nrt_deferred('.nrt group type translg=40')
             !*******for shell to body element nodes壳中心点与表面节点位移转换（表面节点为整体位移，壳中心节点为局部坐标位移）
             ! 给定插值系数已经考虑了空间坐标系的转换
 
@@ -2326,6 +2386,7 @@
 
             !***********
         else
+            if(native_mode) call native_nrt_deferred('.nrt rotation group (translg other than 0)')
             read(nrtunit,*)ntlg !,ielem
             allocate(listx(ntlg),rotation(ndimn,ndimn))
             read(nrtunit,*)rotation(1,:)
@@ -2354,6 +2415,13 @@
             deallocate(listx,rotation)
         endif
     end do !itransgroup
+    if(native_mode .and. native_nrt_receipt_on) then   ! receipt from the stored trans(:) table
+        f0=0.
+        do itotv=1,ntotv
+            if(trans(itotv)%nintf>0) f0=f0+sum(trans(itotv)%rintf)
+        end do
+        call native_nrt_receipt(native_nrt_ntie(),count(trans(1:ntotv)%nintf>0),f0)
+    endif
     goto 222
     !!int2000
     !!int2000
@@ -2368,6 +2436,7 @@
     read(nrtunit,*)transgroup
     endif
     do itrans=1,transgroup
+        if(native_mode) call native_nrt_deferred('.nrt contact groups (trans_c)')
         read(nrtunit,*)ipoin,nintf
         trans_c(ipoin)%nintf=nintf
         allocate(trans_c(ipoin)%listf(abs(nintf)),trans_c(ipoin)%rintf(abs(nintf)))
@@ -2378,6 +2447,7 @@
 222 continue
 
     if (meshc==1.or.meshc==2) then  !if(meshc/=0) then
+        if(native_mode) call native_nrt_deferred('.nrt refined-mesh groups (meshc/=0)')
         allocate(appear_p(ngroup))
         if(native_mode) text='TOML-03'
         if(.not.native_mode) read(nrtunit,*)text

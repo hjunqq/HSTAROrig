@@ -73,7 +73,7 @@
     	! equiv pipecooling 考虑通水冷却【等效算法】
          print *,'ecwpipe=',ecwpipe,'iblks=',iblks,'lblks+1=',lblks+1
     if(ecwpipe>=1)then   !20200221
-	if(native_mode) call native_tem_deferred('equivalent pipe cooling (ecwpipe>=1)')
+	if(native_mode .and. ecwpipe/=2) call native_tem_deferred('equivalent pipe cooling (ecwpipe=1)')
 	do igroup=1,ngroup
         allocate(group(igroup)%water_pipe)
         group(igroup)%water_pipe%pipecooling=0
@@ -160,7 +160,7 @@
         if(native_mode) text='TOML-03'
         if(.not.native_mode) read(tunit,*)text
     if(native_mode) then
-        ntedge=0
+        ntedge=native_tem_nedge()     ! T4: face4 surfaces (transient_heat), else none
     else
     read(tunit,*)ntedge  !20230402
     endif
@@ -174,10 +174,13 @@
     allocate(tedges(ntedge))
     tedge=0
     do while(tedge<ntedge)
-       if(native_mode) call native_tem_deferred('convection edges (ntedge>0)')
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(tunit,*)text                               !4
+       if(native_mode) then
+           call native_tem_face_block(iblks,sedge,nnode,index,beta_bar,ibeta_bar)
+       else
        read(tunit,*)sedge,nnode,index,beta_bar,ibeta_bar
+       endif
        print *,'ibeta_bar=',ibeta_bar,'beta_bar=',beta_bar
        linet=linet+2
        do iedge=1,sedge                            !3
@@ -188,7 +191,11 @@
           tedges(tedge)%ibeta_bar=ibeta_bar
 
           allocate(tedges(tedge)%lnode(nnode))
+          if(native_mode) then
+              call native_tem_face(tedge,tedges(tedge)%lnode(1:nnode),tedges(tedge)%aelem)
+          else
           read(tunit,*)i0,tedges(tedge)%lnode(1:nnode),tedges(tedge)%aelem
+          endif
           linet=linet+1
           aelem=tedges(tedge)%aelem
           indey=element(aelem)%index
@@ -259,7 +266,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(tunit,*)text
     if(native_mode) then
-        ntelgroup=0
+        ntelgroup=native_tem_ntelgroup(iblks)
     else
     read(tunit,*)ntelgroup
     endif
@@ -269,11 +276,14 @@
     allocate(tedgeload(ntelgroup))
     tedge=0
     do while(tedge<ntelgroup)
-       if(native_mode) call native_tem_deferred('convection edge loads (ntelgroup>0)')
        if(native_mode) text='TOML-03'
        if(.not.native_mode) read(tunit,*)text                               !4
+       if(native_mode) then
+           call native_tem_conv_group(iblks,sedge,itcurve,nline,begin_edge,end_edge)
+       else
        read(tunit,*)sedge,itcurve,nline
-       read(tunit,*)begin_edge,end_edge
+       endif
+       if(.not.native_mode) read(tunit,*)begin_edge,end_edge
        linet=linet+2
        allocate(listdge(sedge))
        do ie=begin_edge,end_edge
@@ -329,8 +339,7 @@
       if(.not.native_mode) read(tunit,*)text
       print *, text
 	  if(native_mode) then
-	      npipe=0
-	      algo_pipe=3
+	      call native_tem_pipes(npipe,algo_pipe)     ! T5: [[pipe]] (algorithm 3)
 	  else
 	  read(tunit,*)npipe,algo_pipe
 	  endif
@@ -343,18 +352,26 @@ linet=linet+3
      allocate(pipeinfo(npipe))     
 
 	 do ipipe=1,npipe
-	 if(native_mode) call native_tem_deferred('cooling pipes (npipe>0)')
 	 if(algo_pipe==1)then
+     if(native_mode) call native_tem_deferred('cooling pipes algo 1')
      read(tunit,*) nline,igroup,nnodc,coef  !nelocal
      print *,'nline,nelocal,nnodc=',nline,nelocal,nnodc
      linet=linet+1
      
      elseif(algo_pipe>=2)then
+     if(native_mode) then
+         call native_tem_pipe_head(ipipe,nline,igroup,coef)
+     else
      read(tunit,*) nline,igroup,coef  !coef is for discount of the no real pipes
+     endif
      linet=linet+1
      endif
      
+     if(native_mode) then
+         call native_tem_pipe_props(ipipe,Qw,lamda_w,density_w,Cw,begin_time,end_time,twater_curve)
+     else
      read(tunit,*) Qw,lamda_w,density_w,Cw,begin_time,end_time,twater_curve
+     endif
      linet=linet+1
 	 print *,'Qw=',Qw,lamda_w,density_w,Cw,begin_time,end_time,twater_curve
 	 pipeinfo(ipipe)%nline=nline
@@ -372,6 +389,7 @@ linet=linet+3
   allocate( pipeinfo(ipipe)%Temp_var0_node(nline+1))
    endif
 	 if(algo_pipe==1)then
+         if(native_mode) call native_tem_deferred('cooling pipes algo 1')
          nelocal=group(igroup)%nelgroup  !20200320
 	   pipeinfo(ipipe)%nelocal= nelocal
 	   pipeinfo(ipipe)%nnodc=nnodc
@@ -385,6 +403,7 @@ linet=linet+3
      linet=linet+1
 	   end do
 	 elseif(algo_pipe==2)then
+	             if(native_mode) call native_tem_deferred('cooling pipes algo 2')
 	             allocate(line_pipe(2,nline))
 				 allocate(icpe(nelem))
 				 icpe=0
@@ -425,8 +444,13 @@ linet=linet+3
 	  else if(algo_pipe>=3)then
         allocate( pipeinfo(ipipe)%line_pipe(3,nline))
 	    do ie=1,nline
+        if(native_mode) then
+            call native_tem_pipe_seg(ipipe,ie,i0,pipeinfo(ipipe)%line_pipe(1,ie),pipeinfo(ipipe)%line_pipe(2,ie))
+        else
         if(igroup/=0) &
         read(tunit,*)i0,pipeinfo(ipipe)%line_pipe(1:2,ie)
+        endif
+        if(native_mode .and. igroup==0) call native_tem_deferred('cooling pipes without elset (igroup=0)')
         if(igroup==0) &
         read(tunit,*)i0,pipeinfo(ipipe)%line_pipe(:,ie)
      linet=linet+1
@@ -508,6 +532,7 @@ linet=linet+3
     
 32    continue
     if(native_mode) call native_tem_receipt(int(ntemp_surface),int(ntedge),int(ntelgroup),int(npipe),int(ecwpipe),int(outintr))
+    if(native_mode .and. native_heat) call tem_heat_receipt
     
     
     
@@ -516,6 +541,35 @@ linet=linet+3
     
     print *,'linet=',linet
     contains
+
+    subroutine tem_heat_receipt   ! T4/T5 receipt from the stored tedges / tedgeload / pipeinfo
+    integer(ink) k,nseg
+    integer(ink),allocatable::itcs(:)
+    real(irk) bsum,csum
+    bsum=0.; csum=0.; nseg=0
+    do k=1,ntedge
+        bsum=bsum+tedges(k)%beta_bar
+    end do
+    allocate(itcs(ntelgroup))
+    do k=1,ntelgroup
+        itcs(k)=tedgeload(k)%itcurve
+    end do
+    do k=1,npipe
+        nseg=nseg+pipeinfo(k)%nline
+        csum=csum+sum(abs(pipeinfo(k)%edstif))
+    end do
+    call native_tem_heat_receipt(int(iblks),int(ntedge),bsum,int(ntelgroup),int(unique_curves(itcs)),int(npipe),int(nseg),csum)
+    end subroutine tem_heat_receipt
+
+    function unique_curves(a) result(u)
+    integer(ink),intent(in)::a(:)
+    integer(ink),allocatable::u(:)
+    integer(ink) k
+    allocate(u(0))
+    do k=1,size(a)
+        if(.not.any(u==a(k))) u=[u,a(k)]
+    end do
+    end function unique_curves
 
     subroutine cosc(idm,a3,elcod0,elcod,rr)
     integer(ink) idm,idj,nnode,ind

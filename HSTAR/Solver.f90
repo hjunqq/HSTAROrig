@@ -7806,24 +7806,23 @@
 
         !fowlling setting for MKL_PARDISO 2008-11-05
         iparm=0;mtype=2;ncpu=1;msglvl=0;isdefault=1
-        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-        read(solveunit,*)text
+        if(native_mode) call native_sol_pardiso(mtype,ncpu,msglvl,isdefault,reducing_order,PreCGS,permutation,maxiter, &
+            out_of_core,eps_pivot,iparm11,iparm13)    ! T6 option A: implied PARDISO record (mtype 11)
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(solveunit,*)text
         print *,text
-        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-        read(solveunit,*)mtype,ncpu,msglvl
+        if(.not.native_mode) read(solveunit,*)mtype,ncpu,msglvl
         print *,mtype,ncpu,msglvl
-        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-        read(solveunit,*)text
+        if(native_mode) text='TOML-03'
+        if(.not.native_mode) read(solveunit,*)text
         print *,text
-        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-        read(solveunit,*)isdefault   !0=use default;1=not use default
+        if(.not.native_mode) read(solveunit,*)isdefault   !0=use default;1=not use default
         print *,isdefault
 
         if(isdefault/=0)then   ! define value for iparm
-            if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-            read(solveunit,*)text
-            if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
-            read(solveunit,*)reducing_order,PreCGS,permutation,maxiter,out_of_core,eps_pivot,iparm11,iparm13
+            if(native_mode) text='TOML-03'
+            if(.not.native_mode) read(solveunit,*)text
+            if(.not.native_mode) read(solveunit,*)reducing_order,PreCGS,permutation,maxiter,out_of_core,eps_pivot,iparm11,iparm13
             iparm(1) = 1 ! no solver default
             iparm(2) = reducing_order ! fill-in reordering from METIS
             iparm(3) = ncpu ! numbers of processors

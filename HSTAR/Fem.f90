@@ -8593,9 +8593,21 @@
     allocate(earthquake_curve(ndimn),fachv(ndimn),earthquake_curve_d(ndimn),earthquake_curve_v(ndimn))!hxl2006 , VIE
     allocate(earthquake_curve_MIF(ndimn))
     earthquake_curve=0 ; earthquake_curve_MIF=0 ; earthquake_curve_d=0 ; earthquake_curve_v=0
-    read(mainunit,*)text
+    if(native_mode) text='TOML-03'
+    if(.not.native_mode) read(mainunit,*)text
+    if(native_mode) then          ! T3: [[step.increment]] of this block; no seismic curve, no cdtest
+        nincs=native_man_nincs(iblks)
+        cdtest=0
+    else
     read(mainunit,*)nincs,cdtest,earthquake_curve(1:ndimn)
+    endif
+    if(native_mode) then
+        nstepjq=0
+        nstepjp=0
+    else
     read(mainunit,*)nstepjq,nstepjp !20231215YL
+    endif
+    if(native_mode .and. (type_ABC=='VIE'.or.type_ABC=='MIF')) call native_man_deferred('VIE/MIF absorbing boundary input')
 
     if(type_ABC=='VIE')read(mainunit,*)hwdirec,hcoord  !20220105
     if(type_ABC=='VIE')read(mainunit,*)inpcord,earthquake_curve_d(1:ndimn),earthquake_curve_v(1:ndimn)
@@ -8603,6 +8615,7 @@
 
     mdiv=1
     if(cdtest>=1)then  !2013/12/11
+        if(native_mode) call native_man_deferred('cdtest>=1 (cyclic loading)')
         read(mainunit,*)text
         read(mainunit,*)ntram
         allocate(xl1(ntram),xl2(ntram),ncyc(ntram),ic(ntram))
@@ -8673,16 +8686,26 @@
     time=0.0
 
     do iincs=1,lincs
+        if(native_mode) call native_man_deferred('restart increments (lincs>0)')
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef  !20231215YL
+        if(native_mode) call native_man_deferred('restart increments (lincs>0)')
         read(mainunit,*)toler_force,toler_var(1:mdofn)
     end do
 
     do iincs=lincs+1,nincs
         print *,'  time depend     iincs=',  iincs,'nincs=',nincs
+        if(native_mode) then
+            call native_man_inc(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef, &
+                toler_force,toler_var(1:mdofn))
+        else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef !20231215YL
-        read(mainunit,*)toler_force,toler_var(1:mdofn)
+        endif
+        if(.not.native_mode) read(mainunit,*)toler_force,toler_var(1:mdofn)
+        if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
+            toler_force,toler_var(1:mdofn))
         if(nmcon/=0)allocate(lmcon(nmcon),rmcon(ndimn,nmcon))
         if (nmcon/=0) then
+            if(native_mode) call native_man_deferred('nmcon/=0 (moving constraints)')
             read(mainunit,*)coef
             do imcon=1,nmcon
                 read(mainunit,*)i0,lmcon(imcon),rmcon(:,imcon)

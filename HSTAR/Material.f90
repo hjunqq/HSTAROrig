@@ -288,6 +288,7 @@
             property='MECHANICAL'
             name='SOLID'
             imat=jmat
+            if(native_mat_heat(jmat)) property='HEAT'     ! T2: legacy 'HEAT','SOLID',imat
         else
         read(munit,*)property,name,imat
         endif
@@ -1094,16 +1095,28 @@
 
             end do     !! for nphase
         case ('HEAT')   !20200221 modified from chengjing
-            if(native_mode) call native_mat_deferred('HEAT property')
-
             allocate(props(imat)%heat)
             allocate(props(imat)%heat%alfa(ndimn))
+            if(native_mode) then
+                props(imat)%heat%alfa=native_diff(1:ndimn,imat)
+                props(imat)%heat%source_curve=native_src_curve(imat)
+                props(imat)%heat%place_curve=native_place_curve(imat)
+                props(imat)%heat%pipe_cooling=0
+            else
             read(munit,*)props(imat)%heat%alfa,  &
                 props(imat)%heat%source_curve, &
                 props(imat)%heat%place_curve,  &
                 props(imat)%heat%pipe_cooling
+            endif
+            if(native_mode) then
+                props(imat)%heat%ialfa=0
+            else
             read(munit,*)props(imat)%heat%ialfa
+            endif
+            if(native_mode) call native_heat_mat_receipt(int(imat),props(imat)%heat%alfa,int(props(imat)%heat%source_curve), &
+                int(props(imat)%heat%place_curve),int(props(imat)%heat%pipe_cooling),int(props(imat)%heat%ialfa))
             if(props(imat)%heat%pipe_cooling/=0)then   !pipe_cool
+                if(native_mode) call native_mat_deferred('equivalent pipe cooling (pipe_cooling/=0)')
                 read(munit,*)props(imat)%heat%water_curve,  &
                     props(imat)%heat%time_cooling,gap_cooling,eata,props(imat)%heat%bcooltime
                 !b=(2.09-1.35*eata+.32*eata**2)*props(imat)%heat%alfa(1)/(gap_cooling**2)
