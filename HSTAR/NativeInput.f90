@@ -540,7 +540,8 @@ contains
     do s=1,native_blocks
       sp=indexed("step",s)
       nb=doc%count_of(sp//".boundary")
-      if(nb<1 .and. .not.native_heat) call native_error("step "//itoa(s)//": at least one [[step.boundary]] is required")
+      ! D2: a constraint-free deck (no nset at all) may have steps without boundary entries
+      if(nb<1 .and. .not.native_heat .and. nn>0) call native_error("step "//itoa(s)//": at least one [[step.boundary]] is required")
       allocate(owner(10,native_points)); owner=0
       allocate(cand(max(3*nb,1))); ncand=0
       do b=1,nb
