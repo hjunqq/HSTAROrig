@@ -160,7 +160,7 @@
         if(native_mode) text='TOML-03'
         if(.not.native_mode) read(tunit,*)text
     if(native_mode) then
-        ntedge=native_tem_nedge()     ! T4: face4 surfaces (transient_heat), else none
+        ntedge=native_tem_nedge()     ! T4/T9: convection face sets from 1.set (transient_heat), else none
     else
     read(tunit,*)ntedge  !20230402
     endif

@@ -6843,6 +6843,7 @@
         else
         Read (solveunit,*) iafile,icond,ipdchk,ising
         endif
+        if(native_mode) call native_sol_receipt('PROFILE',iafile,icond,ipdchk,ising)   ! sol-pilot V2: implied 0 0 1 1
         if(iafile/=0)open(iafile,file='forpivots',form='unformatted')
         call totv_to_eq
         if(neq==0) return   !2017/11/19

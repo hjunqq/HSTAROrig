@@ -112,6 +112,12 @@ module native_input
   ! convection on face4 surfaces, cooling pipes (algo 3) and [[tie]] (HSTAR_NATIVE_NRT=toml, .nrt TRAL).
   logical :: native_heat=.false.
   logical :: native_nrt_toml=.false., native_nrt_receipt_on=.false.
+  ! SOL seam (sol-pilot V1-V8): HSTAR_NATIVE_SOL=contract (default: implied .sol records, PROFILE 0 0 1 1 /
+  ! heat PARDISO mtype 11 ncpu 2) | toml ([solver] linear = "profile" | "pardiso", [solver.pardiso]
+  ! matrix_type -2|11, threads (default 1, V5), iparm = "default"). Receipt native-sol.txt.
+  logical :: native_sol_toml=.false., native_sol_receipt_on=.false., native_pardiso=.false.
+  integer :: native_sol_mtype=0, native_sol_threads=1
+  integer, private :: sol_receipt_n=0
   integer, parameter :: NATIVE_MAXI=100
   integer :: native_ninc(NATIVE_MAXB)=0
   real(real64) :: native_inc_dt(NATIVE_MAXI,NATIVE_MAXB)=0._real64, native_inc_tol(NATIVE_MAXI,NATIVE_MAXB)=0._real64
@@ -148,7 +154,7 @@ module native_input
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env, glb_env, nrt_env
+    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env, glb_env, nrt_env, sol_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
@@ -226,6 +232,15 @@ contains
       case default; call native_error("HSTAR_NATIVE_GLB must be contract or toml")
       end select
     endif
+    call get_environment_variable("HSTAR_NATIVE_SOL",sol_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_SOL too long")
+    if(ios==0 .and. len_trim(sol_env)>0) then
+      select case(trim(sol_env))
+      case("contract"); native_sol_receipt_on=.true.
+      case("toml"); native_sol_toml=.true.; native_sol_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_SOL must be contract or toml")
+      end select
+    endif
     call toml_read(trim(filename),doc)
     if(doc%failed) then
       write(error_unit,*) 'TOML line',doc%fail_line
@@ -249,6 +264,7 @@ contains
         "requires HSTAR_NATIVE_TEM = toml (convection, pipes and ECWPIPE come from the TOML)")
     else
     if(native_nrt_toml) call native_error("NRT: HSTAR_NATIVE_NRT=toml requires HSTAR_NATIVE_GLB=toml")
+    if(native_sol_toml) call native_error("SOL: HSTAR_NATIVE_SOL=toml requires HSTAR_NATIVE_GLB=toml")
     i=key_index('case.name')
     if(doc%entry(i)%kind/=TV_STR) call native_error('expected string: case.name')
     select case(trim(doc%entry(i)%svalue))
@@ -311,9 +327,6 @@ contains
     if(native_sets_on) then
       if(len(sets_first_unreferenced())>0) call native_error("SETS: unreferenced "//sets_first_unreferenced())
       call sets_receipt("native-sets.txt")
-    elseif(native_glb_toml .and. (doc%count_of("nset")>0 .or. doc%count_of("surface")>0 .or. doc%count_of("elset")>0)) then
-      write(error_unit,'(a)') "warning: inline [[nset]]/[[surface]]/[[elset]] tables are deprecated; "// &
-        "move them to 1.set ([mesh] sets_file, sets-pilot S2)"
     endif
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
@@ -323,6 +336,11 @@ contains
     else
       call validate_mesh()
     endif
+    ! sol-pilot V9: with HSTAR_NATIVE_GLB=toml the inline set tables are no longer accepted (code removal later)
+    if(native_glb_toml .and. .not.native_sets_on .and. &
+       (doc%count_of("nset")>0 .or. doc%count_of("surface")>0 .or. doc%count_of("elset")>0)) &
+      call native_error("SETS: inline [[nset]]/[[surface]]/[[elset]] tables are no longer accepted with "// &
+        "HSTAR_NATIVE_GLB=toml; move them to 1.set ([mesh] sets_file; tools/fortran-interface/sets_tool.py convert)")
     native_mode=.true.
     print *, 'Native TOML input accepted (mesh relative to TOML file)'
     print *, 'TOML material E,nu,density:',native_e(1:native_materials),native_nu(1:native_materials),native_density(1:native_materials)
@@ -1815,15 +1833,23 @@ contains
     enddo
     ! [solver] (G5: .sol is implied by linear = "profile")
     k=key_index('solver.@table')
-    call glb_check_keys('solver','@table linear','')
+    if(native_sol_toml) then
+      call glb_check_keys('solver','@table linear pardiso.@table pardiso.matrix_type pardiso.threads pardiso.iparm','')
+    else
+      call glb_check_keys('solver','@table linear','')
+    endif
     s=string_value('solver.linear')
     if(native_heat) then
       ! T6 option A: PARDISO, no environment variables; .sol (mtype 11 nonsymmetric) is implied
       if(s/='pardiso') call native_error('GLB: a transient_heat analysis needs solver.linear "pardiso" '// &
         '(nonsymmetric pipe advection; .sol mtype 11 is implied)')
+    elseif(s=='pardiso' .and. native_sol_toml) then
+      native_pardiso=.true.                 ! sol-pilot V1: static PARDISO from [solver.pardiso]
     elseif(s/='profile') then
-      call native_error('GLB: solver.linear "'//s//'" is deferred for static (only profile; .sol 0 0 1 1 is implied)')
+      call native_error('GLB: solver.linear "'//s//'" is deferred for static (only profile; .sol 0 0 1 1 is implied; '// &
+        'pardiso needs HSTAR_NATIVE_SOL=toml)')
     endif
+    if(native_sol_toml) call parse_sol(s)
     ! [output] (G6)
     k=key_index('output.@table')
     if(native_heat) then
@@ -2309,14 +2335,76 @@ contains
     close(u)
   end subroutine
 
-  ! .sol for PARDISO (G5 analogue, T6 option A): implied record, nonsymmetric real matrix (mtype 11).
+  ! [solver.pardiso] (sol-pilot V1/V3/V4/V5), only with HSTAR_NATIVE_SOL=toml.
+  subroutine parse_sol(lin)
+    character(*), intent(in) :: lin
+    integer :: k
+    character(:), allocatable :: s
+    if(lin/='pardiso') then
+      if(doc%find('solver.pardiso.@table')>0) call native_error('SOL: [solver.pardiso] needs solver.linear = "pardiso"')
+      return
+    endif
+    if(doc%find('solver.pardiso.@table')>0) k=key_index('solver.pardiso.@table')
+    native_sol_mtype=merge(11,-2,native_heat)      ! V3: heat 11 (nonsymmetric), static -2 (symmetric indefinite)
+    if(doc%find('solver.pardiso.matrix_type')>0) native_sol_mtype=integer_value('solver.pardiso.matrix_type')
+    if(native_sol_mtype/=-2 .and. native_sol_mtype/=11) call native_error('SOL: solver.pardiso.matrix_type must be '// &
+      '-2 (real symmetric indefinite) or 11 (real nonsymmetric); other PARDISO matrix types are deferred')
+    if(native_heat .and. native_sol_mtype/=11) call native_error('SOL: transient_heat needs solver.pardiso.matrix_type 11 '// &
+      '(nonsymmetric matrix storage)')
+    if(.not.native_heat .and. native_sol_mtype/=-2) call native_error('SOL: static needs solver.pardiso.matrix_type -2 '// &
+      '(symmetric upper-triangle storage)')
+    native_sol_threads=1                           ! V5: 1 thread = reproducible (byte-exact acceptance)
+    if(doc%find('solver.pardiso.threads')>0) native_sol_threads=integer_value('solver.pardiso.threads')
+    if(native_sol_threads<1 .or. native_sol_threads>64) call native_error('SOL: solver.pardiso.threads out of range [1,64]')
+    if(doc%find('solver.pardiso.iparm')>0) then
+      s=string_value('solver.pardiso.iparm')
+      if(s/='default') call native_error('SOL: solver.pardiso.iparm must be "default" (explicit iparm fields are deferred, V4)')
+    endif
+  end subroutine
+
+  ! .sol for PARDISO (G5 analogue, T6 option A; sol-pilot V1-V5).
+  ! contract: implied record (transient_heat only): mtype 11, ncpu 2, isdefault 1 + 8 fixed iparm values.
+  ! toml: mtype / threads from [solver.pardiso]; static uses the MKL default iparm (isdefault 0), transient_heat keeps
+  ! the internal 8-value record (V4). MKL threads are set to "threads" (V5), so threads = 1 is reproducible.
   subroutine native_sol_pardiso(mtype,ncpu,msglvl,isdefault,reducing_order,precgs,permutation,maxiter,out_of_core, &
                                 eps_pivot,iparm11,iparm13)
     integer, intent(out) :: mtype,ncpu,msglvl,isdefault,reducing_order,precgs,permutation,maxiter,out_of_core, &
                             eps_pivot,iparm11,iparm13
-    if(.not.native_heat) call native_glb_deferred('MAIN_PARDISO (.sol) outside transient_heat')
+    if(.not.native_heat .and. .not.native_pardiso) call native_glb_deferred('MAIN_PARDISO (.sol) outside transient_heat')
     mtype=11; ncpu=2; msglvl=0; isdefault=1
     reducing_order=2; precgs=0; permutation=0; maxiter=20; out_of_core=0; eps_pivot=20; iparm11=0; iparm13=0
+    if(native_sol_toml) then
+      mtype=native_sol_mtype; ncpu=native_sol_threads
+      isdefault=merge(1,0,native_heat)
+      call mkl_set_num_threads(ncpu)
+    endif
+    call native_sol_receipt('PARDISO',mtype,ncpu,msglvl,isdefault)
+  end subroutine
+
+  ! native-sol.txt: written at the first solver SET call (every block uses the same record, V7).
+  subroutine native_sol_receipt(kind,a,b,c,d)
+    character(*), intent(in) :: kind
+    integer, intent(in) :: a,b,c,d
+    integer :: u
+    if(.not.native_sol_receipt_on) return
+    sol_receipt_n=sol_receipt_n+1
+    if(sol_receipt_n>1) return
+    open(newunit=u,file="native-sol.txt",status="replace",action="write")
+    write(u,"(a)") "native-sol v1 mode="//trim(merge("toml    ","contract",native_sol_toml))
+    if(kind=='PROFILE') then
+      write(u,"(a,4(a,i0))") "solver=PROFILE"," iafile=",a," icond=",b," ipdchk=",c," ising=",d
+    else
+      write(u,"(a,4(a,i0))") "solver=PARDISO"," mtype=",a," ncpu=",b," msglvl=",c," isdefault=",d
+      if(.not.native_sol_toml) then
+        write(u,"(a)") "threads=environment deterministic=unknown (contract record; MKL threads from the environment)"
+      elseif(b==1) then
+        write(u,"(a)") "threads=1 deterministic=yes (byte-exact acceptance)"
+      else
+        write(u,"(a,i0,a)") "threads=",b," deterministic=no (threads>1: PARDISO results are not byte-reproducible; "// &
+          "acceptance by numerical tolerance only, sol-pilot V5)"
+      endif
+    endif
+    close(u)
   end subroutine
 
   subroutine native_error(message)

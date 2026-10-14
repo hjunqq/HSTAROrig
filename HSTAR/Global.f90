@@ -980,6 +980,7 @@
         Bparameter=0
         balgor=0
         upliftin=0
+        if(native_pardiso) type_solver='PARDISO'   ! sol-pilot V1: static [solver] linear = "pardiso"
         if(native_heat) then          ! legacy temperature deck: type_problem S, PARDISO, type_nl 10
             type_problem='S'
             type_solver='PARDISO'
