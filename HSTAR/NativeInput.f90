@@ -305,7 +305,7 @@ contains
       native_density(i)=number(indexed('material',i)//'.density')
       if(native_e(i)<=0 .or. native_e(i)>1.e15_real64) call native_error('E out of range (0,1e15] Pa')
       if(native_nu(i)<=-1 .or. native_nu(i)>=0.5_real64) call native_error('nu out of range (-1,0.5)')
-      if(native_density(i)<=0 .or. native_density(i)>1.e6_real64) call native_error('density out of range (0,1e6]')
+      if(native_density(i)<0 .or. native_density(i)>1.e6_real64) call native_error('density out of range [0,1e6]')   ! D3: 0 allowed (massless/weightless fill)
     enddo
     do i=1,native_blocks
       if(native_heat) exit                 ! transient_heat: increments come from [[step.increment]] (parse_man)
@@ -496,7 +496,8 @@ contains
       do i=1,sets_n
         if(sets(i)%kind==SK_NSET) nn=nn+1
       enddo
-      if(nn<1 .and. .not.native_heat) call native_error("SETS: at least one nset is required in 1.set")
+      ! D2 (conv step A): a 1.set without any nset is accepted (constraint-free deck, e.g. contact3d); a boundary
+      ! entry that names an nset still fails the name lookup below.
       allocate(ns(nn)); j=0
       do i=1,sets_n
         if(sets(i)%kind/=SK_NSET) cycle
@@ -1214,8 +1215,8 @@ contains
       if(s/="linear_elastic") call native_error("MAT: material "//nm//": model "//s// &
         " is deferred in the MAT pilot (only linear_elastic); use the legacy .mat")
       native_density(i)=number(p//".density")
-      if(native_density(i)<=0 .or. native_density(i)>1.e6_real64) &
-        call native_error("MAT: material "//nm//": density out of range (0,1e6] kg/m^3")
+      if(native_density(i)<0 .or. native_density(i)>1.e6_real64) &   ! D3 (conv step A): density 0 allowed
+        call native_error("MAT: material "//nm//": density out of range [0,1e6] kg/m^3")
       native_e(i)=number(p//".elastic.youngs_modulus")
       if(native_e(i)<=0 .or. native_e(i)>1.e15_real64) &
         call native_error("MAT: material "//nm//": youngs_modulus out of range (0,1e15] Pa")
