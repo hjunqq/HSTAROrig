@@ -1389,7 +1389,6 @@ contains
     if(string_value('mesh.format')/='hstar-legacy-cor-ele') call native_error('GLB: mesh.format must be "hstar-legacy-cor-ele"')
     native_ndim=integer_value('mesh.dimension')
     if(native_ndim/=2 .and. native_ndim/=3) call native_error('GLB: mesh.dimension must be 2 or 3')
-    if(native_ndim==3) call native_error('GLB: mesh.dimension 3 (B8) is not enabled in this build (GLB pilot step 2)')
     ! [[elset]] (group order = element order in 1.ele, legacy rule)
     ng=doc%count_of('elset')
     if(ng<1 .or. ng>NATIVE_MAXG) call native_error('GLB: need 1..'//itoa(NATIVE_MAXG)//' [[elset]] tables')
@@ -1515,7 +1514,7 @@ contains
 
   ! General Q4 / B8 mesh check for HSTAR_NATIVE_GLB=toml (DESIGN.md section 6 rules 2-3).
   subroutine validate_mesh_general()
-    integer :: u, ios, k, id, g, last, nn, nd, j, mat
+    integer :: u, ios, k, id, g, last, nn, nd, j, mat, nt
     integer :: nodes(8)
     real(real64), allocatable :: xyz(:,:)
     logical, allocatable :: used(:)
@@ -1548,9 +1547,16 @@ contains
       nn=native_gnnode(g)
       read(u,'(a)',iostat=ios) row
       if(ios /= 0) call native_error('missing mesh element row')
-      if(token_count(row) /= nn+2) call native_error('GLB: 1.ele row '//itoa(k)//' must have '//itoa(nn+2)// &
-        ' columns for element '//trim(native_gname(g))//' (elset '//trim(native_kname(g))//')')
-      read(row,*,iostat=ios) id,nodes(1:nn),mat
+      ! legacy read_element reads "id nodes(1:nnode)"; a trailing group column is optional
+      nt=token_count(row)
+      if(nt /= nn+1 .and. nt /= nn+2) call native_error('GLB: 1.ele row '//itoa(k)//' must have '//itoa(nn+1)// &
+        ' or '//itoa(nn+2)//' columns for element '//trim(native_gname(g))//' (elset '//trim(native_kname(g))//')')
+      mat=g
+      if(nt==nn+2) then
+        read(row,*,iostat=ios) id,nodes(1:nn),mat
+      else
+        read(row,*,iostat=ios) id,nodes(1:nn)
+      endif
       if(ios /= 0) call native_error('invalid mesh connectivity')
       if(id /= k) call native_error('GLB: 1.ele element numbers must be 1..n in order (row '//itoa(k)//')')
       if(mat /= g) call native_error('GLB: 1.ele row '//itoa(k)//': group column '//itoa(mat)//' does not match elset '// &
@@ -1564,6 +1570,9 @@ contains
       if(nn==4) then
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
+      else
+        if(b8_min_jacobian(xyz(:,nodes(1:8)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': B8 Jacobian is not positive (node order / distortion)')
       endif
     enddo
     read(u,'(a)',iostat=ios) row
@@ -1573,6 +1582,32 @@ contains
       if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
     enddo
   end subroutine
+
+  ! Smallest Jacobian determinant of a trilinear hexahedron (nodes 1-4 bottom counter-clockwise seen
+  ! from the top face, 5-8 above them), sampled at the 8 corners and the centre.
+  real(real64) function b8_min_jacobian(x) result(dmin)
+    real(real64), intent(in) :: x(3,8)
+    real(real64), parameter :: xi(8)=[-1,1,1,-1,-1,1,1,-1], et(8)=[-1,-1,1,1,-1,-1,1,1], ze(8)=[-1,-1,-1,-1,1,1,1,1]
+    real(real64) :: p(3), j(3,3), dn(3)
+    integer :: ip, a
+    dmin=huge(1._real64)
+    do ip=0,8
+      if(ip==0) then
+        p=0
+      else
+        p=[xi(ip),et(ip),ze(ip)]
+      endif
+      j=0
+      do a=1,8
+        dn(1)=xi(a)*(1+et(a)*p(2))*(1+ze(a)*p(3))/8
+        dn(2)=et(a)*(1+xi(a)*p(1))*(1+ze(a)*p(3))/8
+        dn(3)=ze(a)*(1+xi(a)*p(1))*(1+et(a)*p(2))/8
+        j(:,1)=j(:,1)+x(:,a)*dn(1); j(:,2)=j(:,2)+x(:,a)*dn(2); j(:,3)=j(:,3)+x(:,a)*dn(3)
+      enddo
+      dmin=min(dmin, j(1,1)*(j(2,2)*j(3,3)-j(3,2)*j(2,3)) - j(1,2)*(j(2,1)*j(3,3)-j(3,1)*j(2,3)) &
+                     + j(1,3)*(j(2,1)*j(3,2)-j(3,1)*j(2,2)))
+    enddo
+  end function
 
   ! Smallest corner Jacobian determinant of a bilinear quad (all four corners > 0 <=> valid, counter-clockwise).
   real(real64) function q4_min_jacobian(x) result(dmin)
