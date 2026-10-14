@@ -7,12 +7,22 @@ module native_input
   character(1024) :: native_mesh_prefix='1'
   logical :: native_mode = .false.
   logical :: native_dam = .false.
+  ! GLB pilot (glb-pilot/DESIGN.md, G1-G12): bounded sizes instead of the Cook/dam fixed (2) arrays.
+  integer, parameter :: NATIVE_MAXG=64, NATIVE_MAXB=64, NATIVE_MAXN=200000
   integer :: native_points=289, native_elements=256, native_materials=1, native_blocks=1
-  integer :: native_elcounts(2)=[256,0], native_appearance(2,2)=1, native_reset(2)=0
+  integer :: native_elcounts(NATIVE_MAXG)=0, native_appearance(NATIVE_MAXG,NATIVE_MAXB)=1, native_reset(NATIVE_MAXB)=0
   integer :: native_bc(50,2)=0, native_nbc(2)=[17,17], native_edges(3,40)
-  real(real64) :: native_e(2), native_nu(2), native_density(2), native_gravity(2)
+  real(real64) :: native_e(NATIVE_MAXG), native_nu(NATIVE_MAXG), native_density(NATIVE_MAXG), native_gravity(NATIVE_MAXB)
   real(real64) :: native_pressure=0.
-  integer :: native_substeps(2), native_iterations(2)
+  integer :: native_substeps(NATIVE_MAXB), native_iterations(NATIVE_MAXB)
+  ! HSTAR_NATIVE_GLB=contract (default, Cook/dam profile constants) | toml (global control from TOML;
+  ! counts derived from 1.cor/1.ele and the TOML tables; .sol implied by solver.linear="profile")
+  logical :: native_glb_toml=.false., native_glb_receipt_on=.false.
+  integer :: native_ndim=2, native_gid_f=0
+  integer :: native_dof_list(3)=[1,2,3]
+  character(10) :: native_gname(NATIVE_MAXG)='Q4'
+  character(20) :: native_kname(NATIVE_MAXG)='Default'
+  integer :: native_gindex(NATIVE_MAXG)=5, native_gnnode(NATIVE_MAXG)=4
   integer, private :: force_unit, force_frame=0
   integer, parameter :: native_nodes(17) = [1,18,35,52,69,86,103,120,137,154,171,188,205,222,239,256,273]
   type(toml_doc_t), private :: doc
@@ -58,14 +68,14 @@ module native_input
     real(real64) :: cor0, cor1, p0, p1, fact
   end type
   type :: loa_step_t
-    real(real64) :: g=0, dir(2)=0, fdir(2)=0
+    real(real64) :: g=0, dir(3)=0, fdir(3)=0
     integer :: gamp=0
     type(loa_hyd_t), allocatable :: hyd(:)
   end type
   type(loa_step_t), allocatable :: native_loa(:)
   type :: loa_pl_t
     integer :: itcurve=0
-    real(real64) :: comp(2)=0
+    real(real64) :: comp(3)=0
     integer, allocatable :: nodes(:)
   end type
   type(loa_pl_t), allocatable :: native_pl(:)
@@ -74,8 +84,8 @@ module native_input
   ! MAT pilot: HSTAR_NATIVE_MAT=contract (default, profile constants) | toml (material/section data from TOML)
   ! Contract defaults equal the constants Material.f90 used before the seam (ratio=1, thickness=1, alfa=1e-5).
   logical :: native_mat_toml=.false., native_mat_receipt_on=.false.
-  real(real64) :: native_alfa(2)=1.e-5_real64, native_thick(2)=1._real64, native_ratio(2)=1._real64
-  integer :: native_group_mat(2)=[1,2]
+  real(real64) :: native_alfa(NATIVE_MAXG)=1.e-5_real64, native_thick(NATIVE_MAXG)=1._real64, native_ratio(NATIVE_MAXG)=1._real64
+  integer :: native_group_mat(NATIVE_MAXG)=0   ! set to 1..NATIVE_MAXG at native_start (was [1,2])
   integer, private :: mat_receipt_n=0
   ! TEM minimal step (T1/M8): HSTAR_NATIVE_TEM=contract (default) | toml (no temperature loading allowed)
   logical :: native_tem_toml=.false., native_tem_receipt_on=.false.
@@ -85,18 +95,19 @@ module native_input
   ! tolerance_dof from TOML). Creep (Kelvin/Burgers = legacy icreep=4) lives under [[material]].creep
   ! with HSTAR_NATIVE_MAT=toml. Contract defaults equal the constants Fem.f90 used before the seam.
   logical :: native_man_toml=.false., native_man_receipt_on=.false.
-  real(real64) :: native_ditime(2)=1._real64, native_tol_force(2)=1.e-5_real64, native_tol_dof(2)=1.e-5_real64
-  integer :: native_icreep(2)=0
-  real(real64) :: native_ek(2)=0._real64, native_etak(2)=0._real64, native_etam(2)=0._real64
+  real(real64) :: native_ditime(NATIVE_MAXB)=1._real64, native_tol_force(NATIVE_MAXB)=1.e-5_real64, native_tol_dof(NATIVE_MAXB)=1.e-5_real64
+  integer :: native_icreep(NATIVE_MAXG)=0
+  real(real64) :: native_ek(NATIVE_MAXG)=0._real64, native_etak(NATIVE_MAXG)=0._real64, native_etam(NATIVE_MAXG)=0._real64
   real(real64), parameter :: native_kelvin_etam=1.e30_real64
   integer, private :: man_receipt_n=0
 contains
   subroutine native_start()
     character(1024) :: flag, filename
-    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env
+    character(256) :: pre_env, loa_env, mat_env, tem_env, man_env, glb_env
     integer :: n, i, j, file_size, ios
     n = command_argument_count()
     if(n == 0) return
+    native_group_mat=[(i,i=1,NATIVE_MAXG)]
     call get_command_argument(1,flag)
     if(n /= 2 .or. trim(flag) /= '--input') call native_error('usage: hstar [--input case.toml]')
     call get_command_argument(2,filename,length=n)
@@ -152,6 +163,15 @@ contains
       case default; call native_error("HSTAR_NATIVE_MAN must be contract or toml")
       end select
     endif
+    call get_environment_variable("HSTAR_NATIVE_GLB",glb_env,status=ios)
+    if(ios==-1) call native_error("HSTAR_NATIVE_GLB too long")
+    if(ios==0 .and. len_trim(glb_env)>0) then
+      select case(trim(glb_env))
+      case("contract"); native_glb_receipt_on=.true.
+      case("toml"); native_glb_toml=.true.; native_glb_receipt_on=.true.
+      case default; call native_error("HSTAR_NATIVE_GLB must be contract or toml")
+      end select
+    endif
     call toml_read(trim(filename),doc)
     if(doc%failed) then
       write(error_unit,*) 'TOML line',doc%fail_line
@@ -163,6 +183,15 @@ contains
         if(doc%entry(i)%path == doc%entry(j)%path) call native_error('duplicate: '//trim(doc%entry(i)%path))
       enddo
     enddo
+    if(native_glb_toml) then
+      ! G2: case.name is only a name; the case skeleton comes from the TOML tables and the mesh.
+      if(.not.(native_pre_toml .and. native_loa_toml .and. native_mat_toml .and. native_man_toml)) &
+        call native_error("GLB: HSTAR_NATIVE_GLB=toml requires HSTAR_NATIVE_PRE, HSTAR_NATIVE_LOA, "// &
+          "HSTAR_NATIVE_MAT and HSTAR_NATIVE_MAN = toml (their contract constants belong to the Cook/dam profiles)")
+      if(native_tem_receipt_on .and. .not.native_tem_toml) &
+        call native_error("GLB: HSTAR_NATIVE_GLB=toml requires HSTAR_NATIVE_TEM = toml or unset")
+      call parse_glb()
+    else
     i=key_index('case.name')
     if(doc%entry(i)%kind/=TV_STR) call native_error('expected string: case.name')
     select case(trim(doc%entry(i)%svalue))
@@ -170,12 +199,14 @@ contains
       include 'NativeContract.inc'
       native_bc(1:17,1)=native_nodes
       native_bc(1:17,2)=native_nodes
+      native_elcounts(1)=256
     case('train01_gravdam_static')
       native_dam=.true.
       include 'NativeDamContract.inc'
       native_points=1705; native_elements=1600; native_materials=2; native_blocks=2
-      native_elcounts=[960,640]; native_appearance(:,1)=[1,0]; native_appearance(:,2)=[1,1]
-      native_reset=[0,1]; native_nbc=[50,41]
+      native_elcounts(1:2)=[960,640]; native_appearance(1:2,1)=[1,0]; native_appearance(1:2,2)=[1,1]
+      native_reset(1:2)=[0,1]; native_nbc=[50,41]
+      native_kname(1)='Foundation'; native_kname(2)='Dam'; native_gid_f=1
       do i=1,25
         native_bc(2*i-1,1)=1+41*(i-1)
         native_bc(2*i,1)=41*i
@@ -192,6 +223,7 @@ contains
     case default
       call native_error('unsupported case.name')
     end select
+    endif
     if(native_mat_toml) call parse_mat()
     do i=1,native_materials
       if(native_mat_toml) exit
@@ -219,7 +251,11 @@ contains
     do i=1,doc%n
       if(.not.seen(i)) call native_error('unsupported key: '//trim(doc%entry(i)%path))
     enddo
-    call validate_mesh()
+    if(native_glb_toml) then
+      call validate_mesh_general()
+    else
+      call validate_mesh()
+    endif
     native_mode=.true.
     print *, 'Native TOML input accepted (mesh relative to TOML file)'
     print *, 'TOML material E,nu,density:',native_e(1:native_materials),native_nu(1:native_materials),native_density(1:native_materials)
@@ -367,7 +403,7 @@ contains
     integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre
     logical, allocatable :: nref(:)
     real(real64) :: val
-    ndim_pre=2
+    ndim_pre=native_ndim
     nn=doc%count_of("nset")
     if(nn<1) call native_error("at least one [[nset]] is required")
     allocate(ns(nn))
@@ -574,7 +610,8 @@ contains
     character(:), allocatable :: p, q, sp, nm, typ
     integer :: na, i, j, k, n, s, nl, l, ns, ie, total, ng, nh, ip, ii, nnset, idx
     integer :: e(3)
-    real(real64) :: wl, bt, gw, g, d(2), fd(2)
+    real(real64) :: wl, bt, gw, g, d(3), fd(3)
+    integer :: nd
     type(loa_hyd_t), allocatable :: tmp(:)
     logical, allocatable :: srf_step(:)
     ! ---- [[amplitude]]
@@ -628,6 +665,7 @@ contains
       enddo
       native_surf(i)%name=nm
       if(string_value(p//".kind")/="edge2") call native_error("LOA: surface "//nm//": kind must be edge2")
+      if(native_ndim/=2) call native_error("LOA: surface "//nm//": edge2 surfaces need mesh.dimension 2 (3D faces are deferred)")
       n=integer_value(p//".edges.count")
       if(n<1) call native_error("LOA: surface "//nm//" has no edges")
       native_surf(i)%first=total+1
@@ -670,13 +708,21 @@ contains
           if(ng>1) call native_error("LOA: step "//itoa(s)//": only one gravity load per step")
           g=number(q//".magnitude")
           if(g<=0 .or. g>1.e4_real64) call native_error('gravity out of range (0,1e4]')
-          if(integer_value(q//".direction.count")/=2) call native_error("LOA: step "//itoa(s)//": gravity direction needs 2 components")
-          d(1)=number(q//".direction[1]"); d(2)=number(q//".direction[2]")
+          nd=native_ndim
+          if(integer_value(q//".direction.count")/=nd) call native_error("LOA: step "//itoa(s)// &
+            ": gravity direction needs "//itoa(nd)//" components (mesh.dimension)")
+          d=0
+          do j=1,nd
+            d(j)=number(q//".direction["//itoa(j)//"]")
+          enddo
           if(sum(d**2)==0) call native_error("LOA: step "//itoa(s)//": zero gravity direction")
           fd=d
           if(present_key(q//".fluid_direction.count")) then
-            if(integer_value(q//".fluid_direction.count")/=2) call native_error("LOA: step "//itoa(s)//": fluid_direction needs 2 components")
-            fd(1)=number(q//".fluid_direction[1]"); fd(2)=number(q//".fluid_direction[2]")
+            if(integer_value(q//".fluid_direction.count")/=nd) call native_error("LOA: step "//itoa(s)// &
+              ": fluid_direction needs "//itoa(nd)//" components (mesh.dimension)")
+            do j=1,nd
+              fd(j)=number(q//".fluid_direction["//itoa(j)//"]")
+            enddo
           endif
           if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": gravity amplitude is required")
           native_loa(s)%gamp=amp_ref(q//".amplitude")
@@ -737,8 +783,12 @@ contains
         if(ii<1 .or. ii>native_points) call native_error("LOA: node out of range in nset "//nm)
         native_pl(ip)%nodes(j)=ii
       enddo
-      if(integer_value(p//".components.count")/=2) call native_error("LOA: load "//itoa(ip)//": components must have mesh.dimension (2) entries")
-      native_pl(ip)%comp(1)=number(p//".components[1]"); native_pl(ip)%comp(2)=number(p//".components[2]")
+      if(integer_value(p//".components.count")/=native_ndim) call native_error("LOA: load "//itoa(ip)// &
+        ": components must have mesh.dimension ("//itoa(native_ndim)//") entries")
+      native_pl(ip)%comp=0
+      do j=1,native_ndim
+        native_pl(ip)%comp(j)=number(p//".components["//itoa(j)//"]")
+      enddo
       if(maxval(abs(native_pl(ip)%comp))>1.e12_real64) call native_error("LOA: load "//itoa(ip)//": component out of range")
       if(.not.present_key(p//".amplitude")) call native_error("LOA: load "//itoa(ip)//": amplitude is required")
       native_pl(ip)%itcurve=amp_ref(p//".amplitude")
@@ -896,7 +946,7 @@ contains
     integer, intent(in) :: iblk
     real(real64), intent(out) :: fg(:),ff(:)
     if(native_loa_toml) then
-      fg=native_loa(iblk)%dir; ff=native_loa(iblk)%fdir
+      fg=native_loa(iblk)%dir(1:size(fg)); ff=native_loa(iblk)%fdir(1:size(ff))
     else
       fg=[0._real64,-1._real64]; ff=[0._real64,-1._real64]
     endif
@@ -909,7 +959,8 @@ contains
     k=1
     if(native_loa_toml) k=native_loa(iblk)%gamp
     tcg=k
-    if(native_dam) tcg=merge(k,0,native_appearance(1:size(tcg),iblk)>0)
+    ! dam profile and GLB=toml: element sets not active in this step carry no gravity curve
+    if(native_dam .or. native_glb_toml) tcg=merge(k,0,native_appearance(1:size(tcg),iblk)>0)
   end subroutine
 
   subroutine native_loa_deferred(what)
@@ -979,8 +1030,8 @@ contains
   subroutine parse_mat()
     character(:), allocatable :: p, nm, s, el
     integer :: nmat, nsec, i, j, k, g, ng
-    logical :: used(2), covered(2)
-    character(len=TOML_LEN_TEXT) :: mname(2), ename(2), sname(2)
+    logical :: used(NATIVE_MAXG), covered(NATIVE_MAXG)
+    character(len=TOML_LEN_TEXT) :: mname(NATIVE_MAXG), ename(NATIVE_MAXG), sname(NATIVE_MAXG)
     real(real64) :: v
     ng=native_materials
     nmat=doc%count_of("material")
@@ -1045,9 +1096,14 @@ contains
       if(g==0) call native_error("MAT: section "//nm//": undefined elset "//el)
       if(covered(g)) call native_error("MAT: elset "//el//" is assigned by more than one section")
       covered(g)=.true.
+      if(native_glb_toml) then
+        ! element/formulation were checked against mesh.dimension by parse_glb (G7)
+        s=string_value(p//".element"); s=string_value(p//".formulation")
+      else
       if(string_value(p//".element")/="Q4") call native_error("MAT: section "//nm//': only element "Q4" in this profile')
       if(string_value(p//".formulation")/="plane_strain") &
         call native_error("MAT: section "//nm//': only formulation "plane_strain" in this profile')
+      endif
       s=string_value(p//".material")
       i=0
       do j=1,nmat
@@ -1060,6 +1116,8 @@ contains
       native_group_mat(g)=i
       v=1._real64
       if(present_key(p//".thickness")) v=number(p//".thickness")
+      if(present_key(p//".thickness") .and. native_ndim/=2) &
+        call native_error("MAT: section "//nm//": thickness applies only to mesh.dimension 2")
       if(v<=0 .or. v>1.e3_real64) call native_error("MAT: section "//nm//": thickness out of range (0,1e3] m")
       native_thick(i)=v
       v=1._real64
@@ -1264,6 +1322,270 @@ contains
       " ntelgroup=",nelgroup," npipe=",npipe," ecwpipe=",ecwpipe," outintr=",outintr
     close(u)
   end subroutine
+
+  ! ---------------------------------------------------------------------------
+  ! GLB pilot (HSTAR_NATIVE_GLB=toml, glb-pilot/DESIGN.md G1-G12): global control from TOML.
+  ! Counts (nodes, elements, groups, materials, steps, dofs) are derived, never keys (G4).
+  ! ---------------------------------------------------------------------------
+  subroutine glb_check_keys(p,allowed,lists)
+    character(*), intent(in) :: p, allowed, lists
+    character(len=TOML_LEN_PATH) :: rest
+    integer :: i, n, b
+    n=len(p)+1
+    do i=1,doc%n
+      if(len_trim(doc%entry(i)%path)<=n) cycle
+      if(doc%entry(i)%path(1:n)/=p//".") cycle
+      rest=doc%entry(i)%path(n+1:)
+      if(in_list(trim(rest),allowed)) cycle
+      b=index(rest,"[")
+      if(b==0) b=index(rest,".count")
+      if(b>1) then
+        if(in_list(rest(1:b-1),lists)) cycle
+      endif
+      call native_error("GLB: unsupported key: "//trim(doc%entry(i)%path)// &
+        " (counts are derived from 1.cor/1.ele and the TOML tables; advanced switches are deferred)")
+    enddo
+  end subroutine
+
+  integer function glb_count_rows(file) result(n)
+    character(*), intent(in) :: file
+    integer :: u, ios
+    character(1024) :: row
+    open(newunit=u,file=file,status='old',action='read',iostat=ios)
+    if(ios /= 0) call native_error('cannot open mesh '//file)
+    n=0
+    do
+      read(u,'(a)',iostat=ios) row
+      if(ios /= 0) exit
+      if(len_trim(row)==0) call native_error('GLB: blank row in mesh '//file)
+      n=n+1
+      if(n>NATIVE_MAXN) call native_error('GLB: mesh '//file//' exceeds '//itoa(NATIVE_MAXN)//' rows')
+    enddo
+    close(u)
+  end function
+
+  subroutine parse_glb()
+    character(:), allocatable :: s, p, q, nm, el
+    character(len=TOML_LEN_TEXT) :: ename(NATIVE_MAXG)
+    integer :: i, j, k, n, ng, nb, nsec, nf, g, total
+    logical :: has(3), act(NATIVE_MAXG), seen_el(NATIVE_MAXG)
+    if(integer_value('version')/=1) call native_error('GLB: version must be 1')
+    ! [case]
+    k=key_index('case.@table')
+    call glb_check_keys('case','@table name units description','')
+    if(len(string_value('case.name'))==0) call native_error('GLB: empty case.name')
+    if(string_value('case.units')/='SI') call native_error('GLB: case.units must be "SI"')
+    if(present_key('case.description')) s=string_value('case.description')
+    ! [analysis] (G3: static only)
+    if(.not.present_key('analysis.type')) call native_error('GLB: [analysis] type = "static" is required with HSTAR_NATIVE_GLB=toml')
+    k=key_index('analysis.@table')
+    call glb_check_keys('analysis','@table type','')
+    s=string_value('analysis.type')
+    if(s/='static') call native_error('GLB: analysis.type "'//s//'" is deferred in the GLB pilot (only static)')
+    ! [mesh]
+    k=key_index('mesh.@table')
+    call glb_check_keys('mesh','@table file format dimension','')
+    if(string_value('mesh.file')/='1') call native_error('GLB: mesh.file must be "1" (1.cor / 1.ele next to the TOML)')
+    if(string_value('mesh.format')/='hstar-legacy-cor-ele') call native_error('GLB: mesh.format must be "hstar-legacy-cor-ele"')
+    native_ndim=integer_value('mesh.dimension')
+    if(native_ndim/=2 .and. native_ndim/=3) call native_error('GLB: mesh.dimension must be 2 or 3')
+    if(native_ndim==3) call native_error('GLB: mesh.dimension 3 (B8) is not enabled in this build (GLB pilot step 2)')
+    ! [[elset]] (group order = element order in 1.ele, legacy rule)
+    ng=doc%count_of('elset')
+    if(ng<1 .or. ng>NATIVE_MAXG) call native_error('GLB: need 1..'//itoa(NATIVE_MAXG)//' [[elset]] tables')
+    total=0
+    do i=1,ng
+      p=indexed('elset',i)
+      k=key_index(p//'.@table')
+      call glb_check_keys(p,'@table name element_count','')
+      nm=string_value(p//'.name')
+      if(len(nm)==0) call native_error('GLB: empty elset name: '//p)
+      if(len(nm)>20) call native_error('GLB: elset name longer than 20 characters: '//nm)
+      do j=1,i-1
+        if(trim(ename(j))==nm) call native_error('GLB: duplicate elset name: '//nm)
+      enddo
+      ename(i)=nm
+      native_kname(i)=nm
+      native_elcounts(i)=integer_value(p//'.element_count')
+      if(native_elcounts(i)<1) call native_error('GLB: elset '//nm//': element_count must be >= 1')
+      total=total+native_elcounts(i)
+    enddo
+    native_materials=ng
+    ! element type per elset from [[section]] (G7); MAT checks the rest of the section
+    nsec=doc%count_of('section')
+    seen_el=.false.
+    do k=1,nsec
+      p=indexed('section',k)
+      el=string_value(p//'.elset')
+      g=0
+      do j=1,ng
+        if(trim(ename(j))==el) g=j
+      enddo
+      if(g==0) cycle                      ! MAT reports the undefined elset
+      s=string_value(p//'.element')
+      select case(s)
+      case('Q4')
+        if(native_ndim/=2) call native_error('GLB: section '//p//': element Q4 needs mesh.dimension 2')
+        if(string_value(p//'.formulation')/='plane_strain') &
+          call native_error('GLB: section '//p//': 2D Q4 supports only formulation "plane_strain"')
+        native_gname(g)='Q4'; native_gindex(g)=5; native_gnnode(g)=4
+      case('B8')
+        if(native_ndim/=3) call native_error('GLB: section '//p//': element B8 needs mesh.dimension 3')
+        if(string_value(p//'.formulation')/='solid') &
+          call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
+        native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
+      case default
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8)')
+      end select
+      seen_el(g)=.true.
+    enddo
+    ! [[step]] skeleton: active element sets, reset, increments (load/boundary/controls data: LOA/PRE/MAN)
+    nb=doc%count_of('step')
+    if(nb<1 .or. nb>NATIVE_MAXB) call native_error('GLB: need 1..'//itoa(NATIVE_MAXB)//' [[step]] tables')
+    native_blocks=nb
+    do i=1,nb
+      p=indexed('step',i)
+      k=key_index(p//'.@table')
+      k=key_index(p//'.controls.@table')
+      if(len(string_value(p//'.name'))==0) call native_error('GLB: empty step name: '//p)
+      s=string_value(p//'.procedure')
+      if(s/='static') call native_error('GLB: '//p//'.procedure "'//s//'" is deferred (only static)')
+      if(string_value(p//'.load_mode')/='load') call native_error('GLB: '//p//'.load_mode must be "load"')
+      k=key_index(p//'.reset_state')
+      if(doc%entry(k)%kind/=TV_BOOL) call native_error('expected boolean: '//p//'.reset_state')
+      native_reset(i)=merge(1,0,doc%entry(k)%lvalue)
+      if(integer_value(p//'.controls.increments')/=1) call native_error('GLB: '//p//'.controls.increments must be 1')
+      if(string_value(p//'.controls.stiffness_update')/='first_iteration') &
+        call native_error('GLB: '//p//'.controls.stiffness_update must be "first_iteration"')
+      n=integer_value(p//'.active_elsets.count')
+      if(n<1) call native_error('GLB: '//p//': active_elsets is empty')
+      act=.false.
+      do j=1,n
+        q=string_value(indexed(p//'.active_elsets',j))
+        g=0
+        do k=1,ng
+          if(trim(ename(k))==q) g=k
+        enddo
+        if(g==0) call native_error('GLB: '//p//': undefined elset '//q//' in active_elsets')
+        if(act(g)) call native_error('GLB: '//p//': elset '//q//' listed twice in active_elsets')
+        act(g)=.true.
+      enddo
+      native_appearance(1:ng,i)=merge(1,0,act(1:ng))
+    enddo
+    ! [solver] (G5: .sol is implied by linear = "profile")
+    k=key_index('solver.@table')
+    call glb_check_keys('solver','@table linear','')
+    s=string_value('solver.linear')
+    if(s/='profile') call native_error('GLB: solver.linear "'//s//'" is deferred (only profile; .sol 0 0 1 1 is implied)')
+    ! [output] (G6)
+    k=key_index('output.@table')
+    call glb_check_keys('output','@table format stress_averaging','field')
+    if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
+    if(string_value('output.stress_averaging')/='direct') call native_error('GLB: output.stress_averaging must be "direct"')
+    nf=integer_value('output.field.count')
+    has=.false.
+    do j=1,nf
+      s=string_value(indexed('output.field',j))
+      select case(s)
+      case('u'); k=1
+      case('s'); k=2
+      case('f'); k=3
+      case default; call native_error('GLB: output.field "'//s//'" is deferred (only u, s, f)')
+      end select
+      if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
+      has(k)=.true.
+    enddo
+    if(.not.(has(1) .and. has(2))) call native_error('GLB: output.field must contain "u" and "s"')
+    native_gid_f=merge(1,0,has(3))
+    ! derived mesh counts (G4); full checks in validate_mesh_general
+    native_points=glb_count_rows(trim(native_mesh_prefix)//'.cor')
+    native_elements=glb_count_rows(trim(native_mesh_prefix)//'.ele')
+    if(native_points<1) call native_error('GLB: 1.cor has no rows')
+    if(total/=native_elements) call native_error('GLB: sum of elset element_count ('//itoa(total)// &
+      ') does not match the '//itoa(native_elements)//' element rows of 1.ele')
+    do g=1,ng
+      if(.not.seen_el(g)) native_gnnode(g)=4   ! MAT reports the missing section
+    enddo
+  end subroutine
+
+  subroutine native_glb_deferred(what)
+    character(*), intent(in) :: what
+    call native_error("GLB: "//what//" is deferred (GLB pilot) and cannot be driven by TOML")
+  end subroutine
+
+  ! General Q4 / B8 mesh check for HSTAR_NATIVE_GLB=toml (DESIGN.md section 6 rules 2-3).
+  subroutine validate_mesh_general()
+    integer :: u, ios, k, id, g, last, nn, nd, j, mat
+    integer :: nodes(8)
+    real(real64), allocatable :: xyz(:,:)
+    logical, allocatable :: used(:)
+    real(real64) :: c(3)
+    character(1024) :: row
+    nd=native_ndim
+    allocate(xyz(3,native_points), used(native_points)); xyz=0; used=.false.
+    open(newunit=u,file=trim(native_mesh_prefix)//'.cor',status='old',action='read',iostat=ios)
+    if(ios /= 0) call native_error('cannot open mesh 1.cor')
+    do k=1,native_points
+      read(u,'(a)',iostat=ios) row
+      if(ios /= 0) call native_error('missing mesh coordinate row')
+      if(token_count(row) /= nd+1) call native_error('GLB: 1.cor row '//itoa(k)//' must have '//itoa(nd+1)// &
+        ' columns (id + mesh.dimension coordinates)')
+      c=0
+      read(row,*,iostat=ios) id,c(1:nd)
+      if(ios /= 0) call native_error('invalid mesh coordinates')
+      if(id /= k) call native_error('GLB: 1.cor node numbers must be 1..n in order (row '//itoa(k)//')')
+      if(.not.all(ieee_is_finite(c))) call native_error('non-finite mesh')
+      xyz(:,k)=c
+    enddo
+    close(u)
+    open(newunit=u,file=trim(native_mesh_prefix)//'.ele',status='old',action='read',iostat=ios)
+    if(ios /= 0) call native_error('cannot open mesh 1.ele')
+    g=1; last=native_elcounts(1)
+    do k=1,native_elements
+      do while(k>last)
+        g=g+1; last=last+native_elcounts(g)
+      enddo
+      nn=native_gnnode(g)
+      read(u,'(a)',iostat=ios) row
+      if(ios /= 0) call native_error('missing mesh element row')
+      if(token_count(row) /= nn+2) call native_error('GLB: 1.ele row '//itoa(k)//' must have '//itoa(nn+2)// &
+        ' columns for element '//trim(native_gname(g))//' (elset '//trim(native_kname(g))//')')
+      read(row,*,iostat=ios) id,nodes(1:nn),mat
+      if(ios /= 0) call native_error('invalid mesh connectivity')
+      if(id /= k) call native_error('GLB: 1.ele element numbers must be 1..n in order (row '//itoa(k)//')')
+      if(mat /= g) call native_error('GLB: 1.ele row '//itoa(k)//': group column '//itoa(mat)//' does not match elset '// &
+        itoa(g)//' (elsets follow the element order of 1.ele)')
+      if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
+        call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
+      do j=2,nn
+        if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node')
+      enddo
+      used(nodes(1:nn))=.true.
+      if(nn==4) then
+        if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
+      endif
+    enddo
+    read(u,'(a)',iostat=ios) row
+    if(ios >= 0) call native_error('extra mesh element row')
+    close(u)
+    do k=1,native_points
+      if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
+    enddo
+  end subroutine
+
+  ! Smallest corner Jacobian determinant of a bilinear quad (all four corners > 0 <=> valid, counter-clockwise).
+  real(real64) function q4_min_jacobian(x) result(dmin)
+    real(real64), intent(in) :: x(2,4)
+    integer :: i, ip, im
+    real(real64) :: a(2), b(2)
+    dmin=huge(1._real64)
+    do i=1,4
+      ip=mod(i,4)+1; im=mod(i+2,4)+1
+      a=x(:,ip)-x(:,i); b=x(:,im)-x(:,i)
+      dmin=min(dmin,a(1)*b(2)-a(2)*b(1))
+    enddo
+  end function
 
   subroutine native_error(message)
     character(*), intent(in) :: message

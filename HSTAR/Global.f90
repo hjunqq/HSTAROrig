@@ -642,6 +642,7 @@
     call read_nrt_constraints
 
     call read_glb_tension_lists
+    if(native_mode .and. native_glb_receipt_on) call native_glb_receipt_write
 
     !   write(chkunit,*)'nodfn='
     !   do ipoin=1,npoin
@@ -823,7 +824,7 @@
         npoin=native_points
         npoinb=native_points
         nelem=native_elements
-        ndimn=2
+        ndimn=native_ndim
         nmats=native_materials
         ngroup=native_materials
         ntlink=0
@@ -857,6 +858,7 @@
     if(.not.native_mode) read(gunit,*,iostat=glb_ios,iomsg=glb_msg)text  !2004/7/12
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'text',text)
+    if(native_mode .and. (rmesh/=0)) call native_glb_deferred('read_glb_mesh_header')
     if(rmesh/=0)read(gunit,*,iostat=glb_ios,iomsg=glb_msg)valv1,valv2 !2004/7/12
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
         'valv1,valv2',text)
@@ -867,6 +869,7 @@
         'text',text)
     if (rmesh/=0)then
         allocate(ndefault(abs(rmesh)))
+        if(native_mode) call native_glb_deferred('read_glb_mesh_header')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ndefault
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_mesh_header', &
             'ndefault',text)
@@ -1000,6 +1003,7 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
+    if(native_mode .and. (nlayer==2)) call native_glb_deferred('read_glb_problem_type')
     if(nlayer==2)read(gunit,*,iostat=glb_ios,iomsg=glb_msg) type_nl_layer1,type_nl_layer2,solver_iter
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'type_nl_layer1,type_nl_layer2,solver_iter',text)
@@ -1033,11 +1037,13 @@
         'text',text)
     print *,text
     if (nflow/=0)then
+        if(native_mode) call native_glb_deferred('read_glb_problem_type')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfreeflownode
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
             'nfreeflownode',text)
         if(nfreeflownode/=0)then
             allocate(listfreeflownode(nfreeflownode))
+            if(native_mode) call native_glb_deferred('read_glb_problem_type')
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)listfreeflownode
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
                 'listfreeflownode',text)
@@ -1073,7 +1079,7 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_dofs_time', &
         'text',text)
     if(native_mode) then
-        mdofn=2
+        mdofn=native_ndim
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
     endif
@@ -1185,6 +1191,7 @@
             'text',text)
         print *,text
         do iblk=1,nblks
+            if(native_mode) call native_glb_deferred('read_glb_block_process')
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)state_change_process(1:ngroup,iblk)
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_block_process', &
                 'state_change_process(1:ngroup,iblk)',text)
@@ -1227,7 +1234,7 @@
         gid_u=1
         gid_s=1
         gid_ms=0
-        gid_f=merge(1,0,native_dam)
+        gid_f=native_gid_f
         gid_rot=0
         gid_v=0
         gid_a=0
@@ -1311,7 +1318,7 @@
         Icaddmass=0
         swlifs2006=50.
         toth=50.
-        ifswater=2
+        ifswater=native_ndim
         ifsgravity=9.8
         absorb=0.6
         alfa_p4=10.
@@ -1434,6 +1441,7 @@
         print *,text
 
         do idofn=1,nbspring
+            if(native_mode) call native_glb_deferred('read_glb_special_blocks')
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg) bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%spring
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
                 'bspring(idofn)%listp,bspring(idofn)%listdim,bspring(idofn)%s' //&
@@ -1476,15 +1484,18 @@
     print *,text
     do ilink=1,nlinks
 
+        if(native_mode) call native_glb_deferred('read_glb_links')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)npairs
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
             'npairs',text)
         links(ilink)%npairs=npairs
         allocate(links(ilink)%link_freedom(cdofn),links(ilink)%pairnode(2,npairs))
+        if(native_mode) call native_glb_deferred('read_glb_links')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)links(ilink)%link_freedom(1:cdofn)
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
             'links(ilink)%link_freedom(1:cdofn)',text)
         do ipair=1,npairs
+            if(native_mode) call native_glb_deferred('read_glb_links')
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)i0,links(ilink)%pairnode(1:2,ipair)
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
                 'i0,links(ilink)%pairnode(1:2,ipair)',text)
@@ -1498,6 +1509,7 @@
         'text',text)
     print *,text
     do ilink=1,ntlink
+        if(native_mode) call native_glb_deferred('read_glb_links')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)i0,tlink(1:2,ilink)
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_links', &
             'i0,tlink(1:2,ilink)',text)
@@ -1547,13 +1559,9 @@
 
         print *,'igroup=',igroup
         if(native_mode) then
-            group(igroup)%name='Q4'
-            group(igroup)%kname='Default'
-            if(native_dam) then
-                if(igroup==1) group(igroup)%kname='Foundation'
-                if(igroup==2) group(igroup)%kname='Dam'
-            endif
-            group(igroup)%index=5
+            group(igroup)%name=native_gname(igroup)
+            group(igroup)%kname=native_kname(igroup)
+            group(igroup)%index=native_gindex(igroup)
             group(igroup)%class='CO'
             group(igroup)%nrfields=1
             group(igroup)%fieldid='U'
@@ -1616,6 +1624,7 @@
             'rfields)',text)
         !write(7,*)'order-Time=', (group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)
 
+        if(native_mode .and. (group(igroup)%index==20.or.group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26)) call native_glb_deferred('read_glb_element_groups')
         if(group(igroup)%index==20.or.group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26) &
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg) group(igroup)%point_direct   !20230910
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
@@ -1625,7 +1634,7 @@
         allocate(mdof(nrfields))
         do ifield=1,nrfields
             if(native_mode) then
-                nfdof=2
+                nfdof=native_ndim
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
             endif
@@ -1636,7 +1645,7 @@
             mdof(ifield)=nfdof
             allocate(group(igroup)%dof(ifield)%listdof_f(nfdof))
             if(native_mode) then
-                group(igroup)%dof(ifield)%listdof_f=[1,2]
+                group(igroup)%dof(ifield)%listdof_f=native_dof_list(1:nfdof)
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
             endif
@@ -1864,6 +1873,7 @@
     if (tsel/=0) then
         allocate(icxx(tsel))
         icxx=0
+        if(native_mode) call native_glb_deferred('read_glb_tension_lists')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)icxx
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
             'icxx',text)
@@ -1890,6 +1900,7 @@
     if (tsel/=0) then
         allocate(icxx(tsel))
         icxx=0
+        if(native_mode) call native_glb_deferred('read_glb_tension_lists')
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)icxx
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_tension_lists', &
             'icxx',text)
@@ -1897,6 +1908,30 @@
         deallocate(icxx)
     endif
     end subroutine read_glb_tension_lists
+
+    subroutine native_glb_receipt_write  ! GLB pilot (G11): global control as stored in solver state
+    integer u,ig,ib
+    open(newunit=u,file='native-glb.txt',status='replace',action='write')
+    write(u,'(a)') 'native-glb v1 mode='//trim(merge('toml    ','contract',native_glb_toml))
+    write(u,'(a,i0,a,i0,a,i0,a,i0,a,i0,a,i0,a,i0)') 'ndimn=',ndimn,' npoin=',npoin,' nelem=',nelem, &
+        ' nmats=',nmats,' ngroup=',ngroup,' nblks=',nblks,' mdofn=',mdofn
+    write(u,'(a)') 'type_problem='//trim(type_problem)//' type_solver='//trim(type_solver)// &
+        ' type_load='//trim(type_load)//' outplot='//trim(outplot)
+    write(u,'(a,i0,a,i0,a,i0,a,i0)') 'type_nl=',type_nl,' nonsym=',nonsym,' stab_matde=',stab_matde,' ifswater=',ifswater
+    write(u,'(a,i0,a,i0,a,i0)') 'gid_u=',gid_u,' gid_s=',gid_s,' gid_f=',gid_f
+    do ig=1,ngroup
+        write(u,'(a,i0,a)',advance='no') 'group ',ig,' name='//trim(group(ig)%name)//' kname='//trim(group(ig)%kname)
+        write(u,'(a,i0,a)',advance='no') ' index=',group(ig)%index,' class='//trim(group(ig)%class)// &
+            ' fieldid='//trim(group(ig)%fieldid)//' special='//trim(group(ig)%special)//' sptype='//trim(group(ig)%sptype)
+        write(u,'(a,i0,a,i0,a,i0,a,*(1x,i0))') ' nelgroup=',group(ig)%nelgroup,' matno=',group(ig)%matno, &
+            ' nfdof=',group(ig)%dof(1)%nfdof,' listdof=',group(ig)%dof(1)%listdof_f
+    enddo
+    do ib=1,nblks
+        write(u,'(a,i0,a,i0,a,*(1x,i0))',advance='no') 'block ',ib,' uinitial=',uinitial(ib),' appear=',appear_process(1:ngroup,ib)
+        write(u,'(a,*(1x,i0))') ' matno=',matno_process(1:ngroup,ib)
+    enddo
+    close(u)
+    end subroutine native_glb_receipt_write
 
     end  subroutine global_data
 
@@ -2777,6 +2812,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(gunit,*)text
     print *,text
+    if(native_mode) call native_glb_deferred('estif_semi_space')
     read(gunit,*)ne_space,e_space,nu_space,ngaus_p,t0,pes
     nnode_p=2
     if(ndimn==3)nnode_p=4
@@ -2792,6 +2828,7 @@
     allocate(nodx(npoin))
     nodx=0
     do ie=1,ne_space
+        if(native_mode) call native_glb_deferred('estif_semi_space')
         read(gunit,*)i0,liste_space(:,ie)
         !read(gunit,*)i0,liste_space(nnode_p:1:-1,ie)
 
@@ -3095,6 +3132,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(gunit,*)text
     print *,text
+    if(native_mode) call native_glb_deferred('estif_semi_space_center')
     read(gunit,*)ne_space,e_space,nu_space,ngaus_p,t0,pes,ifcg,nel  !080621 add nel
     print *,'ne_space=',ne_space
     nnode_p=2
@@ -3112,8 +3150,10 @@
     nodx=0
     do ie=1,ne_space
         if(ix2==2) then
+            if(native_mode) call native_glb_deferred('estif_semi_space_center')
             read(gunit,*)i0,liste_space(nnode_p:1:-1,ie) !the information are obtained from psgid
         elseif(ix2==1)then
+            if(native_mode) call native_glb_deferred('estif_semi_space_center')
             read(gunit,*)i0,liste_space(:,ie)
         endif
         nodx(liste_space(:,ie))=1
@@ -3127,6 +3167,7 @@
             allocate(ploadl(ndimn,nel))
         endif
         do ie=1,nel
+            if(native_mode) call native_glb_deferred('estif_semi_space_center')
             read(gunit,*)i0,cordl(:,ie),ploadl(:,ie)
         end do
     endif
@@ -4009,6 +4050,7 @@
     allocate(block_appear_process(ngapb,nblks))   !20200331
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(gunit,*)text   !20200331
+    if(native_mode) call native_glb_deferred('contact_point_to_point')
     read(gunit,*)(block_appear_process(:,iblks),iblks=1,nblks)  !20200331
 
     allocate(gaps(ngaps),gapb(ngapb))
@@ -4020,6 +4062,7 @@
         if(.not.native_mode) read(gunit,*)text
         !print *,'igaps=',igaps,text
         allocate(gaps(igaps)%xlwmd(ndimn))
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)ngroupt,gaps(igaps)%xlwmd,gaps(igaps)%frict_less,gaps(igaps)%goodman,gaps(igaps)%thin_layer
         !if(relis/=0)then
         !read(gunit,*)gaps(igaps)%ivcoh,gaps(igaps)%ivfri
@@ -4038,11 +4081,16 @@
 
         gaps(igaps)%kgroup0=0.
         gaps(igaps)%kgroup1=0.
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gaps(igaps)%listgroupt
         !print *,'igaps=',igaps,'gaps(igaps)%listgroupt=',gaps(igaps)%listgroupt
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gaps(igaps)%gapi,gaps(igaps)%stateix
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gaps(igaps)%ft0
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gaps(igaps)%frict0
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gaps(igaps)%cohes0
 
         print *,'igaps=',igaps,'cohes0=',gaps(igaps)%cohes0,'kstab=',kstab
@@ -4059,9 +4107,11 @@
         endif
 
         if(block_stab==1) then
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)i0,(gaps(igaps)%kgroup0(i,i),i=1,3*(ndimn-1)),(gaps(igaps)%kgroup1(i,i),i=1,3*(ndimn-1))
             !write(7,*)'igaps=',igaps,'kgroup0=',(gaps(igaps)%kgroup0(i,i),i=1,3*(ndimn-1)),'kgroup0=',(gaps(igaps)%kgroup1(i,i),i=1,3*(ndimn-1))
         else
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)i0,(gaps(igaps)%kgroup0(i,i),i=1,ndimn),(gaps(igaps)%kgroup1(i,i),i=1,ndimn)
         endif
         print *, 'gaps(igaps)%kgroup0=',gaps(igaps)%kgroup0
@@ -4073,13 +4123,16 @@
                 allocate(gaps(igaps)%ft1(gaps(igaps)%ngroupt),gaps(igaps)%wt0(gaps(igaps)%ngroupt),gaps(igaps)%wt1(gaps(igaps)%ngroupt), &
                     gaps(igaps)%wt2(gaps(igaps)%ngroupt))
             endif
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)gaps(igaps)%Gf0     !2017/04/03
             if (gaps(igaps)%xlwmd(ndimn)==5)then     !2017/04/03
+                if(native_mode) call native_glb_deferred('contact_point_to_point')
                 read(gunit,*)gaps(igaps)%ft1,gaps(igaps)%wt0,gaps(igaps)%wt1,gaps(igaps)%wt2   !2017/04/03
             endif
         endif
         if (gaps(igaps)%goodman>0)then
             allocate(gaps(igaps)%kgdm(ndimn))
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)gaps(igaps)%kgdm(:),gaps(igaps)%Rf,gaps(igaps)%Pa,gaps(igaps)%gamaw,gaps(igaps)%n
             do idimn=1,ndimn
                 gaps(igaps)%kgroup0(idimn,idimn)=1./( gaps(igaps)%kgdm(idimn)*gamaw)      !gaps(igaps)%gamaw)  20230402
@@ -4104,6 +4157,7 @@
         !       endif
 
         if(gaps(igaps)%thin_layer>0)  then  ! add by HEJINWEN  !2017/02/14
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)gaps(igaps)%Ke, gaps(igaps)%e,gaps(igaps)%miu,gaps(igaps)%RF   !2017/02/14
             gaps(igaps)%kgroup0=0.0
             gaps(igaps)%kgroup1=0.
@@ -4133,6 +4187,7 @@
         if(native_mode) text='TOML-03'
         if(.not.native_mode) read(gunit,*)text
         print *,'igapb=',igapb,text
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gapb(igapb)%ngroupt,gapb(igapb)%ngroupb,gapb(igapb)%nrdof,gapb(igapb)%eblock !2017/11/19
 
         nrdof=gapb(igapb)%nrdof
@@ -4141,14 +4196,18 @@
             gapb(igapb)%ext_force=0. !20231019
             if(type_problem=='F')allocate(gapb(igapb)%mass_inertia(3*(ndimn-1)))
             allocate(gapb(igapb)%listrdof(gapb(igapb)%nrdof)) !fzx 约束点的三个（二维）、六个（三维）自由度的整体自由度号
+            if(native_mode) call native_glb_deferred('contact_point_to_point')
             read(gunit,*)gapb(igapb)%listrdof
         endif
 
 
         allocate(gapb(igapb)%listgroupt(gapb(igapb)%ngroupt),gapb(igapb)%listgroupb(gapb(igapb)%ngroupb))
         if(block_stab==2)allocate(gapb(igapb)%pairspoint12(gapb(igapb)%ngroupt)) !20191031
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gapb(igapb)%listgroupt
+        if(native_mode .and. (block_stab==2)) call native_glb_deferred('contact_point_to_point')
         if(block_stab==2)read(gunit,*)gapb(igapb)%pairspoint12 !20191031
+        if(native_mode) call native_glb_deferred('contact_point_to_point')
         read(gunit,*)gapb(igapb)%listgroupb
 
         print *,'igapb=',igapb,'listgroupb=',gapb(igapb)%listgroupb
@@ -5095,7 +5154,9 @@
     if(.not.native_mode) read(gunit,*)text
     print *,text
     do i0=1,nwcpipe
+        if(native_mode) call native_glb_deferred('link_concrete_and_water_pipe')
         read(gunit,*)iwc,listgroup_c,listgroup_w,nline_g_w
+        if(native_mode) call native_glb_deferred('link_concrete_and_water_pipe')
         read(gunit,*)alfa1,Qw,lamda_w,density_w,Cw,begin_time,end_time,twater_curve,dtime_change
 
         wc_pipe(i0)%iwc=iwc
@@ -5115,6 +5176,7 @@
 
 
         allocate(nel_pipe(nline_g_w))
+        if(native_mode) call native_glb_deferred('link_concrete_and_water_pipe')
         read(gunit,*)nel_pipe
         if(sum(nel_pipe)/=group(listgroup_w)%nelgroup)then
             print *,'sum(nel_pipe)/=group(%listgroup_w%nelgroup)'
@@ -5234,6 +5296,7 @@
     if(.not.native_mode) read(gunit,*)text
     print *,text
     do i0=1,nrcsteel
+        if(native_mode) call native_glb_deferred('link_concrete_and_steel')
         read(gunit,*)listgroup_c,listgroup_s,nline_g_sc,diameter_s,e,ft,ikindsc,err_ctl,mxter
 
         rc_steel(i0)%listgroup_s=listgroup_s
@@ -5246,6 +5309,7 @@
         rc_steel(i0)%mxter=mxter
 
         allocate(nel_steel(nline_g_sc))
+        if(native_mode) call native_glb_deferred('link_concrete_and_steel')
         read(gunit,*)nel_steel
         if(sum(nel_steel)/=group(listgroup_s)%nelgroup)then
             print *,'sum(nel_steel)/=group(%listgroup_s%nelgroup)'

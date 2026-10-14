@@ -176,11 +176,15 @@
     Case ('SET')
         if(restart==1)   then
             do jblks=1,iblks-1
+                if(native_mode) call native_glb_deferred('JPCG (.sol)')
                 read(solveunit,*)text
+                if(native_mode) call native_glb_deferred('JPCG (.sol)')
                 read(solveunit,*)text
             end do
         end if
+        if(native_mode) call native_glb_deferred('JPCG (.sol)')
         Read (solveunit,*) text
+        if(native_mode) call native_glb_deferred('JPCG (.sol)')
         Read (solveunit,*) mitcg, tolcg
         if(iblks==1.or.restart==1) then
             Allocate ( rvector(ntotv),result(ntotv) )
@@ -7552,7 +7556,9 @@
     Case ('SET')
         if(restart==1)   then
             do jblks=1,iblks-1
+                if(native_mode) call native_glb_deferred('PROFILEW (.sol)')
                 read(solveunit,*)text
+                if(native_mode) call native_glb_deferred('PROFILEW (.sol)')
                 read(solveunit,*)text
             end do
         end if
@@ -7781,12 +7787,18 @@
         if(Bparameter/=0)rewind(solveunit)  !20190810
         if(restart==1)   then
             do jblks=1,iblks-1
+                if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
                 read(solveunit,*)text
+                if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
                 read(solveunit,*)text
                 if(type_solver=='PARDISO')then
+                    if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
                     read(solveunit,*)text
+                    if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
                     read(solveunit,*)isdefault
+                    if(native_mode .and. (isdefault/=0)) call native_glb_deferred('MAIN_PARDISO (.sol)')
                     if(isdefault/=0)read(solveunit,*)text
+                    if(native_mode .and. (isdefault/=0)) call native_glb_deferred('MAIN_PARDISO (.sol)')
                     if(isdefault/=0)read(solveunit,*)text
                 endif
             end do
@@ -7794,17 +7806,23 @@
 
         !fowlling setting for MKL_PARDISO 2008-11-05
         iparm=0;mtype=2;ncpu=1;msglvl=0;isdefault=1
+        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
         read(solveunit,*)text
         print *,text
+        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
         read(solveunit,*)mtype,ncpu,msglvl
         print *,mtype,ncpu,msglvl
+        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
         read(solveunit,*)text
         print *,text
+        if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
         read(solveunit,*)isdefault   !0=use default;1=not use default
         print *,isdefault
 
         if(isdefault/=0)then   ! define value for iparm
+            if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
             read(solveunit,*)text
+            if(native_mode) call native_glb_deferred('MAIN_PARDISO (.sol)')
             read(solveunit,*)reducing_order,PreCGS,permutation,maxiter,out_of_core,eps_pivot,iparm11,iparm13
             iparm(1) = 1 ! no solver default
             iparm(2) = reducing_order ! fill-in reordering from METIS
@@ -8387,11 +8405,15 @@ case ('SOLVE')
     Case ('SET')
         if(restart==1)   then
             do jblks=1,iblks-1
+                if(native_mode) call native_glb_deferred('PBCG (.sol)')
                 read(solveunit,*)text
+                if(native_mode) call native_glb_deferred('PBCG (.sol)')
                 read(solveunit,*)text
             end do
         end if
+        if(native_mode) call native_glb_deferred('PBCG (.sol)')
         Read (solveunit,*) text
+        if(native_mode) call native_glb_deferred('PBCG (.sol)')
         Read (solveunit,*)  mitcg, tolcg, itolcg
 
         !       Case ('SET')
@@ -8540,11 +8562,15 @@ case ('SOLVE')
 
         if (restart==1)   then
             do jblks=1,iblks-1
+                if(native_mode) call native_glb_deferred('SSORPBCG (.sol)')
                 read(solveunit,*)text
+                if(native_mode) call native_glb_deferred('SSORPBCG (.sol)')
                 read(solveunit,*)text
             end do
         end if
+        if(native_mode) call native_glb_deferred('SSORPBCG (.sol)')
         read (solveunit,*)text
+        if(native_mode) call native_glb_deferred('SSORPBCG (.sol)')
         read (solveunit,*)miter_ssorpbcg,torler_ssorpbcg,omig_ssorpbcg
 
         call totv_to_eq
