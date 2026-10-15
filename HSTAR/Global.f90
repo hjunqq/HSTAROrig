@@ -2132,6 +2132,7 @@
         if(native_mode) then
             ntransnode=native_nrt_ntie()
             translg=0
+            if(native_nrt_dof_u) translg=88       ! D1 (J7): [[tie]] dof="U" = legacy 88 TRAL on dofs 1..ndimn
         else
         read(nrtunit,*)ntransnode,translg
         endif
@@ -2187,13 +2188,20 @@
             end do
             ! by zhao 2005/12/27 , special for WuDongde
         elseif(translg==88)then
-            if(native_mode) call native_nrt_deferred('.nrt group type translg=88')
             do itrans=1,ntransnode
+                if(native_mode) then
+                    call native_nrt_tie(itrans,title_intp,ipoin,nintf)   ! D1: TRAL only (no ROTA rows from TOML)
+                else
                 read(nrtunit,*)title_intp,ipoin,nintf
+                endif
                 if(title_intp(1:4)=='TRAL')then
                     allocate(listf(nintf),rintf(nintf))
+                    if(native_mode) then
+                        call native_nrt_tie_data(itrans,listf,rintf)
+                    else
                     read(nrtunit,*)listf
                     read(nrtunit,*)rintf
+                    endif
                     !write(7,*)'itrans=',itrans,'ipoin=',ipoin,'listf=',listf,'rintf=',rintf
                     do idofn=1,ndimn
                         if (lmdofn(idofn)/=0)then
@@ -2211,6 +2219,7 @@
                 endif
 
                 if(title_intp(1:4)=='ROTA')then
+                    if(native_mode) call native_nrt_deferred('ROTA under .nrt translg=88')  ! D1: only TRAL from [[tie]] dof="U"
 
                     !if(ndimn==2.and.title_intp(1:5)=='ROTAZ')then
                     if(ndimn==2)then   !20221130

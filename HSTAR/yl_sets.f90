@@ -1,7 +1,7 @@
 ! 1.set reader (sets-pilot/DESIGN.md, S1-S10 confirmed 2026-10-14).
 ! Text, versioned ("hstar-sets 1"), "end" marker, per-set counts, generate ranges, full validation.
 ! Kinds: nset, elset (members; optional "generate" triples start end step), surface (pairs
-! elem local-id; "face" = B8 faces 1..6, "edge" = Q4 edges 1..4), tie (slave nmaster masters weights).
+! elem local-id; "face" = B8 faces 1..6 / T4 faces 1..4, "edge" = Q4 edges 1..4), tie (slave nmaster masters weights).
 ! No dependency on native_input: errors come back in msg (caller stops with exit code 2).
 module yl_sets
   use iso_fortran_env, only: real64
@@ -25,6 +25,9 @@ module yl_sets
   integer, allocatable, public :: sets_elnn(:), sets_elnodes(:,:)
   ! B8 local faces (verified on train_temp_creep: 1672/1672 unique, canonical order byte-identical)
   integer, parameter, public :: B8_FACE(4,6)=reshape([1,2,3,4, 5,6,7,8, 1,2,6,5, 2,3,7,6, 3,4,8,7, 4,1,5,8],[4,6])
+  ! joint pilot D1: T4 faces as the legacy degenerate 4-node face rows (third node repeated; verified on the
+  ! two xfj_thermal_transient tet faces). A 4-node element under a "face" surface is a T4 (3D; GLB checks the group).
+  integer, parameter, public :: T4_FACE(4,4)=reshape([1,2,3,3, 1,2,4,4, 2,3,4,4, 3,1,4,4],[4,4])
   ! tokenizer state
   integer :: u_=0, line_=0, pos_=1
   character(SETS_MAX_LINE) :: buf_=''
@@ -205,8 +208,12 @@ contains
         call num(b); if(len(msg)>0) return
         if(a<1 .or. a>sets_nelem) then; msg=who//': element out of range 1..'//itoa(sets_nelem)//': '//itoa(a); return; endif
         if(s%sub==SS_FACE) then
-          if(sets_elnn(a)/=8) then; msg=who//': face surfaces need B8 elements (element '//itoa(a)//')'; return; endif
+          if(sets_elnn(a)==4) then
+            if(b<1 .or. b>4) then; msg=who//': T4 face id must be 1..4 (element '//itoa(a)//': '//itoa(b)//')'; return; endif
+          else
+          if(sets_elnn(a)/=8) then; msg=who//': face surfaces need B8 or T4 elements (element '//itoa(a)//')'; return; endif
           if(b<1 .or. b>6) then; msg=who//': B8 face id must be 1..6 (element '//itoa(a)//': '//itoa(b)//')'; return; endif
+          endif
         else
           if(sets_elnn(a)/=4) then; msg=who//': edge surfaces need Q4 elements (element '//itoa(a)//'; 3D edges are deferred)'; return; endif
           if(b<1 .or. b>4) then; msg=who//': Q4 edge id must be 1..4 (element '//itoa(a)//': '//itoa(b)//')'; return; endif
@@ -342,7 +349,11 @@ contains
   subroutine sets_face_nodes(e,k,n)
     integer, intent(in) :: e,k
     integer, intent(out) :: n(4)
+    if(sets_elnn(e)==4) then
+      n=sets_elnodes(T4_FACE(:,k),e)
+    else
     n=sets_elnodes(B8_FACE(:,k),e)
+    endif
   end subroutine
 
   subroutine sets_receipt(file)

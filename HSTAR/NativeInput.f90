@@ -161,6 +161,7 @@ module native_input
     real(real64), allocatable :: weights(:)
   end type
   type(nrt_tie_t), allocatable :: native_tie(:)
+  logical :: native_nrt_dof_u=.false.             ! D1: [[tie]] dof = "U" -> legacy translg=88 (TRAL rows only)
   integer, private :: tem_face_blk=0, tem_conv_grp=0, tem_receipt2_n=0
   integer, allocatable, private :: mesh_ele(:,:)       ! (8,nelem) kept by validate_mesh_general for face checks
 contains
@@ -1437,7 +1438,8 @@ contains
       if(native_diff(j,i)<=0 .or. native_diff(j,i)>1.e3_real64) call native_error("MAT: material "//nm// &
         ": diffusivity out of range (0,1e3] m^2/time")
     enddo
-    mat_src_name(i)=string_value(p//".heat_source_curve")
+    mat_src_name(i)=''
+    if(present_key(p//".heat_source_curve")) mat_src_name(i)=string_value(p//".heat_source_curve")   ! D1: absent = no source (0)
     mat_place_name(i)=string_value(p//".placement_temperature_curve")
     native_density(i)=0; native_e(i)=0; native_nu(i)=0
   end subroutine
@@ -1915,6 +1917,15 @@ contains
           call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
         endif
         native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
+      case('T4')                          ! joint pilot D1 (J2): 4-node tetrahedron, legacy index 7 (h4, Elements.f90:412)
+        if(native_ndim/=3) call native_error('GLB: section '//p//': element T4 needs mesh.dimension 3')
+        if(native_heat) then
+          if(string_value(p//'.formulation')/='heat') &
+            call native_error('GLB: section '//p//': a transient_heat analysis needs formulation "heat"')
+        elseif(string_value(p//'.formulation')/='solid') then
+          call native_error('GLB: section '//p//': 3D T4 supports only formulation "solid"')
+        endif
+        native_gname(g)='T4'; native_gindex(g)=7; native_gnnode(g)=4
       case('L2')                          ! matline L1-L4: 2-node bar (legacy index 1), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with L2 is deferred (only B8)')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
@@ -1925,7 +1936,7 @@ contains
           'and its host) is deferred: it needs the .glb bond-slip parameters ikindks/doubsig/ktan1/ktan2/coefMpa/'// &
           'nlocalbeam, which have no TOML keys yet')
       case default
-        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / L2)')
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2)')
       end select
       seen_el(g)=.true.
     enddo
@@ -2042,6 +2053,8 @@ contains
   subroutine validate_mesh_general()
     integer :: u, ios, k, id, g, last, nn, nd, j, mat, nt
     integer :: nodes(8)
+    integer :: dn(8), ndn
+    logical :: degen
     real(real64), allocatable :: xyz(:,:)
     logical, allocatable :: used(:)
     real(real64) :: c(3)
@@ -2092,17 +2105,42 @@ contains
         itoa(g)//' (elsets follow the element order of 1.ele)')
       if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
         call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
+      degen=.false.
+      if(nn==8 .and. native_gindex(g)==9) then
+        degen=(nodes(3)==nodes(4) .and. nodes(7)==nodes(8) .and. count(nodes(1:8)==nodes(3))==2 .and. &
+               count(nodes(1:8)==nodes(7))==2) .or. &
+              (all(nodes(6:8)==nodes(5)) .and. count(nodes(1:8)==nodes(5))==4)
+        if(degen) then                  ! the remaining distinct nodes must not repeat
+          if(nodes(5)==nodes(8)) then
+            dn(1:5)=nodes(1:5); ndn=5
+          else
+            dn(1:3)=nodes(1:3); dn(4:6)=nodes(5:7); ndn=6
+          endif
+          do j=2,ndn
+            if(any(dn(1:j-1)==dn(j))) degen=.false.
+          enddo
+        endif
+      endif
+      if(.not.degen) then
       do j=2,nn
-        if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node')
+        if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node'// &
+          ' (only the B8 wedge 3=4,7=8 and pyramid 5=6=7=8 collapses are accepted)')
       enddo
+      endif
       used(nodes(1:nn))=.true.
       if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
       if(nn==2) then
         if(sum((xyz(:,nodes(2))-xyz(:,nodes(1)))**2)<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': L2 element has zero length')
+      elseif(native_gindex(g)==7) then
+        if(t4_jacobian(xyz(:,nodes(1:4)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': T4 Jacobian is not positive (node order / distortion)')
       elseif(nn==4) then
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
+      elseif(degen) then
+        if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': degenerate B8 Jacobian is not positive at the Gauss points')
       else
         if(b8_min_jacobian(xyz(:,nodes(1:8)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': B8 Jacobian is not positive (node order / distortion)')
@@ -2120,13 +2158,24 @@ contains
   ! face4 rows must be a face of their B8 element; pipe segments must be an element edge of their elset.
   subroutine heat_check_mesh_refs()
     integer, parameter :: fc(4,6)=reshape([1,2,3,4, 5,6,7,8, 1,2,6,5, 2,3,7,6, 3,4,8,7, 4,1,5,8],[4,6])
+    integer, parameter :: ft(4,4)=reshape([1,2,3,3, 1,2,4,4, 2,3,4,4, 3,1,4,4],[4,4])
     integer :: t, e, k, j, ip, ie, g, first, last
     logical :: ok
     do t=1,native_nface
       e=native_faces(5,t); ok=.false.
+      g=1; last=native_elcounts(1)
+      do while(e>last)
+        g=g+1; last=last+native_elcounts(g)
+      enddo
+      if(native_gindex(g)==7) then           ! D1: T4 face = degenerate 4-node row (yl_sets T4_FACE)
+        do k=1,4
+          if(all(native_faces(1:4,t)==mesh_ele(ft(:,k),e))) ok=.true.
+        enddo
+      elseif(native_gindex(g)==9) then
       do k=1,6
         if(all([(any(native_faces(1:4,t)==mesh_ele(fc(j,k),e)),j=1,4)])) ok=.true.
       enddo
+      endif
       if(.not.ok) call native_error('TEM: face '//itoa(t)//' (nodes '//itoa(native_faces(1,t))//' '//itoa(native_faces(2,t))// &
         ' '//itoa(native_faces(3,t))//' '//itoa(native_faces(4,t))//') is not a face of element '//itoa(e))
     enddo
@@ -2161,6 +2210,37 @@ contains
       else
         p=[xi(ip),et(ip),ze(ip)]
       endif
+      j=0
+      do a=1,8
+        dn(1)=xi(a)*(1+et(a)*p(2))*(1+ze(a)*p(3))/8
+        dn(2)=et(a)*(1+xi(a)*p(1))*(1+ze(a)*p(3))/8
+        dn(3)=ze(a)*(1+xi(a)*p(1))*(1+et(a)*p(2))/8
+        j(:,1)=j(:,1)+x(:,a)*dn(1); j(:,2)=j(:,2)+x(:,a)*dn(2); j(:,3)=j(:,3)+x(:,a)*dn(3)
+      enddo
+      dmin=min(dmin, j(1,1)*(j(2,2)*j(3,3)-j(3,2)*j(2,3)) - j(1,2)*(j(2,1)*j(3,3)-j(3,1)*j(2,3)) &
+                     + j(1,3)*(j(2,1)*j(3,2)-j(3,1)*j(2,2)))
+    enddo
+  end function
+
+  ! T4 (Elements.f90:2767 shape 1-s-t-u, s, t, u): constant Jacobian det[x2-x1; x3-x1; x4-x1]
+  real(real64) function t4_jacobian(x) result(d)
+    real(real64), intent(in) :: x(3,4)
+    real(real64) :: a(3), b(3), c(3)
+    a=x(:,2)-x(:,1); b=x(:,3)-x(:,1); c=x(:,4)-x(:,1)
+    d=a(1)*(b(2)*c(3)-b(3)*c(2))-a(2)*(b(1)*c(3)-b(3)*c(1))+a(3)*(b(1)*c(2)-b(2)*c(1))
+  end function
+
+  ! D1: degenerate B8 (legacy wedge = nodes 3=4 and 7=8, pyramid = nodes 5=6=7=8): legacy integrates it with the
+  ! 2x2x2 B8 rule, so its Jacobian must be positive at those Gauss points (it is 0 at the collapsed corners).
+  real(real64) function b8_gauss_min_jacobian(x) result(dmin)
+    real(real64), intent(in) :: x(3,8)
+    real(real64), parameter :: xi(8)=[-1,1,1,-1,-1,1,1,-1], et(8)=[-1,-1,1,1,-1,-1,1,1], ze(8)=[-1,-1,-1,-1,1,1,1,1]
+    real(real64) :: p(3), j(3,3), dn(3), g
+    integer :: ip, a
+    g=1._real64/sqrt(3._real64)
+    dmin=huge(1._real64)
+    do ip=1,8
+      p=g*[xi(ip),et(ip),ze(ip)]
       j=0
       do a=1,8
         dn(1)=xi(a)*(1+et(a)*p(2))*(1+ze(a)*p(3))/8
@@ -2245,10 +2325,13 @@ contains
     character(:), allocatable :: p, q, nm
     do i=1,native_materials
       if(.not.native_mat_heat(i)) cycle
+      native_src_curve(i)=0
+      if(len_trim(mat_src_name(i))>0) then
       k=amp_by_name(trim(mat_src_name(i)))
       if(k==0) call native_error("MAT: undefined amplitude "//trim(mat_src_name(i))//" (heat_source_curve)")
       if(native_amp(k)%typ/="DABT") call native_error("MAT: heat_source_curve "//trim(mat_src_name(i))//" must be a dabt amplitude")
       native_amp(k)%used=.true.; native_src_curve(i)=k
+      endif
       k=amp_by_name(trim(mat_place_name(i)))
       if(k==0) call native_error("MAT: undefined amplitude "//trim(mat_place_name(i))//" (placement_temperature_curve)")
       if(native_amp(k)%typ/="LINEAR") call native_error("MAT: placement_temperature_curve "//trim(mat_place_name(i))// &
@@ -2312,14 +2395,24 @@ contains
     character(:), allocatable :: p, nm
     integer, allocatable :: idx(:)
     n=doc%count_of("tie")
-    if(.not.native_heat .and. n>0) call native_error("NRT: [[tie]] needs analysis.type 'transient_heat' (T field) in this pilot")
     if(n>0 .and. .not.native_sets_on) call native_error("NRT: [[tie]] needs [mesh] sets_file (ties are tie sets in 1.set)")
     allocate(idx(n)); nt=0
     do i=1,n
       p=indexed("tie",i)
       k=key_index(p//".@table")
       call glb_check_keys(p,"@table set dof","")
-      if(string_value(p//".dof")/="T") call native_error("NRT: tie "//itoa(i)//": dof must be ""T"" (the active field)")
+      select case(string_value(p//".dof"))
+      case("T")
+        if(.not.native_heat) call native_error("NRT: tie "//itoa(i)//": dof ""T"" needs analysis.type 'transient_heat'")
+      case("U")                           ! joint pilot D1 (J7): legacy .nrt translg=88 TRAL, displacements 1..ndimn
+        if(native_heat) call native_error("NRT: tie "//itoa(i)//": dof ""U"" in a transient_heat analysis "// &
+          "(no displacement field; legacy translg=88 ties are a no-op there)")
+        if(any(native_gindex(1:native_materials)==1)) call native_error("NRT: tie "//itoa(i)// &
+          ": dof ""U"" with L2 elements is deferred (rotational dofs / ROTA rows)")
+        native_nrt_dof_u=.true.
+      case default
+        call native_error("NRT: tie "//itoa(i)//": dof must be ""T"" (transient_heat) or ""U"" (displacements)")
+      end select
       nm=string_value(p//".set")
       idx(i)=sets_find(SK_TIE,nm)
       if(idx(i)==0) call native_error("NRT: tie "//itoa(i)//": undefined tie set "//nm)
