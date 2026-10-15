@@ -240,22 +240,35 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(munit,*)text
     if(native_mode) then
-        nscurve=0
+        nscurve=native_nscurve          ! matline M1: [[stress_strain_curve]] in definition order
     else
     read(munit,*)nscurve
     endif
     if (nscurve.ne.0)allocate(scurves(nscurve))
     do iscurve=1,nscurve
-        if(native_mode) call native_mat_deferred('stress-strain curves (nscurve>0)')
-
+        if(native_mode) then
+            npoints=size(native_scurve(iscurve)%strain)
+            type_curve='LINEAR'         ! interpolation = "linear" (the only accepted value)
+        else
         read(munit,*)npoints,type_curve   !20200220
+        endif
 
         scurves(iscurve)%npoints=npoints
         scurves(iscurve)%type_curve=type_curve
         allocate(scurves(iscurve)%strain_curve(npoints))
         allocate(scurves(iscurve)%stress_curve(npoints))
+        if(native_mode) then
+            scurves(iscurve)%strain_curve(1:npoints)=native_scurve(iscurve)%strain
+        else
         read(munit,*)scurves(iscurve)%strain_curve(1:npoints)
+        endif
+        if(native_mode) then
+            scurves(iscurve)%stress_curve(1:npoints)=native_scurve(iscurve)%stress
+        else
         read(munit,*)scurves(iscurve)%stress_curve(1:npoints) !!one record
+        endif
+        if(native_mode) call native_curve_receipt(int(iscurve),scurves(iscurve)%type_curve, &
+            scurves(iscurve)%strain_curve,scurves(iscurve)%stress_curve)
 
     end do
 
@@ -1143,6 +1156,22 @@
         end select property_select
 
     end do
+
+    ! matline M5/M6: line-element section data ([[section]] area, torsion_constant, inertia_y, inertia_z)
+    ! stored where the legacy GEOMETRY ROD_or_BEAM record puts it (props(imat)%geometry, name ROD_or_BEAM).
+    if(native_mode) then
+        do jmat=1,mmats
+            if(.not.native_has_geom(jmat)) cycle
+            props(jmat)%name='ROD_or_BEAM'
+            allocate(props(jmat)%geometry)
+            props(jmat)%geometry%aera=native_area(jmat)
+            props(jmat)%geometry%J=native_tj(jmat)
+            props(jmat)%geometry%Iy=native_iy(jmat)
+            props(jmat)%geometry%Iz=native_iz(jmat)
+            call native_geometry_receipt(int(jmat),props(jmat)%geometry%aera,props(jmat)%geometry%J, &
+                props(jmat)%geometry%Iy,props(jmat)%geometry%Iz)
+        enddo
+    endif
 
     end subroutine material_set
 

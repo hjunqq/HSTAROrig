@@ -88,6 +88,18 @@ module native_input
   logical :: native_mat_toml=.false., native_mat_receipt_on=.false.
   real(real64) :: native_alfa(NATIVE_MAXG)=1.e-5_real64, native_thick(NATIVE_MAXG)=1._real64, native_ratio(NATIVE_MAXG)=1._real64
   integer :: native_group_mat(NATIVE_MAXG)=0   ! set to 1..NATIVE_MAXG at native_start (was [1,2])
+  ! matline pilot (matline-pilot/DESIGN.md M1-M6, L1-L4): [[stress_strain_curve]] (legacy .mat curve table)
+  ! and L2 line-element section data (legacy GEOMETRY ROD_or_BEAM: aera J Iy Iz), per material index.
+  integer, parameter :: NATIVE_MAXC=1000
+  type :: mat_curve_t
+    character(len=TOML_LEN_TEXT) :: name=""
+    real(real64), allocatable :: strain(:), stress(:)
+  end type
+  type(mat_curve_t), allocatable :: native_scurve(:)
+  integer :: native_nscurve=0
+  logical :: native_has_geom(NATIVE_MAXG)=.false.
+  real(real64) :: native_area(NATIVE_MAXG)=0._real64, native_tj(NATIVE_MAXG)=0._real64, &
+    native_iy(NATIVE_MAXG)=0._real64, native_iz(NATIVE_MAXG)=0._real64
   integer, private :: mat_receipt_n=0
   ! TEM minimal step (T1/M8): HSTAR_NATIVE_TEM=contract (default) | toml (no temperature loading allowed)
   logical :: native_tem_toml=.false., native_tem_receipt_on=.false.
@@ -1139,7 +1151,7 @@ contains
     character(*), intent(in) :: path
     mat_owned=.false.
     if(.not.native_mat_toml) return
-    mat_owned = index(path,"material[")==1 .or. index(path,"section[")==1
+    mat_owned = index(path,"material[")==1 .or. index(path,"section[")==1 .or. index(path,"stress_strain_curve[")==1
   end function
 
   logical function in_list(seg,list)
@@ -1183,7 +1195,9 @@ contains
     logical :: used(NATIVE_MAXG), covered(NATIVE_MAXG)
     character(len=TOML_LEN_TEXT) :: mname(NATIVE_MAXG), ename(NATIVE_MAXG), sname(NATIVE_MAXG)
     real(real64) :: v
+    character(:), allocatable :: et
     ng=native_materials
+    call parse_curves()
     nmat=doc%count_of("material")
     nsec=doc%count_of("section")
     if(nmat/=ng) call native_error("MAT: this profile needs exactly "//itoa(ng)// &
@@ -1249,7 +1263,8 @@ contains
         if(trim(sname(j))==nm) call native_error("MAT: duplicate section name: "//nm)
       enddo
       sname(k)=nm
-      call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor","section "//nm)
+      call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor "// &
+        "area torsion_constant inertia_y inertia_z","section "//nm)
       el=string_value(p//".elset")
       g=0
       do j=1,ng
@@ -1260,8 +1275,9 @@ contains
       if(covered(g)) call native_error("MAT: elset "//el//" is assigned by more than one section")
       covered(g)=.true.
       if(native_glb_toml) then
-        ! element/formulation were checked against mesh.dimension by parse_glb (G7)
-        s=string_value(p//".element"); s=string_value(p//".formulation")
+        ! element/formulation were checked against mesh.dimension by parse_glb (G7); L2 has no formulation
+        s=string_value(p//".element")
+        if(present_key(p//".formulation")) s=string_value(p//".formulation")
       else
       if(string_value(p//".element")/="Q4") call native_error("MAT: section "//nm//': only element "Q4" in this profile')
       if(string_value(p//".formulation")/="plane_strain") &
@@ -1277,6 +1293,14 @@ contains
         " is referenced by more than one section (one material per element set in the MAT pilot)")
       used(i)=.true.
       native_group_mat(g)=i
+      et=string_value(p//".element")
+      if(et=="L2") then
+        call section_geometry(p,nm,i)
+      elseif(present_key(p//".area") .or. present_key(p//".torsion_constant") .or. present_key(p//".inertia_y") &
+             .or. present_key(p//".inertia_z")) then
+        call native_error("MAT: section "//nm//": area / torsion_constant / inertia_y / inertia_z apply only to "// &
+          'line elements (element "L2")')
+      endif
       if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
       v=1._real64
@@ -1293,6 +1317,110 @@ contains
     do i=1,nmat
       if(.not.used(i)) call native_error("MAT: unreferenced material "//trim(mname(i)))
     enddo
+  end subroutine
+
+  ! matline M5/M6: L2 section data. area (legacy aera) is required, J/Iy/Iz are optional (default 0, legacy
+  ! decks write "A 0 0 0"); a bar takes its cross-section from area, so thickness is rejected.
+  subroutine section_geometry(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    real(real64) :: v
+    if(.not.present_key(p//".area")) call native_error("MAT: section "//nm//': element "L2" needs area (m^2)')
+    if(present_key(p//".thickness")) call native_error("MAT: section "//nm// &
+      ': thickness does not apply to element "L2" (the bar cross-section is area)')
+    v=number(p//".area")
+    if(.not.(v>0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": area out of range (0,1e3] m^2")
+    native_area(i)=v
+    native_tj(i)=geom_opt(p//".torsion_constant",nm)
+    native_iy(i)=geom_opt(p//".inertia_y",nm)
+    native_iz(i)=geom_opt(p//".inertia_z",nm)
+    native_has_geom(i)=.true.
+  end subroutine
+
+  real(real64) function geom_opt(path,nm) result(v)
+    character(*), intent(in) :: path, nm
+    v=0._real64
+    if(.not.present_key(path)) return
+    v=number(path)
+    if(.not.(v>=0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": "// &
+      path(index(path,".",back=.true.)+1:)//" out of range [0,1e3] m^4")
+  end function
+
+  ! matline M1-M3: [[stress_strain_curve]] name, interpolation = "linear", strain = [...], stress = [...]
+  ! -> legacy curve table scurves(1:nscurve) in definition order (parameter_find semantics unchanged, M3).
+  ! M4: no TOML material model references a curve yet, so every curve is unreferenced -> warning (M2).
+  subroutine parse_curves()
+    character(:), allocatable :: p, nm
+    integer :: nc, k, j, n, m, i
+    real(real64) :: a
+    nc=doc%count_of("stress_strain_curve")
+    native_nscurve=nc
+    allocate(native_scurve(nc))
+    if(nc>0 .and. native_heat) call native_error("MAT: [[stress_strain_curve]] does not apply to a transient_heat analysis")
+    do k=1,nc
+      p=indexed("stress_strain_curve",k)
+      i=key_index(p//".@table")
+      call glb_check_keys(p,"@table name interpolation","strain stress")
+      nm=string_value(p//".name")
+      if(len(nm)==0) call native_error("MAT: empty stress_strain_curve name: "//p)
+      do j=1,k-1
+        if(trim(native_scurve(j)%name)==nm) call native_error("MAT: duplicate stress_strain_curve name: "//nm)
+      enddo
+      native_scurve(k)%name=nm
+      if(string_value(p//".interpolation")/="linear") call native_error("MAT: stress_strain_curve "//nm// &
+        ': interpolation must be "linear" (legacy type_curve LINEAR; other types are deferred)')
+      n=integer_value(p//".strain.count"); m=integer_value(p//".stress.count")
+      if(n<2) call native_error("MAT: stress_strain_curve "//nm//": needs at least 2 points")
+      if(n>NATIVE_MAXC) call native_error("MAT: stress_strain_curve "//nm//": more than "//itoa(NATIVE_MAXC)//" points")
+      if(m/=n) call native_error("MAT: stress_strain_curve "//nm//": strain and stress need the same number of points")
+      allocate(native_scurve(k)%strain(n),native_scurve(k)%stress(n))
+      do j=1,n
+        a=number(indexed(p//".strain",j))
+        if(.not.ieee_is_finite(a)) call native_error("MAT: stress_strain_curve "//nm//": non-finite strain")
+        if(j>1) then
+          if(a<=native_scurve(k)%strain(j-1)) call native_error("MAT: stress_strain_curve "//nm// &
+            ": strain must be strictly increasing")
+        endif
+        native_scurve(k)%strain(j)=a
+        a=number(indexed(p//".stress",j))
+        if(.not.ieee_is_finite(a)) call native_error("MAT: stress_strain_curve "//nm//": non-finite stress")
+        native_scurve(k)%stress(j)=a
+      enddo
+      write(error_unit,"(a)") "MAT warning: stress_strain_curve "//nm//" is not referenced by any material "// &
+        "(kept as legacy curve "//itoa(k)//"; no TOML material model uses curves yet, matline M2/M4)"
+    enddo
+  end subroutine
+
+  ! Written from the stored scurves(i) (Material.f90).
+  subroutine native_curve_receipt(i,typ,strain,stress)
+    integer, intent(in) :: i
+    character(*), intent(in) :: typ
+    real(real64), intent(in) :: strain(:), stress(:)
+    integer :: u, j
+    if(.not.native_mat_receipt_on) return
+    if(i==1) then
+      open(newunit=u,file="native-mat-curves.txt",status="replace",action="write")
+      write(u,"(a)") "native-mat-curves v1 mode="//trim(merge("toml    ","contract",native_mat_toml))
+    else
+      open(newunit=u,file="native-mat-curves.txt",status="old",position="append",action="write")
+    endif
+    write(u,"(a,i0,1x,a,1x,i0)") "curve ",i,trim(typ),size(strain)
+    do j=1,size(strain)
+      write(u,"(2es25.16)") strain(j),stress(j)
+    enddo
+    close(u)
+  end subroutine
+
+  ! Written from the stored props(imat)%geometry (Material.f90).
+  subroutine native_geometry_receipt(i,aera,tj,iy,iz)
+    integer, intent(in) :: i
+    real(real64), intent(in) :: aera,tj,iy,iz
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    write(u,"(a,i0,a)") "geometry ",i," ROD_or_BEAM"
+    write(u,"(a,4es25.16)") "aera,J,Iy,Iz=",aera,tj,iy,iz
+    close(u)
   end subroutine
 
   ! [[material]] model = "heat" (T2): legacy 'HEAT' card alfa(1:ndimn), source_curve, place_curve,
@@ -1787,8 +1915,17 @@ contains
           call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
         endif
         native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
+      case('L2')                          ! matline L1-L4: 2-node bar (legacy index 1), 2D or 3D
+        if(native_heat) call native_error('GLB: section '//p//': transient_heat with L2 is deferred (only B8)')
+        if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
+          ': formulation does not apply to element L2 (2-node bar)')
+        native_gname(g)='L2'; native_gindex(g)=1; native_gnnode(g)=2
+      case('steel')
+        call native_error('GLB: section '//p//': element "steel" (legacy index 25, bond-slip link between a bar '// &
+          'and its host) is deferred: it needs the .glb bond-slip parameters ikindks/doubsig/ktan1/ktan2/coefMpa/'// &
+          'nlocalbeam, which have no TOML keys yet')
       case default
-        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8)')
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / L2)')
       end select
       seen_el(g)=.true.
     enddo
@@ -1960,7 +2097,10 @@ contains
       enddo
       used(nodes(1:nn))=.true.
       if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
-      if(nn==4) then
+      if(nn==2) then
+        if(sum((xyz(:,nodes(2))-xyz(:,nodes(1)))**2)<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': L2 element has zero length')
+      elseif(nn==4) then
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
       else

@@ -123,10 +123,11 @@ contains
       k=k+1
       nt=ntok(row)
       select case(nt)
+      case(3,4); sets_elnn(k)=2          ! matline L1: 2-node bar (L2)
       case(5,6); sets_elnn(k)=4
       case(9,10); sets_elnn(k)=8
       case default
-        msg='SETS: 1.ele row '//itoa(k)//': only Q4 (4 nodes) and B8 (8 nodes) elements are supported'; close(u); return
+        msg='SETS: 1.ele row '//itoa(k)//': only L2 (2 nodes), Q4 (4 nodes) and B8 (8 nodes) elements are supported'; close(u); return
       end select
       read(row,*,iostat=ios) id, sets_elnodes(1:sets_elnn(k),k)
       if(ios/=0 .or. id/=k) then; msg='SETS: 1.ele row '//itoa(k)//': invalid row'; close(u); return; endif

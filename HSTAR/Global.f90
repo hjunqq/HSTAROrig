@@ -1249,6 +1249,9 @@
     if(native_mode) then
         average_appear(1:ngroup)=2
         if(native_heat) average_appear(1:ngroup)=0
+        ! matline L3: line elements (L2) are never nodally averaged (Output.f90 average_aera excludes nnode==2;
+        ! a positive value there would STOP 'stop for iaver!!'), same as legacy average_appear<0 for a bar group
+        where(native_gnnode(1:ngroup)==2) average_appear(1:ngroup)=0
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
     endif
