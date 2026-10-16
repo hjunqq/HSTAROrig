@@ -334,6 +334,7 @@
                     if(native_mode) then
                         material='ELASTIC_ISOTROPIC'
                         if(native_mat_goodman(imat)) material='GOODMAN'   ! joint pilot D3a: goodman_fcm
+                        if(native_mat_mcj(imat)) material='CLASSICALEP'   ! joint pilot D3b: mc_joint thin layer
                         density=native_density(imat)
                         ratio=native_ratio(imat)
                         thickness=native_thick(imat)
@@ -525,7 +526,8 @@
                     ! 'if(native_mode) text=...' lines below only skip comment records; their data reads are
                     ! not guarded, so every non-elastic case also starts with native_mat_deferred.
                     if(native_mode .and. trim(material)/='ELASTIC_ISOTROPIC' .and. &
-                        .not.(trim(material)=='GOODMAN' .and. native_mat_goodman(imat))) &
+                        .not.(trim(material)=='GOODMAN' .and. native_mat_goodman(imat)) .and. &
+                        .not.(trim(material)=='CLASSICALEP' .and. native_mat_mcj(imat))) &
                         call native_mat_deferred('material model '//trim(material))
                     material_select: select case(material)                       ! select 3
                     case('PLANE_LOWFT')
@@ -713,15 +715,26 @@
                             !write(7,*)'imat=',imat,'kns0=',props(imat)%mechanical%solid%Goodman%fcmp%kns0
                         endif
                     case('CLASSICALEP')
-                        if(native_mode) call native_mat_deferred('material model CLASSICALEP')
+                        if(native_mode .and. .not.native_mat_mcj(imat)) call native_mat_deferred('material model CLASSICALEP')
                         allocate(props(imat)%mechanical%solid%ClassicalEP)
+                        if(native_mode) then        ! joint pilot D3b: [material.mc_joint] -> MCJOINT card
+                            props(imat)%mechanical%solid%ClassicalEP%criteria='MCJOINT'
+                            props(imat)%mechanical%solid%ClassicalEP%sigma0=native_mcj(1,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%hardening=native_mcj(2,imat)
+                        else
                         read(munit,*)props(imat)%mechanical%solid%ClassicalEP%criteria, &
                             props(imat)%mechanical%solid%ClassicalEP%sigma0,   &
                             props(imat)%mechanical%solid%ClassicalEP%hardening
+                        endif
                         criteria=props(imat)%mechanical%solid%ClassicalEP%criteria
+                        if(native_mode) then
+                            props(imat)%mechanical%solid%ClassicalEP%frict_angle=native_mcj(3,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%dilan_angle=native_mcj(4,imat)
+                        else
                         if (criteria(1:2)=='MC'.or.criteria(1:2)=='DP')                      &
                             read(munit,*)props(imat)%mechanical%solid%ClassicalEP%frict_angle,   &
                             props(imat)%mechanical%solid%ClassicalEP%dilan_angle
+                        endif
                         if (kstab/=0.and.criteria=='MCJOINT') then
 
                             props(imat)%mechanical%solid%ClassicalEP%frict_angle_ini=props(imat)%mechanical%solid%ClassicalEP%frict_angle
@@ -740,6 +753,25 @@
                             props(imat)%mechanical%solid%ClassicalEP%dilan_angle=dilan
                             props(imat)%mechanical%solid%ClassicalEP%sigma0=sigma0
                         endif
+                        if(native_mode) then
+                            props(imat)%mechanical%solid%ClassicalEP%csigma0=native_mcj_curve(1,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%cfrict=native_mcj_curve(2,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%cdilan=native_mcj_curve(3,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%ft=native_mcj(5,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%cft=native_mcj_curve(4,imat)
+                            props(imat)%mechanical%solid%ClassicalEP%sigmat=0
+                            props(imat)%mechanical%solid%ClassicalEP%csigmat=0
+                            call native_mcj_receipt(int(imat),props(imat)%mechanical%solid%ClassicalEP%sigma0, &
+                                props(imat)%mechanical%solid%ClassicalEP%hardening, &
+                                props(imat)%mechanical%solid%ClassicalEP%frict_angle, &
+                                props(imat)%mechanical%solid%ClassicalEP%dilan_angle, &
+                                props(imat)%mechanical%solid%ClassicalEP%ft, &
+                                int(props(imat)%mechanical%solid%ClassicalEP%csigma0), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cfrict), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cdilan), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cft),real(kstab,8),int(mat_curve), &
+                                trim(type_load),int(type_nl))
+                        else
                         read(munit,*)props(imat)%mechanical%solid%ClassicalEP%csigma0
                         if (criteria(1:2)=='MC'.or.criteria(1:2)=='DP')                  &
                             read(munit,*)props(imat)%mechanical%solid%ClassicalEP%cfrict,    &
@@ -750,6 +782,7 @@
                             props(imat)%mechanical%solid%ClassicalEP%cft,       &
                             props(imat)%mechanical%solid%ClassicalEP%sigmat,    &
                             props(imat)%mechanical%solid%ClassicalEP%csigmat
+                        endif
                     case('CAMCLAY')
                         if(native_mode) call native_mat_deferred('material model CAMCLAY')
                         allocate(props(imat)%mechanical%solid%CamClay)

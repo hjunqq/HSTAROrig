@@ -138,6 +138,14 @@ module native_input
   ! joint pilot D3a: GOODMAN node-pair joints (section element="joint", formulation="goodman"), FCM sub-model only
   logical :: native_mat_goodman(NATIVE_MAXG)=.false., native_mat_janbu(NATIVE_MAXG)=.false., native_gjoint(NATIVE_MAXG)=.false.
   integer :: native_fcm_law(NATIVE_MAXG)=0
+  ! joint pilot D3b: mc_joint thin layer (legacy CLASSICALEP / MCJOINT). native_mcj(1:5,i) = sigma0, hardening,
+  ! frict_angle, dilan_angle, ft; native_mcj_curve(1:4,i) = csigma0, cfrict, cdilan, cft (scurves index, 0 = none)
+  logical :: native_mat_mcj(NATIVE_MAXG)=.false.
+  real(real64) :: native_mcj(5,NATIVE_MAXG)=0._real64, native_elcod(NATIVE_MAXG)=0._real64, native_kstab=0._real64
+  integer :: native_mcj_curve(4,NATIVE_MAXG)=0, native_mat_curve=0, native_type_nl=5
+  integer :: native_gid_ms=0, native_gid_ep=0, native_gid_y=0
+  logical, private :: sr_amp_on=.false., any_mcj=.false.
+  logical, allocatable, private :: scurve_ref(:)
   real(real64) :: native_fcm_gf(NATIVE_MAXG)=0._real64, native_fcm_ft(NATIVE_MAXG)=0._real64
   real(real64) :: native_diff(3,NATIVE_MAXG)=0._real64
   integer :: native_src_curve(NATIVE_MAXG)=0, native_place_curve(NATIVE_MAXG)=0
@@ -338,6 +346,12 @@ contains
     if(native_pre_toml) call parse_pre()
     if(native_heat) call heat_resolve()
     if(native_nrt_toml) call parse_nrt()
+    if(sr_amp_on) native_mat_curve=amp_ref('analysis.strength_reduction.amplitude')   ! D3b: legacy MAT_DE curve
+    if((native_kstab/=0 .or. sr_amp_on .or. native_gid_ms+native_gid_ep+native_gid_y>0) .and. .not.any_mcj) &
+      call native_error('GLB: analysis.strength_reduction and output.field ms / ep / yield need an mc_joint material '// &
+        '(joint pilot D3b)')
+    if(native_type_nl==4 .and. .not.any_mcj) call native_error('GLB: stiffness_update "every_iteration" needs an '// &
+      'mc_joint material (joint pilot D3b)')
     if(native_loa_toml) call loa_check_used()
     if(native_tem_toml .and. .not.native_heat) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
@@ -1229,7 +1243,9 @@ contains
       call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
         "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient creep.@table creep.model "// &
         "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity goodman.@table goodman.softening "// &
-        "goodman.fracture_energy goodman.tensile_strength","material "//nm)
+        "goodman.fracture_energy goodman.tensile_strength mc_joint.@table mc_joint.cohesion mc_joint.hardening "// &
+        "mc_joint.friction_angle mc_joint.dilation_angle mc_joint.tensile_strength mc_joint.cohesion_curve "// &
+        "mc_joint.friction_curve mc_joint.dilation_curve mc_joint.tensile_curve","material "//nm)
       s=string_value(p//".model")
       if(s=="goodman_janbu") then        ! D3a: CONTACT usage (gap arrays, igap0); the section decides the message
         native_mat_janbu(i)=.true.
@@ -1237,8 +1253,10 @@ contains
       endif
       if(s=="elastic_isotropic") call native_error("MAT: material "//nm// &
         ': model "elastic_isotropic" is the contract spelling; with HSTAR_NATIVE_MAT=toml use "linear_elastic"')
-      if(s/="linear_elastic" .and. s/="goodman_fcm") call native_error("MAT: material "//nm//": model "//s// &
-        " is deferred in the MAT pilot (only linear_elastic / goodman_fcm); use the legacy .mat")
+      if(s/="linear_elastic" .and. s/="goodman_fcm" .and. s/="mc_joint") call native_error("MAT: material "//nm// &
+        ": model "//s//" is deferred in the MAT pilot (only linear_elastic / goodman_fcm / mc_joint); use the legacy .mat")
+      if(s/="mc_joint" .and. present_key(p//".mc_joint.@table")) call native_error("MAT: material "//nm// &
+        ': [material.mc_joint] applies only to model "mc_joint"')
       if(s/="goodman_fcm" .and. present_key(p//".goodman.@table")) call native_error("MAT: material "//nm// &
         ': [material.goodman] applies only to model "goodman_fcm"')
       native_density(i)=number(p//".density")
@@ -1258,6 +1276,11 @@ contains
       endif
       call parse_creep(p,nm,i)
       if(s=="goodman_fcm") call parse_goodman_fcm(p,nm,i)
+      if(s=="mc_joint") call parse_mc_joint(p,nm,i)
+    enddo
+    do k=1,native_nscurve
+      if(.not.scurve_ref(k)) write(error_unit,"(a)") "MAT warning: stress_strain_curve "//trim(native_scurve(k)%name)// &
+        " is not referenced by any material (kept as legacy curve "//itoa(k)//"; matline M2/M4)"
     enddo
     do j=1,ng
       if(native_sets_on) then
@@ -1277,7 +1300,7 @@ contains
       enddo
       sname(k)=nm
       call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor "// &
-        "area torsion_constant inertia_y inertia_z contact","section "//nm)
+        "area torsion_constant inertia_y inertia_z contact layer_thickness","section "//nm)
       el=string_value(p//".elset")
       g=0
       do j=1,ng
@@ -1320,6 +1343,19 @@ contains
         'goodman_janbu joints (joint pilot D3c, not implemented yet)')
       if(et=="joint" .neqv. native_mat_goodman(i)) call native_error("MAT: section "//nm// &
         ': element "joint" and material model "goodman_fcm" go together (got element "'//et//'", material '//s//')')
+      ! D3b: mc_joint is an ordinary Q4 / B8 solid section; layer_thickness -> legacy group elcod_local (the
+      ! thin-layer normal offset of the back nodes, Elements.f90 normal_local_inc)
+      if(native_mat_mcj(i)) then
+        if(.not.(et=="Q4" .or. et=="B8")) call native_error("MAT: section "//nm//": material "//s// &
+          ' is model "mc_joint" (thin-layer solid): element must be "Q4" or "B8" (got "'//et//'")')
+        if(.not.present_key(p//".layer_thickness")) call native_error("MAT: section "//nm// &
+          ': model "mc_joint" needs layer_thickness (m, legacy elcod_local)')
+        v=number(p//".layer_thickness")
+        if(.not.(v>0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": layer_thickness out of range (0,1e3] m")
+        native_elcod(g)=v
+      elseif(present_key(p//".layer_thickness")) then
+        call native_error("MAT: section "//nm//': layer_thickness applies only to model "mc_joint" sections')
+      endif
       if(et=="L2") then
         call section_geometry(p,nm,i)
       elseif(present_key(p//".area") .or. present_key(p//".torsion_constant") .or. present_key(p//".inertia_y") &
@@ -1412,10 +1448,24 @@ contains
         if(.not.ieee_is_finite(a)) call native_error("MAT: stress_strain_curve "//nm//": non-finite stress")
         native_scurve(k)%stress(j)=a
       enddo
-      write(error_unit,"(a)") "MAT warning: stress_strain_curve "//nm//" is not referenced by any material "// &
-        "(kept as legacy curve "//itoa(k)//"; no TOML material model uses curves yet, matline M2/M4)"
     enddo
+    allocate(scurve_ref(nc)); scurve_ref=.false.
   end subroutine
+
+  ! D3b: mc_joint curve keys name a [[stress_strain_curve]] (legacy scurves index, abscissa = plastic strain epstn)
+  integer function scurve_ref_idx(path,nm) result(k)
+    character(*), intent(in) :: path, nm
+    character(:), allocatable :: c
+    integer :: j
+    k=0
+    if(.not.present_key(path)) return
+    c=string_value(path)
+    do j=1,native_nscurve
+      if(trim(native_scurve(j)%name)==c) k=j
+    enddo
+    if(k==0) call native_error("MAT: material "//nm//": undefined stress_strain_curve "//c//" ("//path//")")
+    scurve_ref(k)=.true.
+  end function
 
   ! Written from the stored scurves(i) (Material.f90).
   subroutine native_curve_receipt(i,typ,strain,stress)
@@ -1516,6 +1566,63 @@ contains
     if(v<=0 .or. v>1.e12_real64) call native_error("MAT: material "//nm//": goodman.tensile_strength out of range (0,1e12] Pa")
     native_fcm_ft(i)=v
     native_mat_goodman(i)=.true.
+  end subroutine
+
+  ! D3b: [material.mc_joint] of model "mc_joint" -> legacy CLASSICALEP / MCJOINT card (Material.f90 case CLASSICALEP):
+  ! cohesion = sigma0, hardening (d c / d epstn, default 0), friction_angle / dilation_angle (deg), tensile_strength = ft
+  ! (default 0), *_curve = csigma0 / cfrict / cdilan / cft. sigmat / csigmat are written 0 (inert in the legacy Q4/B8 path).
+  subroutine parse_mc_joint(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    real(real64) :: v
+    if(.not.native_glb_toml) call native_error("MAT: material "//nm//': model "mc_joint" needs HSTAR_NATIVE_GLB=toml')
+    if(.not.present_key(p//".mc_joint.@table")) call native_error("MAT: material "//nm// &
+      ': model "mc_joint" needs [material.mc_joint] cohesion / friction_angle / dilation_angle')
+    if(present_key(p//".creep.@table")) call native_error("MAT: material "//nm//": creep does not apply to mc_joint")
+    v=number(p//".mc_joint.cohesion")
+    if(.not.(v>0 .and. v<=1.e12_real64)) call native_error("MAT: material "//nm//": mc_joint.cohesion out of range (0,1e12] Pa")
+    native_mcj(1,i)=v
+    v=0
+    if(present_key(p//".mc_joint.hardening")) v=number(p//".mc_joint.hardening")
+    if(.not.(abs(v)<=1.e15_real64)) call native_error("MAT: material "//nm//": mc_joint.hardening out of range [-1e15,1e15] Pa")
+    native_mcj(2,i)=v
+    v=number(p//".mc_joint.friction_angle")
+    if(.not.(v>=0 .and. v<90)) call native_error("MAT: material "//nm//": mc_joint.friction_angle out of range [0,90) deg")
+    native_mcj(3,i)=v
+    v=number(p//".mc_joint.dilation_angle")
+    if(.not.(v>=0 .and. v<90)) call native_error("MAT: material "//nm//": mc_joint.dilation_angle out of range [0,90) deg")
+    native_mcj(4,i)=v
+    v=0
+    if(present_key(p//".mc_joint.tensile_strength")) v=number(p//".mc_joint.tensile_strength")
+    if(.not.(v>=0 .and. v<=1.e12_real64)) call native_error("MAT: material "//nm// &
+      ": mc_joint.tensile_strength out of range [0,1e12] Pa")
+    native_mcj(5,i)=v
+    native_mcj_curve(1,i)=scurve_ref_idx(p//".mc_joint.cohesion_curve",nm)
+    native_mcj_curve(2,i)=scurve_ref_idx(p//".mc_joint.friction_curve",nm)
+    native_mcj_curve(3,i)=scurve_ref_idx(p//".mc_joint.dilation_curve",nm)
+    native_mcj_curve(4,i)=scurve_ref_idx(p//".mc_joint.tensile_curve",nm)
+    if(native_mcj_curve(4,i)/=0 .and. native_mcj(5,i)<=0) call native_error("MAT: material "//nm// &
+      ": mc_joint.tensile_curve needs tensile_strength > 0 (legacy divides by ft)")
+    if(native_mcj_curve(4,i)==0 .and. native_mcj(5,i)>0) write(error_unit,"(a)") "MAT warning: material "//nm// &
+      ": mc_joint.tensile_strength has no effect without tensile_curve (legacy Q4/B8 MCJOINT has no active tension"// &
+      " cutoff; the Coulomb apex c/tan(phi) limits tension)"
+    native_mat_mcj(i)=.true.
+    any_mcj=.true.
+  end subroutine
+
+  ! D3b receipt: the stored props(imat)%mechanical%solid%ClassicalEP fields (after kstab reduction) and the globals
+  subroutine native_mcj_receipt(i,sigma0,hard,frict,dilan,ft,cs,cf,cd,ct,kstab,matc,tload,tnl)
+    integer, intent(in) :: i,cs,cf,cd,ct,matc,tnl
+    real(real64), intent(in) :: sigma0,hard,frict,dilan,ft,kstab
+    character(*), intent(in) :: tload
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    write(u,"(a,i0,a)") "classicalep ",i," MCJOINT"
+    write(u,"(a,5es25.16)") "sigma0,hardening,frict,dilan,ft=",sigma0,hard,frict,dilan,ft
+    write(u,"(a,4(1x,i0))") "csigma0,cfrict,cdilan,cft=",cs,cf,cd,ct
+    write(u,"(a,es25.16,1x,i0,1x,a,1x,i0)") "kstab,mat_curve,type_load,type_nl=",kstab,matc,tload,tnl
+    close(u)
   end subroutine
 
   ! D3a receipt: the stored props(imat)%mechanical%solid%Goodman%fcmp fields (Material.f90)
@@ -1906,7 +2013,7 @@ contains
     character(:), allocatable :: s, p, q, nm, el
     character(len=TOML_LEN_TEXT) :: ename(NATIVE_MAXG)
     integer :: i, j, k, n, ng, nb, nsec, nf, g, total
-    logical :: has(3), act(NATIVE_MAXG), seen_el(NATIVE_MAXG)
+    logical :: has(6), act(NATIVE_MAXG), seen_el(NATIVE_MAXG)
     if(integer_value('version')/=1) call native_error('GLB: version must be 1')
     ! [case]
     k=key_index('case.@table')
@@ -1917,7 +2024,18 @@ contains
     ! [analysis] (G3: static only)
     if(.not.present_key('analysis.type')) call native_error('GLB: [analysis] type = "static" is required with HSTAR_NATIVE_GLB=toml')
     k=key_index('analysis.@table')
-    call glb_check_keys('analysis','@table type','')
+    call glb_check_keys('analysis','@table type strength_reduction.@table strength_reduction.factor '// &
+      'strength_reduction.amplitude','')
+    if(present_key('analysis.strength_reduction.@table')) then        ! D3b: legacy kstab / MAT_DE + mat_curve
+      if(.not.(present_key('analysis.strength_reduction.factor') .or. present_key('analysis.strength_reduction.amplitude'))) &
+        call native_error('GLB: [analysis.strength_reduction] needs factor and/or amplitude')
+      if(present_key('analysis.strength_reduction.factor')) then
+        native_kstab=number('analysis.strength_reduction.factor')
+        if(.not.(native_kstab>0 .and. native_kstab<=100)) &
+          call native_error('GLB: analysis.strength_reduction.factor out of range (0,100]')
+      endif
+      sr_amp_on=present_key('analysis.strength_reduction.amplitude')
+    endif
     s=string_value('analysis.type')
     if(s=='transient_heat') then
       native_heat=.true.                  ! temperature pilot phase 2 (T1-T8)
@@ -2040,8 +2158,13 @@ contains
       if(native_heat .and. native_reset(i)/=0) call native_error('GLB: '//p//'.reset_state must be false in a transient_heat analysis')
       if(.not.native_heat) then
       if(integer_value(p//'.controls.increments')/=1) call native_error('GLB: '//p//'.controls.increments must be 1')
-      if(string_value(p//'.controls.stiffness_update')/='first_iteration') &
-        call native_error('GLB: '//p//'.controls.stiffness_update must be "first_iteration"')
+      s=string_value(p//'.controls.stiffness_update')
+      if(s/='first_iteration' .and. s/='every_iteration') &
+        call native_error('GLB: '//p//'.controls.stiffness_update must be "first_iteration" or "every_iteration"')
+      k=merge(4,5,s=='every_iteration')             ! D3b: legacy type_nl 5 / 4 (full Newton), one value for all steps
+      if(i>1 .and. k/=native_type_nl) call native_error('GLB: '//p//'.controls.stiffness_update must be the same in '// &
+        'every step (legacy type_nl is global)')
+      native_type_nl=k
       endif
       n=integer_value(p//'.active_elsets.count')
       if(n<1) call native_error('GLB: '//p//': active_elsets is empty')
@@ -2098,13 +2221,17 @@ contains
       case('u'); k=1
       case('s'); k=2
       case('f'); k=3
-      case default; call native_error('GLB: output.field "'//s//'" is deferred (only u, s, f)')
+      case('ms'); k=4                  ! D3b: legacy gid_ms / gid_ep / gid_Y (mc_joint analyses only)
+      case('ep'); k=5
+      case('yield'); k=6
+      case default; call native_error('GLB: output.field "'//s//'" is deferred (only u, s, f; ms, ep, yield with mc_joint)')
       end select
       if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
       has(k)=.true.
     enddo
     if(.not.(has(1) .and. has(2))) call native_error('GLB: output.field must contain "u" and "s"')
     native_gid_f=merge(1,0,has(3))
+    native_gid_ms=merge(1,0,has(4)); native_gid_ep=merge(1,0,has(5)); native_gid_y=merge(1,0,has(6))
     endif
     ! derived mesh counts (G4); full checks in validate_mesh_general
     native_points=glb_count_rows(trim(native_mesh_prefix)//'.cor')

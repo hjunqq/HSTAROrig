@@ -829,8 +829,8 @@
         ngroup=native_materials
         ntlink=0
         outplot='GIDR'
-        kstab=0
-        mat_curve=0
+        kstab=native_kstab             ! joint pilot D3b: [analysis.strength_reduction]
+        mat_curve=native_mat_curve
         meshc=0
         rmesh=0
         level_set_problem=0
@@ -972,7 +972,8 @@
         type_problem='Q'
         type_solver='PROFILE'
         type_load='LOAD'
-        type_nl=5
+        if(native_mat_curve/=0) type_load='MAT_DE'   ! D3b: strength_reduction.amplitude
+        type_nl=native_type_nl         ! D3b: stiffness_update every_iteration -> 4
         stabpw=0
         nlayer=0
         kglb=0
@@ -1267,7 +1268,7 @@
     if(native_mode) then
         gid_u=1
         gid_s=1
-        gid_ms=0
+        gid_ms=native_gid_ms
         gid_f=native_gid_f
         gid_rot=0
         gid_v=0
@@ -1275,8 +1276,8 @@
         gid_T=0
         gid_P=0
         gid_Pv=0
-        gid_ep=0
-        gid_Y=0
+        gid_ep=native_gid_ep
+        gid_Y=native_gid_y
         gid_FC=0
         gid_Ns=0
         gid_Ss=0
@@ -1615,7 +1616,7 @@
             group(igroup)%type_stiff=1
             group(igroup)%type_ecoint=1
             group(igroup)%ilayer=1
-            elcod_local=0.
+            elcod_local=native_elcod(igroup)   ! D3b: section.layer_thickness (mc_joint thin layer)
             group_inf=0
             group(igroup)%uplift_ic=0
             group(igroup)%liquj=0
