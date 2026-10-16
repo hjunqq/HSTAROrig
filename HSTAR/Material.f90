@@ -665,7 +665,6 @@
                                 props(imat)%mechanical%solid%Goodman%gamaw=native_janbu(8,imat)
                                 props(imat)%mechanical%solid%Goodman%cohes=native_janbu(9,imat)
                                 props(imat)%mechanical%solid%Goodman%Ft=native_janbu(10,imat)
-                                if(ndimn==3) props(imat)%mechanical%solid%Goodman%Kzy=native_janbu(11,imat)
                             else
                             read(munit,*)props(imat)%mechanical%solid%Goodman%K1,       &
                                 props(imat)%mechanical%solid%Goodman%n,        &
@@ -678,6 +677,10 @@
                                 props(imat)%mechanical%solid%Goodman%cohes,    &
                                 props(imat)%mechanical%solid%Goodman%Ft
 
+                            endif
+                            if(native_mode) then      ! D3c: janbu.ks2_ref (3D)
+                                if(ndimn==3) props(imat)%mechanical%solid%Goodman%Kzy=native_janbu(11,imat)
+                            else
                             if (ndimn==3)read(munit,*)props(imat)%mechanical%solid%Goodman%Kzy
                             endif
                             if(native_mode) call native_janbu_receipt(int(imat),int(props(imat)%mechanical%solid%igap0), &
