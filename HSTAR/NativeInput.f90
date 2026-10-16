@@ -1577,9 +1577,11 @@ contains
     character(*), intent(in) :: p, nm
     integer, intent(in) :: i
     real(real64) :: v
+    integer :: i0
     if(.not.native_glb_toml) call native_error("MAT: material "//nm//': model "mc_joint" needs HSTAR_NATIVE_GLB=toml')
     if(.not.present_key(p//".mc_joint.@table")) call native_error("MAT: material "//nm// &
       ': model "mc_joint" needs [material.mc_joint] cohesion / friction_angle / dilation_angle')
+    i0=key_index(p//".mc_joint.@table")
     if(present_key(p//".creep.@table")) call native_error("MAT: material "//nm//": creep does not apply to mc_joint")
     v=number(p//".mc_joint.cohesion")
     if(.not.(v>0 .and. v<=1.e12_real64)) call native_error("MAT: material "//nm//": mc_joint.cohesion out of range (0,1e12] Pa")
@@ -2029,6 +2031,7 @@ contains
     call glb_check_keys('analysis','@table type strength_reduction.@table strength_reduction.factor '// &
       'strength_reduction.amplitude strength_reduction.reset_state_each_increment_from_step','')
     if(present_key('analysis.strength_reduction.@table')) then        ! D3b: legacy kstab / MAT_DE + mat_curve
+      k=key_index('analysis.strength_reduction.@table')
       if(.not.(present_key('analysis.strength_reduction.factor') .or. present_key('analysis.strength_reduction.amplitude'))) &
         call native_error('GLB: [analysis.strength_reduction] needs factor and/or amplitude')
       if(present_key('analysis.strength_reduction.factor')) then
@@ -2334,10 +2337,14 @@ contains
           enddo
         endif
       endif
+      ! D3b (train05): Q4 triangle collapse 3=4 (legacy Q4 row with a repeated last node); nodes 1-3 distinct
+      if(nn==4 .and. native_gindex(g)==5 .and. .not.native_gjoint(g)) then
+        degen=nodes(3)==nodes(4) .and. nodes(1)/=nodes(2) .and. nodes(1)/=nodes(3) .and. nodes(2)/=nodes(3)
+      endif
       if(.not.degen) then
       do j=2,nn
         if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node'// &
-          ' (only the B8 wedge 3=4,7=8 and pyramid 5=6=7=8 collapses are accepted)')
+          ' (only the Q4 triangle 3=4, B8 wedge 3=4,7=8 and pyramid 5=6=7=8 collapses are accepted)')
       enddo
       endif
       used(nodes(1:nn))=.true.
@@ -2357,6 +2364,11 @@ contains
       elseif(native_gindex(g)==7) then
         if(t4_jacobian(xyz(:,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': T4 Jacobian is not positive (node order / distortion)')
+      elseif(nn==4 .and. degen) then
+        ! collapsed Q4: the bilinear Jacobian is det = 2*area(1,2,3)*(1+eta)/4 > 0 at every Gauss point iff area > 0
+        if((xyz(1,nodes(2))-xyz(1,nodes(1)))*(xyz(2,nodes(3))-xyz(2,nodes(1))) - &
+           (xyz(2,nodes(2))-xyz(2,nodes(1)))*(xyz(1,nodes(3))-xyz(1,nodes(1)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': collapsed Q4 (3=4) triangle 1-2-3 is not counter-clockwise')
       elseif(nn==4) then
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
