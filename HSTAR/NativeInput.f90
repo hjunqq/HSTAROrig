@@ -1172,7 +1172,7 @@ contains
     character(:), allocatable :: seg
     integer :: i, n, d
     character(*), parameter :: deferred = "plasticity plastic wetting liquefaction contact gap curve "// &
-      "stress_strain hardening damage duncan_chang goodman concrete cam_clay clay_pz sand_pz soil_pz "// &
+      "stress_strain hardening damage duncan_chang concrete cam_clay clay_pz sand_pz soil_pz "// &
       "fluid heat conductivity specific_heat geometry viscoelastic spring"
     n=len(p)+1
     do i=1,doc%n
@@ -1186,7 +1186,7 @@ contains
       d=index(rest,".")
       seg=trim(rest); if(d>0) seg=rest(1:d-1)
       if(in_list(seg,deferred)) call native_error("MAT: "//what//": "//seg// &
-        " is deferred in the MAT pilot (only linear_elastic); use the legacy .mat")
+        " is deferred in the MAT pilot (only linear_elastic / goodman_fcm); use the legacy .mat")
       if(in_list(trim(rest),"E nu thermal_expansion")) call native_error("MAT: unsupported key: "// &
         trim(doc%entry(i)%path)//" (contract spelling; with HSTAR_NATIVE_MAT=toml use elastic.youngs_modulus,"// &
         " elastic.poisson_ratio, thermal.expansion_coefficient)")
