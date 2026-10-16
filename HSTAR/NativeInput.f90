@@ -357,8 +357,8 @@ contains
     if((native_kstab/=0 .or. sr_amp_on .or. native_gid_ms+native_gid_ep+native_gid_y>0) .and. .not.any_mcj) &
       call native_error('GLB: analysis.strength_reduction and output.field ms / ep / yield need an mc_joint material '// &
         '(joint pilot D3b)')
-    if(native_type_nl==4 .and. .not.any_mcj) call native_error('GLB: stiffness_update "every_iteration" needs an '// &
-      'mc_joint material (joint pilot D3b)')
+    if(native_type_nl==4 .and. .not.(any_mcj .or. any(native_mat_contact))) call native_error('GLB: stiffness_update '// &
+      '"every_iteration" needs an mc_joint or goodman_janbu material (joint pilot D3b / D3c)')
     if(native_loa_toml) call loa_check_used()
     if(native_tem_toml .and. .not.native_heat) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
