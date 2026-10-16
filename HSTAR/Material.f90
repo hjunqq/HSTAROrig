@@ -302,6 +302,7 @@
             name='SOLID'
             imat=jmat
             if(native_mat_heat(jmat)) property='HEAT'     ! T2: legacy 'HEAT','SOLID',imat
+            if(native_mat_contact(jmat)) name='CONTACT'   ! D3c: goodman_janbu on a contact = true section
         else
         read(munit,*)property,name,imat
         endif
@@ -481,12 +482,21 @@
                             props(imat)%mechanical%solid%wetting_def%b, &
                             props(imat)%mechanical%solid%wetting_def%c
                     endif  !20220409
-                    if(native_mode .and. name=='CONTACT') call native_mat_deferred('CONTACT material (igap0)')
-                    if (name=='CONTACT') &
+                    if(native_mode .and. name=='CONTACT' .and. .not.native_mat_contact(imat)) &
+                        call native_mat_deferred('CONTACT material (igap0)')
+                    if (name=='CONTACT') then
+                        if(native_mode) then      ! D3c: [section.gap] initial / value / tension_limit
+                            props(imat)%mechanical%solid%igap0=native_igap0(imat)
+                            props(imat)%mechanical%solid%gap0=native_gap(1,imat)
+                            props(imat)%mechanical%solid%ftcontact=native_gap(2,imat)
+                            props(imat)%mechanical%solid%icft=native_icft(imat)
+                        else
                         read(munit,*)props(imat)%mechanical%solid%igap0, &
                         props(imat)%mechanical%solid%gap0,  &
                         props(imat)%mechanical%solid%ftcontact, &
                         props(imat)%mechanical%solid%icft
+                        endif
+                    endif
                     igap0=props(imat)%mechanical%solid%igap0
                     if(igap0==2)then !20231006
                         if(native_mode) call native_mat_deferred('contact gap definition (igap0=2)')
@@ -628,6 +638,7 @@
                         allocate(props(imat)%mechanical%solid%Goodman)
                         if(native_mode) then          ! D3a: goodman_fcm; no direction points (point1=point2=0), no CONTACT strength
                             model='FCM'
+                            if(native_mat_janbu(imat)) model='JANBU'   ! D3c: goodman_janbu (CONTACT joints)
                             props(imat)%mechanical%solid%Goodman%point1=0
                             props(imat)%mechanical%solid%Goodman%point2=0
                             props(imat)%mechanical%solid%Goodman%uniax_cohes=0.
@@ -641,7 +652,21 @@
                         props(imat)%mechanical%solid%Goodman%model=model
                         print *,'model=',model
                         if (model=='JANBU') then
-                            if(native_mode) call native_mat_deferred('GOODMAN model JANBU (contact joints, joint pilot D3c)')
+                            if(native_mode .and. .not.native_mat_contact(imat)) &
+                                call native_mat_deferred('GOODMAN model JANBU outside a contact = true section')
+                            if(native_mode) then      ! D3c: [material.janbu]
+                                props(imat)%mechanical%solid%Goodman%K1=native_janbu(1,imat)
+                                props(imat)%mechanical%solid%Goodman%n=native_janbu(2,imat)
+                                props(imat)%mechanical%solid%Goodman%Kzz=native_janbu(3,imat)
+                                props(imat)%mechanical%solid%Goodman%Rf=native_janbu(4,imat)
+                                props(imat)%mechanical%solid%Goodman%phi=native_janbu(5,imat)
+                                props(imat)%mechanical%solid%Goodman%Kzx=native_janbu(6,imat)
+                                props(imat)%mechanical%solid%Goodman%pa=native_janbu(7,imat)
+                                props(imat)%mechanical%solid%Goodman%gamaw=native_janbu(8,imat)
+                                props(imat)%mechanical%solid%Goodman%cohes=native_janbu(9,imat)
+                                props(imat)%mechanical%solid%Goodman%Ft=native_janbu(10,imat)
+                                if(ndimn==3) props(imat)%mechanical%solid%Goodman%Kzy=native_janbu(11,imat)
+                            else
                             read(munit,*)props(imat)%mechanical%solid%Goodman%K1,       &
                                 props(imat)%mechanical%solid%Goodman%n,        &
                                 props(imat)%mechanical%solid%Goodman%Kzz,      &
@@ -654,6 +679,16 @@
                                 props(imat)%mechanical%solid%Goodman%Ft
 
                             if (ndimn==3)read(munit,*)props(imat)%mechanical%solid%Goodman%Kzy
+                            endif
+                            if(native_mode) call native_janbu_receipt(int(imat),int(props(imat)%mechanical%solid%igap0), &
+                                props(imat)%mechanical%solid%gap0, &
+                                props(imat)%mechanical%solid%ftcontact,int(props(imat)%mechanical%solid%icft), &
+                                [props(imat)%mechanical%solid%Goodman%K1,props(imat)%mechanical%solid%Goodman%n, &
+                                props(imat)%mechanical%solid%Goodman%Kzz,props(imat)%mechanical%solid%Goodman%Rf, &
+                                props(imat)%mechanical%solid%Goodman%phi,props(imat)%mechanical%solid%Goodman%Kzx, &
+                                props(imat)%mechanical%solid%Goodman%pa,props(imat)%mechanical%solid%Goodman%gamaw, &
+                                props(imat)%mechanical%solid%Goodman%cohes,props(imat)%mechanical%solid%Goodman%Ft, &
+                                merge(props(imat)%mechanical%solid%Goodman%Kzy,0._irk,ndimn==3)])
 
                             !20231215_YL
                         elseif(model=='WATERTIGHT') then !20231007   !来源（抚宁报告，顾淦臣等《土石坝工程经验与创新》（p247））

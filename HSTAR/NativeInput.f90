@@ -141,6 +141,11 @@ module native_input
   ! joint pilot D3b: mc_joint thin layer (legacy CLASSICALEP / MCJOINT). native_mcj(1:5,i) = sigma0, hardening,
   ! frict_angle, dilan_angle, ft; native_mcj_curve(1:4,i) = csigma0, cfrict, cdilan, cft (scurves index, 0 = none)
   logical :: native_mat_mcj(NATIVE_MAXG)=.false.
+  ! joint pilot D3c: goodman_janbu CONTACT joints (legacy MECHANICAL CONTACT group + GOODMAN / JANBU card).
+  ! native_janbu(1:11,i) = K1 n Kzz Rf phi Kzx pa gamaw cohes Ft Kzy; native_gap(1:2,i) = gap0, ftcontact
+  logical :: native_mat_contact(NATIVE_MAXG)=.false.
+  real(real64) :: native_janbu(11,NATIVE_MAXG)=0._real64, native_gap(2,NATIVE_MAXG)=0._real64
+  integer :: native_igap0(NATIVE_MAXG)=0, native_icft(NATIVE_MAXG)=0
   real(real64) :: native_mcj(5,NATIVE_MAXG)=0._real64, native_elcod(NATIVE_MAXG)=0._real64, native_kstab=0._real64
   integer :: native_mcj_curve(4,NATIVE_MAXG)=0, native_mat_curve=0, native_type_nl=5
   integer :: native_gid_ms=0, native_gid_ep=0, native_gid_y=0, native_stab_matde=99999
@@ -1211,6 +1216,8 @@ contains
   end subroutine
 
   subroutine parse_mat()
+    logical :: cflag
+    integer :: k2
     character(:), allocatable :: p, nm, s, el
     integer :: nmat, nsec, i, j, k, g, ng
     logical :: used(NATIVE_MAXG), covered(NATIVE_MAXG)
@@ -1247,16 +1254,17 @@ contains
         "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity goodman.@table goodman.softening "// &
         "goodman.fracture_energy goodman.tensile_strength mc_joint.@table mc_joint.cohesion mc_joint.hardening "// &
         "mc_joint.friction_angle mc_joint.dilation_angle mc_joint.tensile_strength mc_joint.cohesion_curve "// &
-        "mc_joint.friction_curve mc_joint.dilation_curve mc_joint.tensile_curve","material "//nm)
+        "mc_joint.friction_curve mc_joint.dilation_curve mc_joint.tensile_curve janbu.@table janbu.k1 janbu.n janbu.kn "// &
+        "janbu.ks_ref janbu.ks2_ref janbu.rf janbu.phi janbu.cohesion janbu.pa janbu.ft","material "//nm)
       s=string_value(p//".model")
-      if(s=="goodman_janbu") then        ! D3a: CONTACT usage (gap arrays, igap0); the section decides the message
-        native_mat_janbu(i)=.true.
-        cycle
-      endif
+      if(s=="goodman_janbu") native_mat_janbu(i)=.true.   ! D3c: CONTACT joint; the section must say contact = true
       if(s=="elastic_isotropic") call native_error("MAT: material "//nm// &
         ': model "elastic_isotropic" is the contract spelling; with HSTAR_NATIVE_MAT=toml use "linear_elastic"')
-      if(s/="linear_elastic" .and. s/="goodman_fcm" .and. s/="mc_joint") call native_error("MAT: material "//nm// &
-        ": model "//s//" is deferred in the MAT pilot (only linear_elastic / goodman_fcm / mc_joint); use the legacy .mat")
+      if(s/="linear_elastic" .and. s/="goodman_fcm" .and. s/="mc_joint" .and. s/="goodman_janbu") &
+        call native_error("MAT: material "//nm//": model "//s//" is deferred in the MAT pilot (only linear_elastic / "// &
+        "goodman_fcm / goodman_janbu / mc_joint); use the legacy .mat")
+      if(s/="goodman_janbu" .and. present_key(p//".janbu.@table")) call native_error("MAT: material "//nm// &
+        ': [material.janbu] applies only to model "goodman_janbu"')
       if(s/="mc_joint" .and. present_key(p//".mc_joint.@table")) call native_error("MAT: material "//nm// &
         ': [material.mc_joint] applies only to model "mc_joint"')
       if(s/="goodman_fcm" .and. present_key(p//".goodman.@table")) call native_error("MAT: material "//nm// &
@@ -1279,6 +1287,7 @@ contains
       call parse_creep(p,nm,i)
       if(s=="goodman_fcm") call parse_goodman_fcm(p,nm,i)
       if(s=="mc_joint") call parse_mc_joint(p,nm,i)
+      if(s=="goodman_janbu") call parse_goodman_janbu(p,nm,i)
     enddo
     do k=1,native_nscurve
       if(.not.scurve_ref(k)) write(error_unit,"(a)") "MAT warning: stress_strain_curve "//trim(native_scurve(k)%name)// &
@@ -1302,7 +1311,8 @@ contains
       enddo
       sname(k)=nm
       call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor "// &
-        "area torsion_constant inertia_y inertia_z contact layer_thickness","section "//nm)
+        "area torsion_constant inertia_y inertia_z contact layer_thickness gap.@table gap.initial gap.value "// &
+        "gap.tension_limit gap.use_tension_limit","section "//nm)
       el=string_value(p//".elset")
       g=0
       do j=1,ng
@@ -1332,19 +1342,31 @@ contains
       used(i)=.true.
       native_group_mat(g)=i
       et=string_value(p//".element")
-      ! D3a: GOODMAN joints. goodman_janbu is the CONTACT usage (legacy: MECHANICAL CONTACT + igap0, Fem.f90:12261-12270,
-      ! Stiff.f90:880); without the gap arrays the legacy program dereferences unallocated pointers.
+      ! D3a/D3c: GOODMAN joints. goodman_janbu is the CONTACT usage (legacy: MECHANICAL CONTACT + igap0, Fem.f90:12261-12270,
+      ! Stiff.f90:880); contact = true on its joint section -> legacy group name CONTACT + [section.gap] (igap0 card).
+      cflag=.false.
+      if(present_key(p//".contact")) then
+        k2=key_index(p//".contact")
+        if(doc%entry(k2)%kind/=TV_BOOL) call native_error("MAT: section "//nm//": contact must be true or false")
+        cflag=doc%entry(k2)%lvalue
+      endif
       if(native_mat_janbu(i)) then
-        if(.not.present_key(p//".contact")) call native_error("MAT: section "//nm//": material "//s// &
+        if(.not.cflag) call native_error("MAT: section "//nm//": material "//s// &
           ' is model "goodman_janbu", a contact joint: it needs contact = true on a joint section (legacy CONTACT group'// &
           ' with initial gap igap0); JANBU in a solid group is not valid')
-        call native_error("MAT: section "//nm//": contact = true (CONTACT joints, goodman_janbu) is not implemented yet"// &
-          " (joint pilot D3c)")
+        if(et/="joint") call native_error("MAT: section "//nm//': contact = true needs element "joint", '// &
+          'formulation "goodman"')
+        native_mat_contact(i)=.true.
+        call parse_contact_gap(p,nm,i)
+      elseif(cflag) then
+        call native_error("MAT: section "//nm//': contact = true applies only to model "goodman_janbu" joints '// &
+          '(MC joints in contact groups are not introduced yet)')
+      elseif(present_key(p//".gap.@table")) then
+        call native_error("MAT: section "//nm//": [section.gap] applies only to contact = true sections")
       endif
-      if(present_key(p//".contact")) call native_error("MAT: section "//nm//": contact applies only to "// &
-        'goodman_janbu joints (joint pilot D3c, not implemented yet)')
       if(et=="joint" .neqv. native_mat_goodman(i)) call native_error("MAT: section "//nm// &
-        ': element "joint" and material model "goodman_fcm" go together (got element "'//et//'", material '//s//')')
+        ': element "joint" and material model "goodman_fcm" / "goodman_janbu" go together (got element "'//et// &
+        '", material '//s//')')
       ! D3b: mc_joint is an ordinary Q4 / B8 solid section; layer_thickness -> legacy group elcod_local (the
       ! thin-layer normal offset of the back nodes, Elements.f90 normal_local_inc)
       if(native_mat_mcj(i)) then
@@ -1568,6 +1590,113 @@ contains
     if(v<=0 .or. v>1.e12_real64) call native_error("MAT: material "//nm//": goodman.tensile_strength out of range (0,1e12] Pa")
     native_fcm_ft(i)=v
     native_mat_goodman(i)=.true.
+  end subroutine
+
+  ! D3c: [material.janbu] of model "goodman_janbu" -> legacy GOODMAN / JANBU card (Material.f90:640-656):
+  ! k1 = K1, n, kn = Kzz, ks_ref = Kzx, ks2_ref = Kzy (3D only, required there), rf = Rf, phi, cohesion = cohes,
+  ! pa, ft = Ft. gamaw is not written (read but unused by the legacy PKPN, Stiff.f90:6089); point1 / point2 /
+  ! uniax_cohes / frict_angle (JANBU header fields after the model name) are 0.
+  subroutine parse_goodman_janbu(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    integer :: i0
+    if(.not.present_key(p//".janbu.@table")) call native_error("MAT: material "//nm// &
+      ': model "goodman_janbu" needs [material.janbu] k1 / n / kn / ks_ref / rf / phi / cohesion / pa / ft')
+    i0=key_index(p//".janbu.@table")
+    if(present_key(p//".creep.@table")) call native_error("MAT: material "//nm//": creep does not apply to goodman_janbu")
+    if(present_key(p//".goodman.@table")) call native_error("MAT: material "//nm// &
+      ': [material.goodman] applies only to model "goodman_fcm"')
+    native_janbu(1,i)=jv("k1",0._real64,1.e16_real64,.false.)
+    native_janbu(2,i)=jv("n",-10._real64,10._real64,.true.)
+    native_janbu(3,i)=jv("kn",0._real64,1.e16_real64,.false.)
+    native_janbu(4,i)=jv("rf",0._real64,1._real64,.true.)
+    native_janbu(5,i)=jv("phi",0._real64,90._real64,.true.)
+    if(native_janbu(5,i)>=90) call native_error("MAT: material "//nm//": janbu.phi out of range [0,90) deg")
+    native_janbu(6,i)=jv("ks_ref",0._real64,1.e16_real64,.true.)
+    native_janbu(7,i)=jv("pa",0._real64,1.e9_real64,.false.)
+    native_janbu(8,i)=0._real64
+    native_janbu(9,i)=jv("cohesion",0._real64,1.e12_real64,.true.)
+    native_janbu(10,i)=jv("ft",-1.e12_real64,1.e12_real64,.true.)
+    if(native_ndim==3) then
+      native_janbu(11,i)=jv("ks2_ref",0._real64,1.e16_real64,.true.)
+    elseif(present_key(p//".janbu.ks2_ref")) then
+      call native_error("MAT: material "//nm//": janbu.ks2_ref (legacy Kzy) applies only to mesh.dimension 3")
+    endif
+    native_mat_janbu(i)=.true.
+    native_mat_goodman(i)=.true.
+  contains
+    real(real64) function jv(key,lo,hi,closed) result(v)
+      character(*), intent(in) :: key
+      real(real64), intent(in) :: lo, hi
+      logical, intent(in) :: closed
+      character(len=64) :: b
+      if(.not.present_key(p//".janbu."//key)) call native_error("MAT: material "//nm//": missing janbu."//key)
+      v=number(p//".janbu."//key)
+      if(.not.(v<=hi .and. (v>lo .or. (closed .and. v>=lo)))) then
+        write(b,"(a,es9.2,a,es9.2,a)") merge("[","(",closed),lo,",",hi,"]"
+        call native_error("MAT: material "//nm//": janbu."//key//" out of range "//trim(b))
+      endif
+    end function
+  end subroutine
+
+  ! D3c: [section.gap] of a contact = true joint section -> legacy CONTACT card "igap0 gap0 ftcontact icft"
+  ! (Material.f90:485-489). initial = "geometry" (default; igap0 99: gap = normal distance of the node pairs,
+  ! natural_thickness = initial gap, Fem.f90:13113-13146) | "constant" (igap0 1, value = gap0). tension_limit = ftcontact,
+  ! use_tension_limit = (icft /= 0), default true when tension_limit is given; without it the legacy open
+  ! criterion uses 0.01 Pa (Fem.f90:13188-13192).
+  subroutine parse_contact_gap(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    character(:), allocatable :: s
+    logical :: use
+    integer :: k
+    s="geometry"
+    if(present_key(p//".gap.initial")) s=string_value(p//".gap.initial")
+    select case(s)
+    case("geometry")
+      native_igap0(i)=99; native_gap(1,i)=0._real64
+      if(present_key(p//".gap.value")) call native_error("MAT: section "//nm// &
+        ': gap.value applies only to gap.initial = "constant"')
+    case("constant")
+      native_igap0(i)=1
+      if(.not.present_key(p//".gap.value")) call native_error("MAT: section "//nm// &
+        ': gap.initial = "constant" needs gap.value (m)')
+      native_gap(1,i)=number(p//".gap.value")
+      if(.not.(abs(native_gap(1,i))<=1._real64)) call native_error("MAT: section "//nm//": gap.value out of range [-1,1] m")
+    case default
+      call native_error("MAT: section "//nm//': gap.initial must be "geometry" or "constant" (legacy igap0 99 / 1; '// &
+        'the circular gap table igap0 = 2 is not introduced yet)')
+    end select
+    use=present_key(p//".gap.tension_limit")
+    if(present_key(p//".gap.use_tension_limit")) then
+      k=key_index(p//".gap.use_tension_limit")
+      if(doc%entry(k)%kind/=TV_BOOL) call native_error("MAT: section "//nm//": gap.use_tension_limit must be true or false")
+      use=doc%entry(k)%lvalue
+      if(use .and. .not.present_key(p//".gap.tension_limit")) call native_error("MAT: section "//nm// &
+        ": gap.use_tension_limit = true needs gap.tension_limit (Pa)")
+      if(.not.use .and. present_key(p//".gap.tension_limit")) call native_error("MAT: section "//nm// &
+        ": gap.tension_limit is given but gap.use_tension_limit = false")
+    endif
+    native_icft(i)=merge(1,0,use)
+    native_gap(2,i)=0._real64
+    if(use) native_gap(2,i)=number(p//".gap.tension_limit")
+    if(.not.(abs(native_gap(2,i))<=1.e12_real64)) call native_error("MAT: section "//nm// &
+      ": gap.tension_limit out of range [-1e12,1e12] Pa")
+  end subroutine
+
+  ! D3c receipt: stored props(imat)%mechanical%solid CONTACT card + Goodman JANBU fields (Material.f90)
+  subroutine native_janbu_receipt(i,igap0,gap0,ftc,icft,v)
+    integer, intent(in) :: i, igap0, icft
+    real(real64), intent(in) :: gap0, ftc, v(:)
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    write(u,"(a,i0,a)") "goodman ",i," JANBU name=CONTACT"
+    write(u,"(a,i0,es25.16,es25.16,i3)") "igap0,gap0,ftcontact,icft= ",igap0,gap0,ftc,icft
+    write(u,"(a,5es25.16)") "K1,n,Kzz,Rf,phi=",v(1:5)
+    write(u,"(a,5es25.16)") "Kzx,pa,gamaw,cohes,Ft=",v(6:10)
+    write(u,"(a,es25.16)") "Kzy=",v(11)
+    close(u)
   end subroutine
 
   ! D3b: [material.mc_joint] of model "mc_joint" -> legacy CLASSICALEP / MCJOINT card (Material.f90 case CLASSICALEP):
