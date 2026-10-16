@@ -1252,6 +1252,9 @@
         ! matline L3: line elements (L2) are never nodally averaged (Output.f90 average_aera excludes nnode==2;
         ! a positive value there would STOP 'stop for iaver!!'), same as legacy average_appear<0 for a bar group
         where(native_gnnode(1:ngroup)==2) average_appear(1:ngroup)=0
+        ! joint pilot D3a: GOODMAN joint rows are never nodally averaged either (Output.f90:5146-5152: a positive value
+        ! STOPs 'stop for iaver!!' after the first output; legacy -1/-2/0 all give iaver=0 for GOODMAN)
+        where(native_gjoint(1:ngroup)) average_appear(1:ngroup)=0
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)average_appear(1:ngroup) !=0 不参与应力平均，=1应力外推 =2 应力直接平均 =-1按原来方式外推 =-2按原来方式直接平均
     endif
