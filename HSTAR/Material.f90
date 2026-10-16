@@ -333,6 +333,7 @@
                     allocate(props(imat)%mechanical%solid)
                     if(native_mode) then
                         material='ELASTIC_ISOTROPIC'
+                        if(native_mat_goodman(imat)) material='GOODMAN'   ! joint pilot D3a: goodman_fcm
                         density=native_density(imat)
                         ratio=native_ratio(imat)
                         thickness=native_thick(imat)
@@ -523,7 +524,8 @@
                     ! MAT pilot (M7): only ELASTIC_ISOTROPIC may be reached from TOML. The ClayPZ/SandPZ/SoilPZ
                     ! 'if(native_mode) text=...' lines below only skip comment records; their data reads are
                     ! not guarded, so every non-elastic case also starts with native_mat_deferred.
-                    if(native_mode .and. trim(material)/='ELASTIC_ISOTROPIC') &
+                    if(native_mode .and. trim(material)/='ELASTIC_ISOTROPIC' .and. &
+                        .not.(trim(material)=='GOODMAN' .and. native_mat_goodman(imat))) &
                         call native_mat_deferred('material model '//trim(material))
                     material_select: select case(material)                       ! select 3
                     case('PLANE_LOWFT')
@@ -619,13 +621,21 @@
                         endif
                         !  goodman
                     case('GOODMAN')
-                        if(native_mode) call native_mat_deferred('material model GOODMAN')
+                        if(native_mode .and. .not.native_mat_goodman(imat)) call native_mat_deferred('material model GOODMAN')
 
                         allocate(props(imat)%mechanical%solid%Goodman)
+                        if(native_mode) then          ! D3a: goodman_fcm; no direction points (point1=point2=0), no CONTACT strength
+                            model='FCM'
+                            props(imat)%mechanical%solid%Goodman%point1=0
+                            props(imat)%mechanical%solid%Goodman%point2=0
+                            props(imat)%mechanical%solid%Goodman%uniax_cohes=0.
+                            props(imat)%mechanical%solid%Goodman%frict_angle=0.
+                        else
                         read(munit,*)model,props(imat)%mechanical%solid%Goodman%point1,  & !2007
                             props(imat)%mechanical%solid%Goodman%point2,                 &     !2007
                             props(imat)%mechanical%solid%Goodman%uniax_cohes,                  &     !2007
                             props(imat)%mechanical%solid%Goodman%frict_angle
+                        endif
                         props(imat)%mechanical%solid%Goodman%model=model
                         print *,'model=',model
                         if (model=='JANBU') then
@@ -657,7 +667,11 @@
                         elseif (model=='FCM') then !20210125
                             allocate(props(imat)%mechanical%solid%Goodman%fcmp)
                             allocate(props(imat)%mechanical%solid%Goodman%fcmp%kns0(ndimn))
+                            if(native_mode) then
+                                xlwmodel=native_fcm_law(imat); Gf=native_fcm_gf(imat); ft=native_fcm_ft(imat)
+                            else
                             read(munit,*)xlwmodel,Gf,ft
+                            endif
 
 
                             props(imat)%mechanical%solid%Goodman%fcmp%xlwmodel=xlwmodel
@@ -690,6 +704,9 @@
                             !read(munit,*)props(imat)%mechanical%solid%Goodman%fcmp%kns0
                             props(imat)%mechanical%solid%Goodman%fcmp%kns0(ndimn)=e*1.e3
                             props(imat)%mechanical%solid%Goodman%fcmp%kns0(1:ndimn-1)=e*1.e3/(2.*(1+nu))
+                            if(native_mode) call native_goodman_receipt(int(imat),int(xlwmodel),Gf,ft, &
+                                props(imat)%mechanical%solid%Goodman%fcmp%w0,props(imat)%mechanical%solid%Goodman%fcmp%w1, &
+                                props(imat)%mechanical%solid%Goodman%fcmp%ft1,props(imat)%mechanical%solid%Goodman%fcmp%kns0)
 
                             !write(7,*)'imat=',imat,'kns0=',props(imat)%mechanical%solid%Goodman%fcmp%kns0
                         endif

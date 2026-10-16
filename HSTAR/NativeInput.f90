@@ -135,6 +135,10 @@ module native_input
   real(real64) :: native_inc_dt(NATIVE_MAXI,NATIVE_MAXB)=0._real64, native_inc_tol(NATIVE_MAXI,NATIVE_MAXB)=0._real64
   integer :: native_inc_nstep(NATIVE_MAXI,NATIVE_MAXB)=0, native_inc_miter(NATIVE_MAXI,NATIVE_MAXB)=0
   logical :: native_mat_heat(NATIVE_MAXG)=.false.
+  ! joint pilot D3a: GOODMAN node-pair joints (section element="joint", formulation="goodman"), FCM sub-model only
+  logical :: native_mat_goodman(NATIVE_MAXG)=.false., native_mat_janbu(NATIVE_MAXG)=.false., native_gjoint(NATIVE_MAXG)=.false.
+  integer :: native_fcm_law(NATIVE_MAXG)=0
+  real(real64) :: native_fcm_gf(NATIVE_MAXG)=0._real64, native_fcm_ft(NATIVE_MAXG)=0._real64
   real(real64) :: native_diff(3,NATIVE_MAXG)=0._real64
   integer :: native_src_curve(NATIVE_MAXG)=0, native_place_curve(NATIVE_MAXG)=0
   character(len=TOML_LEN_TEXT), private :: mat_src_name(NATIVE_MAXG)='', mat_place_name(NATIVE_MAXG)=''
@@ -1224,12 +1228,19 @@ contains
       endif
       call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
         "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient creep.@table creep.model "// &
-        "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity","material "//nm)
+        "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity goodman.@table goodman.softening "// &
+        "goodman.fracture_energy goodman.tensile_strength","material "//nm)
       s=string_value(p//".model")
+      if(s=="goodman_janbu") then        ! D3a: CONTACT usage (gap arrays, igap0); the section decides the message
+        native_mat_janbu(i)=.true.
+        cycle
+      endif
       if(s=="elastic_isotropic") call native_error("MAT: material "//nm// &
         ': model "elastic_isotropic" is the contract spelling; with HSTAR_NATIVE_MAT=toml use "linear_elastic"')
-      if(s/="linear_elastic") call native_error("MAT: material "//nm//": model "//s// &
-        " is deferred in the MAT pilot (only linear_elastic); use the legacy .mat")
+      if(s/="linear_elastic" .and. s/="goodman_fcm") call native_error("MAT: material "//nm//": model "//s// &
+        " is deferred in the MAT pilot (only linear_elastic / goodman_fcm); use the legacy .mat")
+      if(s/="goodman_fcm" .and. present_key(p//".goodman.@table")) call native_error("MAT: material "//nm// &
+        ': [material.goodman] applies only to model "goodman_fcm"')
       native_density(i)=number(p//".density")
       if(native_density(i)<0 .or. native_density(i)>1.e6_real64) &   ! D3 (conv step A): density 0 allowed
         call native_error("MAT: material "//nm//": density out of range [0,1e6] kg/m^3")
@@ -1246,6 +1257,7 @@ contains
           call native_error("MAT: material "//nm//": expansion_coefficient out of range [0,1e-2] 1/K")
       endif
       call parse_creep(p,nm,i)
+      if(s=="goodman_fcm") call parse_goodman_fcm(p,nm,i)
     enddo
     do j=1,ng
       if(native_sets_on) then
@@ -1265,7 +1277,7 @@ contains
       enddo
       sname(k)=nm
       call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor "// &
-        "area torsion_constant inertia_y inertia_z","section "//nm)
+        "area torsion_constant inertia_y inertia_z contact","section "//nm)
       el=string_value(p//".elset")
       g=0
       do j=1,ng
@@ -1295,6 +1307,19 @@ contains
       used(i)=.true.
       native_group_mat(g)=i
       et=string_value(p//".element")
+      ! D3a: GOODMAN joints. goodman_janbu is the CONTACT usage (legacy: MECHANICAL CONTACT + igap0, Fem.f90:12261-12270,
+      ! Stiff.f90:880); without the gap arrays the legacy program dereferences unallocated pointers.
+      if(native_mat_janbu(i)) then
+        if(.not.present_key(p//".contact")) call native_error("MAT: section "//nm//": material "//s// &
+          ' is model "goodman_janbu", a contact joint: it needs contact = true on a joint section (legacy CONTACT group'// &
+          ' with initial gap igap0); JANBU in a solid group is not valid')
+        call native_error("MAT: section "//nm//": contact = true (CONTACT joints, goodman_janbu) is not implemented yet"// &
+          " (joint pilot D3c)")
+      endif
+      if(present_key(p//".contact")) call native_error("MAT: section "//nm//": contact applies only to "// &
+        'goodman_janbu joints (joint pilot D3c, not implemented yet)')
+      if(et=="joint" .neqv. native_mat_goodman(i)) call native_error("MAT: section "//nm// &
+        ': element "joint" and material model "goodman_fcm" go together (got element "'//et//'", material '//s//')')
       if(et=="L2") then
         call section_geometry(p,nm,i)
       elseif(present_key(p//".area") .or. present_key(p//".torsion_constant") .or. present_key(p//".inertia_y") &
@@ -1466,6 +1491,46 @@ contains
   ! [[material]].creep (phase 1, C2): model "kelvin" | "burgers" -> legacy icreep=4
   ! (Ek, etak, etam). Kelvin stores etam = native_kelvin_etam (no Maxwell dashpot). Every
   ! other creep form (legacy icreep 1/2/3) is a hard error.
+  ! D3a: [material.goodman] of model "goodman_fcm" -> legacy GOODMAN / FCM card (Material.f90:621-689):
+  ! softening = legacy xlwmodel 1..4 (5 = user table, deferred), fracture_energy = Gf, tensile_strength = ft.
+  ! kn0 = E*1e3, ks0 = E*1e3/(2(1+nu)) are derived by the legacy reader from youngs_modulus / poisson_ratio.
+  subroutine parse_goodman_fcm(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    real(real64) :: v
+    if(.not.present_key(p//".goodman.@table")) call native_error("MAT: material "//nm// &
+      ': model "goodman_fcm" needs [material.goodman] softening / fracture_energy / tensile_strength')
+    if(present_key(p//".creep.@table")) call native_error("MAT: material "//nm//": creep does not apply to goodman_fcm")
+    native_fcm_law(i)=integer_value(p//".goodman.softening")
+    if(native_fcm_law(i)==5) call native_error("MAT: material "//nm//": goodman.softening = 5 (user table w0,w1,w2,ft,ft1)"// &
+      " is deferred")
+    if(native_fcm_law(i)<1 .or. native_fcm_law(i)>4) call native_error("MAT: material "//nm// &
+      ": goodman.softening must be 1, 2, 3 or 4")
+    v=number(p//".goodman.fracture_energy")
+    if(v<=0 .or. v>1.e9_real64) call native_error("MAT: material "//nm//": goodman.fracture_energy out of range (0,1e9] N/m")
+    native_fcm_gf(i)=v
+    v=number(p//".goodman.tensile_strength")
+    if(v<=0 .or. v>1.e12_real64) call native_error("MAT: material "//nm//": goodman.tensile_strength out of range (0,1e12] Pa")
+    native_fcm_ft(i)=v
+    native_mat_goodman(i)=.true.
+  end subroutine
+
+  ! D3a receipt: the stored props(imat)%mechanical%solid%Goodman%fcmp fields (Material.f90)
+  subroutine native_goodman_receipt(i,law,gf,ft,w0,w1,ft1,kns0)
+    integer, intent(in) :: i,law
+    real(real64), intent(in) :: gf,ft,w0,w1,ft1,kns0(:)
+    integer :: u
+    if(.not.native_mat_receipt_on) return
+    open(newunit=u,file="native-mat.txt",status="old",position="append",action="write")
+    write(u,"(a,i0,a,i0)") "goodman ",i," FCM softening=",law
+    write(u,"(a,es25.16)") "Gf=",gf
+    write(u,"(a,es25.16)") "ft=",ft
+    write(u,"(a,es25.16)") "w0=",w0
+    if(law==2) write(u,"(a,2es25.16)") "w1,ft1=",w1,ft1
+    write(u,"(a,3es25.16)") "kns0=",kns0
+    close(u)
+  end subroutine
+
   subroutine parse_creep(p,nm,i)
     character(*), intent(in) :: p, nm
     integer, intent(in) :: i
@@ -1926,6 +1991,16 @@ contains
           call native_error('GLB: section '//p//': 3D T4 supports only formulation "solid"')
         endif
         native_gname(g)='T4'; native_gindex(g)=7; native_gnnode(g)=4
+      case('joint')                       ! joint pilot D3a: GOODMAN node-pair rows, legacy index 5 (2D Q4 row) / 9 (3D B8 row)
+        if(native_heat) call native_error('GLB: section '//p//': element joint does not apply to transient_heat')
+        if(string_value(p//'.formulation')/='goodman') &
+          call native_error('GLB: section '//p//': element joint supports only formulation "goodman"')
+        native_gjoint(g)=.true.
+        if(native_ndim==2) then
+          native_gname(g)='Q4'; native_gindex(g)=5; native_gnnode(g)=4
+        else
+          native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
+        endif
       case('L2')                          ! matline L1-L4: 2-node bar (legacy index 1), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with L2 is deferred (only B8)')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
@@ -1936,7 +2011,7 @@ contains
           'and its host) is deferred: it needs the .glb bond-slip parameters ikindks/doubsig/ktan1/ktan2/coefMpa/'// &
           'nlocalbeam, which have no TOML keys yet')
       case default
-        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2)')
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2 / joint)')
       end select
       seen_el(g)=.true.
     enddo
@@ -2106,7 +2181,7 @@ contains
       if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
         call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
       degen=.false.
-      if(nn==8 .and. native_gindex(g)==9) then
+      if(nn==8 .and. native_gindex(g)==9 .and. .not.native_gjoint(g)) then
         degen=(nodes(3)==nodes(4) .and. nodes(7)==nodes(8) .and. count(nodes(1:8)==nodes(3))==2 .and. &
                count(nodes(1:8)==nodes(7))==2) .or. &
               (all(nodes(6:8)==nodes(5)) .and. count(nodes(1:8)==nodes(5))==4)
@@ -2129,7 +2204,16 @@ contains
       endif
       used(nodes(1:nn))=.true.
       if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
-      if(nn==2) then
+      if(native_gjoint(g)) then
+        ! D3a: a joint row is two faces (node pairs 2D 1-4, 2-3; 3D i-(i+4)); the faces may coincide (zero thickness),
+        ! so no volume Jacobian. The front face (integration face, Stiff.f90:123-131) must be non-degenerate.
+        if(native_ndim==2) then
+          if(sum((xyz(1:2,nodes(2))-xyz(1:2,nodes(1)))**2)<=0) &
+            call native_error('GLB: 1.ele row '//itoa(k)//': joint front edge (nodes 1-2) has zero length')
+        elseif(q4_face_area(xyz(:,nodes(1:4)))<=0) then
+          call native_error('GLB: 1.ele row '//itoa(k)//': joint front face (nodes 1-4) has zero area')
+        endif
+      elseif(nn==2) then
         if(sum((xyz(:,nodes(2))-xyz(:,nodes(1)))**2)<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': L2 element has zero length')
       elseif(native_gindex(g)==7) then
@@ -2223,7 +2307,16 @@ contains
   end function
 
   ! T4 (Elements.f90:2767 shape 1-s-t-u, s, t, u): constant Jacobian det[x2-x1; x3-x1; x4-x1]
-  real(real64) function t4_jacobian(x) result(d)
+  real(real64)   ! D3a: area of a 3D quadrilateral face (two triangles 1-2-3, 1-3-4)
+  real(real64) function q4_face_area(x)
+    real(real64), intent(in) :: x(3,4)
+    real(real64) :: a(3), b(3), c(3)
+    a=x(:,2)-x(:,1); b=x(:,3)-x(:,1); c=x(:,4)-x(:,1)
+    q4_face_area=0.5_real64*(norm2([a(2)*b(3)-a(3)*b(2), a(3)*b(1)-a(1)*b(3), a(1)*b(2)-a(2)*b(1)]) + &
+                             norm2([b(2)*c(3)-b(3)*c(2), b(3)*c(1)-b(1)*c(3), b(1)*c(2)-b(2)*c(1)]))
+  end function
+
+function t4_jacobian(x) result(d)
     real(real64), intent(in) :: x(3,4)
     real(real64) :: a(3), b(3), c(3)
     a=x(:,2)-x(:,1); b=x(:,3)-x(:,1); c=x(:,4)-x(:,1)
