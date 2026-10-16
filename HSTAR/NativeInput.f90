@@ -144,6 +144,8 @@ module native_input
   ! joint pilot D3c: goodman_janbu CONTACT joints (legacy MECHANICAL CONTACT group + GOODMAN / JANBU card).
   ! native_janbu(1:11,i) = K1 n Kzz Rf phi Kzx pa gamaw cohes Ft Kzy; native_gap(1:2,i) = gap0, ftcontact
   logical :: native_mat_contact(NATIVE_MAXG)=.false.
+  ! output.stress_averaging_exclude: element sets left out of nodal stress averaging (legacy average_appear = 0)
+  logical :: native_avg_off(NATIVE_MAXG)=.false.
   real(real64) :: native_janbu(11,NATIVE_MAXG)=0._real64, native_gap(2,NATIVE_MAXG)=0._real64
   integer :: native_igap0(NATIVE_MAXG)=0, native_icft(NATIVE_MAXG)=0
   real(real64) :: native_mcj(5,NATIVE_MAXG)=0._real64, native_elcod(NATIVE_MAXG)=0._real64, native_kstab=0._real64
@@ -2356,9 +2358,27 @@ contains
       if(string_value('output.field[1]')/='T') call native_error('GLB: transient_heat output.field must be ["T"]')
       native_gid_f=0
     else
-    call glb_check_keys('output','@table format stress_averaging','field')
+    call glb_check_keys('output','@table format stress_averaging','field stress_averaging_exclude')
     if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
     if(string_value('output.stress_averaging')/='direct') call native_error('GLB: output.stress_averaging must be "direct"')
+    ! element sets excluded from nodal stress averaging (legacy .glb average_appear(group) = 0, Output.f90:5144-5149;
+    ! legacy -1/-2 with 0 < elcod_local < 0.03 is the same exclusion). Line (L2) and joint sets are never averaged.
+    if(present_key('output.stress_averaging_exclude.count')) then
+      nf=integer_value('output.stress_averaging_exclude.count')
+      if(nf<1) call native_error('GLB: output.stress_averaging_exclude must list at least one element set')
+      do j=1,nf
+        s=string_value(indexed('output.stress_averaging_exclude',j))
+        k=0
+        do g=1,ng
+          if(trim(native_kname(g))==s) k=g
+        enddo
+        if(k==0) call native_error('GLB: output.stress_averaging_exclude: undefined element set "'//s//'"')
+        if(native_avg_off(k)) call native_error('GLB: output.stress_averaging_exclude lists "'//s//'" twice')
+        if(native_gnnode(k)==2 .or. native_gjoint(k)) call native_error('GLB: output.stress_averaging_exclude: "'//s// &
+          '" is a line / joint element set, which is never nodally averaged')
+        native_avg_off(k)=.true.
+      enddo
+    endif
     nf=integer_value('output.field.count')
     has=.false.
     do j=1,nf
