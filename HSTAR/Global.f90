@@ -835,7 +835,7 @@
         rmesh=0
         level_set_problem=0
         ljdp=0
-        stab_matde=99999
+        stab_matde=native_stab_matde   ! D3b: strength_reduction.reset_state_each_increment_from_step
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)npoin,npoinb,nelem,ndimn,nmats,ngroup,ntlink,outplot,kstab,mat_curve,meshc,rmesh,level_set_problem,ljdp,stab_matde
     endif

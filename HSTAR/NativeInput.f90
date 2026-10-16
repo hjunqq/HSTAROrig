@@ -143,7 +143,7 @@ module native_input
   logical :: native_mat_mcj(NATIVE_MAXG)=.false.
   real(real64) :: native_mcj(5,NATIVE_MAXG)=0._real64, native_elcod(NATIVE_MAXG)=0._real64, native_kstab=0._real64
   integer :: native_mcj_curve(4,NATIVE_MAXG)=0, native_mat_curve=0, native_type_nl=5
-  integer :: native_gid_ms=0, native_gid_ep=0, native_gid_y=0
+  integer :: native_gid_ms=0, native_gid_ep=0, native_gid_y=0, native_stab_matde=99999
   logical, private :: sr_amp_on=.false., any_mcj=.false.
   logical, allocatable, private :: scurve_ref(:)
   real(real64) :: native_fcm_gf(NATIVE_MAXG)=0._real64, native_fcm_ft(NATIVE_MAXG)=0._real64
@@ -347,6 +347,8 @@ contains
     if(native_heat) call heat_resolve()
     if(native_nrt_toml) call parse_nrt()
     if(sr_amp_on) native_mat_curve=amp_ref('analysis.strength_reduction.amplitude')   ! D3b: legacy MAT_DE curve
+    if(native_stab_matde/=99999 .and. native_stab_matde>native_blocks) call native_error('GLB: analysis.strength_reduction.'// &
+      'reset_state_each_increment_from_step = '//itoa(native_stab_matde)//' exceeds the number of steps')
     if((native_kstab/=0 .or. sr_amp_on .or. native_gid_ms+native_gid_ep+native_gid_y>0) .and. .not.any_mcj) &
       call native_error('GLB: analysis.strength_reduction and output.field ms / ep / yield need an mc_joint material '// &
         '(joint pilot D3b)')
@@ -2025,7 +2027,7 @@ contains
     if(.not.present_key('analysis.type')) call native_error('GLB: [analysis] type = "static" is required with HSTAR_NATIVE_GLB=toml')
     k=key_index('analysis.@table')
     call glb_check_keys('analysis','@table type strength_reduction.@table strength_reduction.factor '// &
-      'strength_reduction.amplitude','')
+      'strength_reduction.amplitude strength_reduction.reset_state_each_increment_from_step','')
     if(present_key('analysis.strength_reduction.@table')) then        ! D3b: legacy kstab / MAT_DE + mat_curve
       if(.not.(present_key('analysis.strength_reduction.factor') .or. present_key('analysis.strength_reduction.amplitude'))) &
         call native_error('GLB: [analysis.strength_reduction] needs factor and/or amplitude')
@@ -2035,6 +2037,12 @@ contains
           call native_error('GLB: analysis.strength_reduction.factor out of range (0,100]')
       endif
       sr_amp_on=present_key('analysis.strength_reduction.amplitude')
+      ! legacy stab_matde: from this block on, every increment starts from zero Gauss-point state (Fem.f90 stab_initialize)
+      if(present_key('analysis.strength_reduction.reset_state_each_increment_from_step')) then
+        native_stab_matde=integer_value('analysis.strength_reduction.reset_state_each_increment_from_step')
+        if(native_stab_matde<1) call native_error('GLB: analysis.strength_reduction.reset_state_each_increment_from_step '// &
+          'must be a step number >= 1')
+      endif
     endif
     s=string_value('analysis.type')
     if(s=='transient_heat') then
