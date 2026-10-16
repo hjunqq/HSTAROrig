@@ -2306,8 +2306,7 @@ contains
     enddo
   end function
 
-  ! T4 (Elements.f90:2767 shape 1-s-t-u, s, t, u): constant Jacobian det[x2-x1; x3-x1; x4-x1]
-  real(real64)   ! D3a: area of a 3D quadrilateral face (two triangles 1-2-3, 1-3-4)
+  ! D3a: area of a 3D quadrilateral face (two triangles 1-2-3, 1-3-4)
   real(real64) function q4_face_area(x)
     real(real64), intent(in) :: x(3,4)
     real(real64) :: a(3), b(3), c(3)
@@ -2316,7 +2315,8 @@ contains
                              norm2([b(2)*c(3)-b(3)*c(2), b(3)*c(1)-b(1)*c(3), b(1)*c(2)-b(2)*c(1)]))
   end function
 
-function t4_jacobian(x) result(d)
+  ! T4 (Elements.f90:2767 shape 1-s-t-u, s, t, u): constant Jacobian det[x2-x1; x3-x1; x4-x1]
+  real(real64) function t4_jacobian(x) result(d)
     real(real64), intent(in) :: x(3,4)
     real(real64) :: a(3), b(3), c(3)
     a=x(:,2)-x(:,1); b=x(:,3)-x(:,1); c=x(:,4)-x(:,1)
