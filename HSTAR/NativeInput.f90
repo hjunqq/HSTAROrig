@@ -1602,13 +1602,14 @@ contains
       ": mc_joint.tensile_strength out of range [0,1e12] Pa")
     native_mcj(5,i)=v
     native_mcj_curve(1,i)=scurve_ref_idx(p//".mc_joint.cohesion_curve",nm)
-    native_mcj_curve(2,i)=scurve_ref_idx(p//".mc_joint.friction_curve",nm)
-    native_mcj_curve(3,i)=scurve_ref_idx(p//".mc_joint.dilation_curve",nm)
-    native_mcj_curve(4,i)=scurve_ref_idx(p//".mc_joint.tensile_curve",nm)
-    if(native_mcj_curve(4,i)/=0 .and. native_mcj(5,i)<=0) call native_error("MAT: material "//nm// &
-      ": mc_joint.tensile_curve needs tensile_strength > 0 (legacy divides by ft)")
-    if(native_mcj_curve(4,i)==0 .and. native_mcj(5,i)>0) write(error_unit,"(a)") "MAT warning: material "//nm// &
-      ": mc_joint.tensile_strength has no effect without tensile_curve (legacy Q4/B8 MCJOINT has no active tension"// &
+    ! D3b: legacy cfrict / cdilan / cft curves are deferred: a friction_curve gives NaN stresses at the first yield in the
+    ! legacy MCJOINT path (S3 probe, D3B-EVIDENCE.md); no curve-driven phi / psi / ft from TOML until that is resolved
+    if(present_key(p//".mc_joint.friction_curve") .or. present_key(p//".mc_joint.dilation_curve") .or. &
+       present_key(p//".mc_joint.tensile_curve")) call native_error("MAT: material "//nm//": mc_joint.friction_curve / "// &
+      "dilation_curve / tensile_curve are deferred (legacy cfrict path gives NaN stresses; use friction_angle / "// &
+      "dilation_angle, cohesion_curve)")
+    if(native_mcj(5,i)>0) write(error_unit,"(a)") "MAT warning: material "//nm// &
+      ": mc_joint.tensile_strength has no effect (legacy Q4/B8 MCJOINT has no active tension"// &
       " cutoff; the Coulomb apex c/tan(phi) limits tension)"
     native_mat_mcj(i)=.true.
     any_mcj=.true.
