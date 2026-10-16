@@ -2351,7 +2351,16 @@ contains
       endif
       used(nodes(1:nn))=.true.
       if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
-      if(native_gjoint(g)) then
+      if(native_elcod(g)>0 .and. .not.degen) then
+        ! D3b: mc_joint thin layer: the legacy reader rebuilds the back nodes as front + normal*layer_thickness
+        ! (Elements.f90 normal_local_inc), so only the front edge (Q4 nodes 1-2) / face (B8 nodes 1-4) must be non-degenerate
+        if(native_ndim==2) then
+          if(sum((xyz(1:2,nodes(2))-xyz(1:2,nodes(1)))**2)<=0) &
+            call native_error('GLB: 1.ele row '//itoa(k)//': mc_joint layer front edge (nodes 1-2) has zero length')
+        elseif(q4_face_area(xyz(:,nodes(1:4)))<=0) then
+          call native_error('GLB: 1.ele row '//itoa(k)//': mc_joint layer front face (nodes 1-4) has zero area')
+        endif
+      elseif(native_gjoint(g)) then
         ! D3a: a joint row is two faces (node pairs 2D 1-4, 2-3; 3D i-(i+4)); the faces may coincide (zero thickness),
         ! so no volume Jacobian. The front face (integration face, Stiff.f90:123-131) must be non-degenerate.
         if(native_ndim==2) then
