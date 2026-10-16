@@ -1974,7 +1974,8 @@
         write(u,'(a,i0,a,i0,a,i0,a,*(1x,i0))') ' nelgroup=',group(ig)%nelgroup,' matno=',group(ig)%matno, &
             ' nfdof=',group(ig)%dof(1)%nfdof,' listdof=',group(ig)%dof(1)%listdof_f
     enddo
-    write(u,'(a,*(i0,:,","))') 'average_appear=',average_appear(1:ngroup)
+    ! only when output.stress_averaging_exclude is given (receipts of earlier pilots stay unchanged)
+    if(any(native_avg_off(1:ngroup))) write(u,'(a,*(i0,:,","))') 'average_appear=',average_appear(1:ngroup)
     do ib=1,nblks
         write(u,'(a,i0,a,i0,a,*(1x,i0))',advance='no') 'block ',ib,' uinitial=',uinitial(ib),' appear=',appear_process(1:ngroup,ib)
         write(u,'(a,*(1x,i0))') ' matno=',matno_process(1:ngroup,ib)
