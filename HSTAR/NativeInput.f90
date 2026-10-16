@@ -1208,7 +1208,8 @@ contains
       endif
       d=index(rest,".")
       seg=trim(rest); if(d>0) seg=rest(1:d-1)
-      if(in_list(seg,deferred)) call native_error("MAT: "//what//": "//seg// &
+      ! D3c: a table that is supported here (seg.@table allowed, e.g. section gap) reports the unknown key itself
+      if(in_list(seg,deferred) .and. .not.in_list(seg//".@table",allowed)) call native_error("MAT: "//what//": "//seg// &
         " is deferred in the MAT pilot (only linear_elastic / goodman_fcm); use the legacy .mat")
       if(in_list(trim(rest),"E nu thermal_expansion")) call native_error("MAT: unsupported key: "// &
         trim(doc%entry(i)%path)//" (contract spelling; with HSTAR_NATIVE_MAT=toml use elastic.youngs_modulus,"// &
