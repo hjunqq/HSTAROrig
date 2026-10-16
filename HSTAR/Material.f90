@@ -761,16 +761,6 @@
                             props(imat)%mechanical%solid%ClassicalEP%cft=native_mcj_curve(4,imat)
                             props(imat)%mechanical%solid%ClassicalEP%sigmat=0
                             props(imat)%mechanical%solid%ClassicalEP%csigmat=0
-                            call native_mcj_receipt(int(imat),props(imat)%mechanical%solid%ClassicalEP%sigma0, &
-                                props(imat)%mechanical%solid%ClassicalEP%hardening, &
-                                props(imat)%mechanical%solid%ClassicalEP%frict_angle, &
-                                props(imat)%mechanical%solid%ClassicalEP%dilan_angle, &
-                                props(imat)%mechanical%solid%ClassicalEP%ft, &
-                                int(props(imat)%mechanical%solid%ClassicalEP%csigma0), &
-                                int(props(imat)%mechanical%solid%ClassicalEP%cfrict), &
-                                int(props(imat)%mechanical%solid%ClassicalEP%cdilan), &
-                                int(props(imat)%mechanical%solid%ClassicalEP%cft),real(kstab,8),int(mat_curve), &
-                                trim(type_load),int(type_nl))
                         else
                         read(munit,*)props(imat)%mechanical%solid%ClassicalEP%csigma0
                         if (criteria(1:2)=='MC'.or.criteria(1:2)=='DP')                  &
@@ -783,6 +773,16 @@
                             props(imat)%mechanical%solid%ClassicalEP%sigmat,    &
                             props(imat)%mechanical%solid%ClassicalEP%csigmat
                         endif
+                        if(native_mode) call native_mcj_receipt(int(imat),props(imat)%mechanical%solid%ClassicalEP%sigma0, &
+                                props(imat)%mechanical%solid%ClassicalEP%hardening, &
+                                props(imat)%mechanical%solid%ClassicalEP%frict_angle, &
+                                props(imat)%mechanical%solid%ClassicalEP%dilan_angle, &
+                                props(imat)%mechanical%solid%ClassicalEP%ft, &
+                                int(props(imat)%mechanical%solid%ClassicalEP%csigma0), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cfrict), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cdilan), &
+                                int(props(imat)%mechanical%solid%ClassicalEP%cft),real(kstab,8),int(mat_curve), &
+                                trim(type_load),int(type_nl))
                     case('CAMCLAY')
                         if(native_mode) call native_mat_deferred('material model CAMCLAY')
                         allocate(props(imat)%mechanical%solid%CamClay)
