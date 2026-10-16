@@ -639,6 +639,7 @@
                         props(imat)%mechanical%solid%Goodman%model=model
                         print *,'model=',model
                         if (model=='JANBU') then
+                            if(native_mode) call native_mat_deferred('GOODMAN model JANBU (contact joints, joint pilot D3c)')
                             read(munit,*)props(imat)%mechanical%solid%Goodman%K1,       &
                                 props(imat)%mechanical%solid%Goodman%n,        &
                                 props(imat)%mechanical%solid%Goodman%Kzz,      &
@@ -695,6 +696,7 @@
                                 w0=5.618*Gf/ft
                                 props(imat)%mechanical%solid%Goodman%fcmp%w0=w0
                             elseif(xlwmodel==5)then
+                                if(native_mode) call native_mat_deferred('GOODMAN FCM softening law 5 (user table)')
                                 read(munit,*)props(imat)%mechanical%solid%Goodman%fcmp%w0, &
                                     props(imat)%mechanical%solid%Goodman%fcmp%w1,      &
                                     props(imat)%mechanical%solid%Goodman%fcmp%w2,       &
