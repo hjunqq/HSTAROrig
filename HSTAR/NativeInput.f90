@@ -1506,6 +1506,9 @@ contains
       " is deferred")
     if(native_fcm_law(i)<1 .or. native_fcm_law(i)>4) call native_error("MAT: material "//nm// &
       ": goodman.softening must be 1, 2, 3 or 4")
+    ! D3a decision: law 3 uses w0 = 209e-6 regardless of Gf (Material.f90:678 @da3ebfc) -> accepted, with a warning
+    if(native_fcm_law(i)==3) write(error_unit,"(a)") "MAT warning: material "//nm//": goodman.softening = 3 uses a fixed "// &
+      "w0 = 209e-6 m (legacy); goodman.fracture_energy is read but has no effect"
     v=number(p//".goodman.fracture_energy")
     if(v<=0 .or. v>1.e9_real64) call native_error("MAT: material "//nm//": goodman.fracture_energy out of range (0,1e9] N/m")
     native_fcm_gf(i)=v
