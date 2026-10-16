@@ -354,9 +354,11 @@ contains
     if(sr_amp_on) native_mat_curve=amp_ref('analysis.strength_reduction.amplitude')   ! D3b: legacy MAT_DE curve
     if(native_stab_matde/=99999 .and. native_stab_matde>native_blocks) call native_error('GLB: analysis.strength_reduction.'// &
       'reset_state_each_increment_from_step = '//itoa(native_stab_matde)//' exceeds the number of steps')
-    if((native_kstab/=0 .or. sr_amp_on .or. native_gid_ms+native_gid_ep+native_gid_y>0) .and. .not.any_mcj) &
-      call native_error('GLB: analysis.strength_reduction and output.field ms / ep / yield need an mc_joint material '// &
-        '(joint pilot D3b)')
+    if((native_kstab/=0 .or. sr_amp_on) .and. .not.any_mcj) &
+      call native_error('GLB: analysis.strength_reduction needs an mc_joint material (joint pilot D3b)')
+    if(native_gid_ms+native_gid_ep+native_gid_y>0 .and. .not.(any_mcj .or. any(native_mat_contact))) &
+      call native_error('GLB: output.field ms / ep / yield need an mc_joint or goodman_janbu material '// &
+        '(joint pilot D3b / D3c)')
     if(native_type_nl==4 .and. .not.(any_mcj .or. any(native_mat_contact))) call native_error('GLB: stiffness_update '// &
       '"every_iteration" needs an mc_joint or goodman_janbu material (joint pilot D3b / D3c)')
     if(native_loa_toml) call loa_check_used()
