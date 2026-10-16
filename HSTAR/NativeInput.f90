@@ -2032,8 +2032,10 @@ contains
       'strength_reduction.amplitude strength_reduction.reset_state_each_increment_from_step','')
     if(present_key('analysis.strength_reduction.@table')) then        ! D3b: legacy kstab / MAT_DE + mat_curve
       k=key_index('analysis.strength_reduction.@table')
-      if(.not.(present_key('analysis.strength_reduction.factor') .or. present_key('analysis.strength_reduction.amplitude'))) &
-        call native_error('GLB: [analysis.strength_reduction] needs factor and/or amplitude')
+      if(.not.(present_key('analysis.strength_reduction.factor') .or. present_key('analysis.strength_reduction.amplitude') &
+               .or. present_key('analysis.strength_reduction.reset_state_each_increment_from_step'))) &
+        call native_error('GLB: [analysis.strength_reduction] needs factor, amplitude and/or '// &
+          'reset_state_each_increment_from_step')
       if(present_key('analysis.strength_reduction.factor')) then
         native_kstab=number('analysis.strength_reduction.factor')
         if(.not.(native_kstab>0 .and. native_kstab<=100)) &
