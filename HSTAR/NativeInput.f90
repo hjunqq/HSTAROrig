@@ -1602,11 +1602,11 @@ contains
       ": mc_joint.tensile_strength out of range [0,1e12] Pa")
     native_mcj(5,i)=v
     native_mcj_curve(1,i)=scurve_ref_idx(p//".mc_joint.cohesion_curve",nm)
-    ! D3b: legacy cfrict / cdilan / cft curves are deferred: a friction_curve gives NaN stresses at the first yield in the
-    ! legacy MCJOINT path (S3 probe, D3B-EVIDENCE.md); no curve-driven phi / psi / ft from TOML until that is resolved
+    ! D3b: curve-driven friction / dilation / tensile strength (legacy cfrict / cdilan / cft) are not introduced yet
+    ! (user decision 2026-10-16); constant friction_angle / dilation_angle, cohesion via hardening or cohesion_curve
     if(present_key(p//".mc_joint.friction_curve") .or. present_key(p//".mc_joint.dilation_curve") .or. &
        present_key(p//".mc_joint.tensile_curve")) call native_error("MAT: material "//nm//": mc_joint.friction_curve / "// &
-      "dilation_curve / tensile_curve are deferred (legacy cfrict path gives NaN stresses; use friction_angle / "// &
+      "dilation_curve / tensile_curve are deferred (not introduced yet; use friction_angle / "// &
       "dilation_angle, cohesion_curve)")
     if(native_mcj(5,i)>0) write(error_unit,"(a)") "MAT warning: material "//nm// &
       ": mc_joint.tensile_strength has no effect (legacy Q4/B8 MCJOINT has no active tension"// &
