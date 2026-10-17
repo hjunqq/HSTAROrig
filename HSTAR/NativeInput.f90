@@ -943,8 +943,9 @@ contains
           nh=nh+1
           tmp(nh)=loa_hyd_t(native_surf(idx)%first,native_surf(idx)%last,amp_ref(q//".amplitude"),wl,bt,0._real64,wl-bt,gw,wa,0._real64)
         case("pressure")
-          ! pressure pilot: uniform pressure on the normal given by the face / edge node order (user 2026-10-16:
-          ! positive = along that normal, outward for the 1.set face/edge table forms) -> legacy water=0 rows
+          ! pressure pilot: uniform pressure (user 2026-10-16, clarified same day): face normal from node order
+          ! (outward for the 1.set face/edge table forms); positive magnitude pushes INTO the element
+          ! (Abaqus Dsload-P). Stored as magnitude; native_loa_press maps to legacy press = -magnitude
           nm=string_value(q//".surface")
           idx=0
           do i=1,ns
@@ -1159,12 +1160,13 @@ contains
     endif
   end subroutine
 
-  ! water=0 rows (Load.f90 "read i0, press(edimn+1,1:nnode)"): the uniform pressure at every node of the face / edge
+  ! water=0 rows (Load.f90 "read i0, press(edimn+1,1:nnode)"): TOML magnitude (positive = into the element)
+  ! maps to legacy nodal press along the node-order normal as press = -magnitude
   subroutine native_loa_press(iblk,ig,pr)
     integer, intent(in) :: iblk,ig
     real(real64), intent(out) :: pr(:)
     if(.not.native_loa_toml) call native_error("LOA: per-face pressure rows need HSTAR_NATIVE_LOA=toml")
-    pr=native_loa(iblk)%hyd(ig)%press
+    pr=-native_loa(iblk)%hyd(ig)%press
   end subroutine
 
   subroutine native_loa_hyd_values(iblk,ig,c0,c1,p0,p1,fact)
