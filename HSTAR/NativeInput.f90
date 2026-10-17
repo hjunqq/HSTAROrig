@@ -1461,7 +1461,12 @@ contains
         if(.not.(v>0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": layer_thickness out of range (0,1e3] m")
         native_elcod(g)=v
       elseif(present_key(p//".layer_thickness")) then
-        call native_error("MAT: section "//nm//': layer_thickness applies only to model "mc_joint" sections')
+        ! user 2026-10-17: any Q4 / B8 solid section may be a thin layer (legacy elcod_local, normal_local_inc)
+        if(.not.(et=="Q4" .or. et=="B8")) call native_error("MAT: section "//nm// &
+          ': layer_thickness applies only to Q4 / B8 solid sections (got element "'//et//'")')
+        v=number(p//".layer_thickness")
+        if(.not.(v>0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": layer_thickness out of range (0,1e3] m")
+        native_elcod(g)=v
       endif
       if(et=="L2" .or. et=="B2") then
         call section_geometry(p,nm,i,et)
@@ -2566,7 +2571,8 @@ contains
     integer :: dn(8), ndn
     logical :: degen
     integer :: nmixed
-    real(real64) :: jmax
+    real(real64) :: jmax, jmin, xr(3,8)
+    logical :: ok, frontrep
     character(4096) :: mixed_rows
     real(real64), allocatable :: xyz(:,:)
     logical, allocatable :: used(:)
@@ -2631,6 +2637,9 @@ contains
       if(nn==4 .and. native_gindex(g)==5 .and. .not.native_gjoint(g)) then
         degen=nodes(3)==nodes(4) .and. nodes(1)/=nodes(2) .and. nodes(1)/=nodes(3) .and. nodes(2)/=nodes(3)
       endif
+      ! user 2026-10-17 (thin layer): with layer_thickness legacy never integrates the stored back nodes
+      ! (Elements.f90 normal_local_inc rebuilds them), so repeated nodes are judged on the rebuilt element below
+      if(native_elcod(g)>0 .and. .not.native_gjoint(g)) degen=.true.
       if(.not.degen) then
       do j=2,nn
         if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node'// &
@@ -2639,14 +2648,30 @@ contains
       endif
       used(nodes(1:nn))=.true.
       if(allocated(mesh_ele)) mesh_ele(1:nn,k)=nodes(1:nn)
-      if(native_elcod(g)>0 .and. .not.degen) then
-        ! D3b: mc_joint thin layer: the legacy reader rebuilds the back nodes as front + normal*layer_thickness
-        ! (Elements.f90 normal_local_inc), so only the front edge (Q4 nodes 1-2) / face (B8 nodes 1-4) must be non-degenerate
+      if(native_elcod(g)>0 .and. .not.native_gjoint(g)) then
+        ! D3b / user 2026-10-17: thin layer (section.layer_thickness = legacy elcod_local, any Q4/B8 solid): legacy
+        ! rebuilds the back nodes as front + mean unit normal * layer_thickness (Elements.f90 normal_local_inc) and never
+        ! integrates the stored ones. 2D: the rebuilt Q4 (1, 2, 2+n, 1+n, n = left normal of 1->2) is valid iff edge 1-2
+        ! has length. 3D: the rebuilt B8 is checked at its 2x2x2 Gauss points (front face with repeated nodes: mixed
+        ! sign read with the warning, all non-positive rejected; otherwise any non-positive rejected).
         if(native_ndim==2) then
           if(sum((xyz(1:2,nodes(2))-xyz(1:2,nodes(1)))**2)<=0) &
-            call native_error('GLB: 1.ele row '//itoa(k)//': mc_joint layer front edge (nodes 1-2) has zero length')
-        elseif(q4_face_area(xyz(:,nodes(1:4)))<=0) then
-          call native_error('GLB: 1.ele row '//itoa(k)//': mc_joint layer front face (nodes 1-4) has zero area')
+            call native_error('GLB: 1.ele row '//itoa(k)//': thin layer front edge (nodes 1-2) has zero length')
+        else
+          if(q4_face_area(xyz(:,nodes(1:4)))<=0) &
+            call native_error('GLB: 1.ele row '//itoa(k)//': thin layer front face (nodes 1-4) has zero area')
+          call thin_layer_rebuild(xyz(:,nodes(1:4)),native_elcod(g),xr,ok)
+          if(.not.ok) call native_error('GLB: 1.ele row '//itoa(k)// &
+            ': thin layer front face (nodes 1-4) has no normal at a Gauss point')
+          jmin=b8_gauss_min_jacobian(xr,jmax)
+          frontrep=nodes(1)==nodes(2) .or. nodes(1)==nodes(3) .or. nodes(1)==nodes(4) .or. nodes(2)==nodes(3) .or. &
+                   nodes(2)==nodes(4) .or. nodes(3)==nodes(4)
+          if(jmax<=0 .or. (jmin<=0 .and. .not.frontrep)) call native_error('GLB: 1.ele row '//itoa(k)// &
+            ': thin layer (rebuilt back nodes) B8 Jacobian is not positive at the Gauss points')
+          if(jmin<=0) then
+            nmixed=nmixed+1
+            if(len_trim(mixed_rows)<len(mixed_rows)-12) mixed_rows=trim(mixed_rows)//' '//itoa(k)
+          endif
         endif
       elseif(native_gjoint(g)) then
         ! D3a: a joint row is two faces (node pairs 2D 1-4, 2-3; 3D i-(i+4)); the faces may coincide (zero thickness),
@@ -2765,6 +2790,36 @@ contains
   end function
 
   ! D3a: area of a 3D quadrilateral face (two triangles 1-2-3, 1-3-4)
+  ! Legacy thin-layer geometry (Elements.f90 normal_local_inc, 3D): unit normals of the bilinear front face at its 2x2
+  ! Gauss points are averaged and normalised; back node i+4 = front node i + normal * h. ok=.false. if a normal vanishes.
+  subroutine thin_layer_rebuild(f,h,x,ok)
+    real(real64), intent(in) :: f(3,4), h
+    real(real64), intent(out) :: x(3,8)
+    logical, intent(out) :: ok
+    real(real64), parameter :: xi(4)=[-1,1,1,-1], et(4)=[-1,-1,1,1]
+    real(real64) :: g, s(3), t(3), n(3), r(3), a
+    integer :: ip, i
+    g=1._real64/sqrt(3._real64); r=0; ok=.true.
+    do ip=1,4
+      s=0; t=0
+      do i=1,4
+        s=s+f(:,i)*xi(i)*(1+et(i)*g*et(ip))/4
+        t=t+f(:,i)*et(i)*(1+xi(i)*g*xi(ip))/4
+      enddo
+      n=[s(2)*t(3)-s(3)*t(2), s(3)*t(1)-s(1)*t(3), s(1)*t(2)-s(2)*t(1)]
+      a=sqrt(sum(n**2))
+      if(a<=0) then; ok=.false.; return; endif
+      r=r+n/a
+    enddo
+    a=sqrt(sum(r**2))
+    if(a<=0) then; ok=.false.; return; endif
+    r=r/a
+    x(:,1:4)=f
+    do i=1,4
+      x(:,i+4)=f(:,i)+r*h
+    enddo
+  end subroutine
+
   real(real64) function q4_face_area(x)
     real(real64), intent(in) :: x(3,4)
     real(real64) :: a(3), b(3), c(3)
