@@ -1613,6 +1613,7 @@
             if(native_heat) group(igroup)%fieldid='T'
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
+            if(native_gps(igroup)) group(igroup)%sptype='PS'   ! section formulation "plane_stress"
             group(igroup)%nelgroup=native_elcounts(igroup)
             group(igroup)%matno=native_group_mat(igroup)
             call native_mat_group_receipt(igroup,int(group(igroup)%matno))

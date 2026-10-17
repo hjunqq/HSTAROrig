@@ -461,6 +461,25 @@ contains
       return
     endif
     if(sets_elnn(e)/=8) then; msg=who//': face_nodes surfaces need B8 elements (element '//itoa(e)//')'; return; endif
+    if(any([(count(nd(1:4)==nd(j))>1, j=1,4)])) then
+      ! degenerate face (collapsed B8, repeated nodes; user 2026-10-17): the listed sequence must be exactly a cyclic
+      ! rotation of one face, in either direction; exactly one face may match
+      p=0
+      do k=1,6
+        f=sets_elnodes(B8_FACE(:,k),e)
+        ok=.false.
+        do j=0,3
+          if(all(nd(1:4)==cshift(f,j)) .or. all(nd(1:4)==cshift(f(4:1:-1),j))) ok=.true.
+        enddo
+        if(ok) then; id=k; p=p+1; endif
+      enddo
+      if(p/=1) then
+        id=0
+        msg=who//': nodes '//itoa(nd(1))//' '//itoa(nd(2))//' '//itoa(nd(3))//' '//itoa(nd(4))// &
+          ' (repeated node) match '//itoa(p)//' faces of element '//itoa(e)//' in as-listed cyclic order (need exactly 1)'
+      endif
+      return
+    endif
     do k=1,6
       f=sets_elnodes(B8_FACE(:,k),e)
       ok=.true.

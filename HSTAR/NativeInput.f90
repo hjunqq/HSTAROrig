@@ -26,6 +26,7 @@ module native_input
   integer :: native_gindex(NATIVE_MAXG)=5, native_gnnode(NATIVE_MAXG)=4
   ! beam pilot C2: B2 = legacy index 20 (b2, 2-node beam). point_direct from section.orientation.node_pair (0 0 = default).
   integer :: native_pdir(2,NATIVE_MAXG)=0
+  logical, save :: native_gps(NATIVE_MAXG)=.false.   ! plane stress (legacy group SPTYPE 'PS'), section formulation "plane_stress"
   logical :: native_beam=.false.                  ! any B2 section: legacy mdofn 6 (3D) / 4 (2D, rotation in slot 4)
   integer, private :: force_unit, force_frame=0
   integer, parameter :: native_nodes(17) = [1,18,35,52,69,86,103,120,137,154,171,188,205,222,239,256,273]
@@ -2364,8 +2365,12 @@ contains
       case('Q4')
         if(native_ndim/=2) call native_error('GLB: section '//p//': element Q4 needs mesh.dimension 2')
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with Q4 is deferred (only B8)')
-        if(string_value(p//'.formulation')/='plane_strain') &
-          call native_error('GLB: section '//p//': 2D Q4 supports only formulation "plane_strain"')
+        select case(string_value(p//'.formulation'))
+        case('plane_strain'); native_gps(g)=.false.
+        case('plane_stress'); native_gps(g)=.true.    ! legacy SPTYPE 'PS' (user 2026-10-17)
+        case default
+          call native_error('GLB: section '//p//': 2D Q4 formulation must be "plane_strain" or "plane_stress"')
+        end select
         native_gname(g)='Q4'; native_gindex(g)=5; native_gnnode(g)=4
       case('B8')
         if(native_ndim/=3) call native_error('GLB: section '//p//': element B8 needs mesh.dimension 3')
