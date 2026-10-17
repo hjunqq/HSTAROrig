@@ -2099,8 +2099,7 @@ contains
       ': orientation.node_pair needs exactly 2 node ids')
     do j=1,2
       native_pdir(j,g)=integer_value(p//'.orientation.node_pair['//itoa(j)//']')
-      if(native_pdir(j,g)<1 .or. native_pdir(j,g)>native_points) call native_error('GLB: section '//p// &
-        ': orientation.node_pair node out of range 1..'//itoa(native_points))
+      if(native_pdir(j,g)<1) call native_error('GLB: section '//p//': orientation.node_pair node must be >= 1')
     enddo
     if(native_pdir(1,g)==native_pdir(2,g)) call native_error('GLB: section '//p// &
       ': orientation.node_pair needs two different nodes')
@@ -2540,6 +2539,9 @@ contains
     native_points=glb_count_rows(trim(native_mesh_prefix)//'.cor')
     native_elements=glb_count_rows(trim(native_mesh_prefix)//'.ele')
     if(native_points<1) call native_error('GLB: 1.cor has no rows')
+    ! orientation node ids: checked here, after 1.cor is counted (sections are parsed before the mesh counts)
+    if(any(native_pdir(:,1:ng)>native_points)) call native_error('GLB: orientation.node_pair node out of range 1..'// &
+      itoa(native_points))
     if(total/=native_elements) call native_error('GLB: sum of elset element_count ('//itoa(total)// &
       ') does not match the '//itoa(native_elements)//' element rows of 1.ele')
     do g=1,ng
