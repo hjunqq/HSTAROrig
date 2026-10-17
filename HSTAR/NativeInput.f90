@@ -1305,6 +1305,8 @@ contains
     if(native_loa_toml) tcg=merge(k,0,native_loa(iblk)%gsel(1:size(tcg)))
     ! dam profile and GLB=toml: element sets not active in this step carry no gravity curve
     if(native_dam .or. native_glb_toml) tcg=merge(k,0,native_appearance(1:size(tcg),iblk)>0)
+    ! seepage S1: gravity apply_to = [element sets] also when GLB comes from TOML
+    if(native_loa_toml) tcg=merge(tcg,0,native_loa(iblk)%gsel(1:size(tcg)))
   end subroutine
 
   subroutine native_loa_deferred(what)
