@@ -1378,14 +1378,17 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_special_blocks', &
         'text',text)
     if(native_mode) then
-        ftcrack=1.5e6
-        coefMpa=1.e6
-        ikindks=0
-        doubsig=2
-        ktan1=1.e8
-        ktan2=1.e8
-        nlocalbeam=0
-        ndimnrt=0
+        ! steel25 pilot: [crack] / [bond_slip] (defaults = the former fixed values 1.5e6 1e6 0 2 1e8 1e8 0 0)
+        ftcrack=native_ftcrack
+        coefMpa=native_coefmpa
+        ikindks=native_ikindks
+        doubsig=native_doubsig
+        ktan1=native_ktan1
+        ktan2=native_ktan2
+        nlocalbeam=native_nlocalbeam
+        ndimnrt=native_ndimnrt
+        if(nlocalbeam>0) listglocbeam(1:nlocalbeam)=native_listglocbeam(1:nlocalbeam)
+        if(ndimnrt>0) lelenrt(1:ndimnrt)=native_lelenrt(1:ndimnrt)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)ftcrack,coefMpa,ikindks,doubsig,ktan1,ktan2,nlocalbeam,ndimnrt,listglocbeam(1:nlocalbeam),lelenrt(1:ndimnrt)
     endif

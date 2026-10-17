@@ -28,6 +28,15 @@ module native_input
   integer :: native_pdir(2,NATIVE_MAXG)=0
   logical, save :: native_gps(NATIVE_MAXG)=.false.   ! plane stress (legacy group SPTYPE 'PS'), section formulation "plane_stress"
   logical :: native_beam=.false.                  ! any B2 section: legacy mdofn 6 (3D) / 4 (2D, rotation in slot 4)
+  ! steel25 pilot: [[section]] element "bond_slip" = legacy index 25 "steel" (2-node bond-slip spring), and the
+  ! .glb global bond line ftcrack coefMpa ikindks doubsig ktan1 ktan2 nlocalbeam ndimnrt listglocbeam lelenrt
+  ! from top-level [bond_slip] / [crack]. Defaults = the values native mode used before this pilot.
+  logical :: native_bond=.false.
+  integer :: native_ikindks=0, native_doubsig=2, native_nlocalbeam=0, native_ndimnrt=0
+  real(real64) :: native_coefmpa=1.e6_real64, native_ktan1=1.e8_real64, native_ktan2=1.e8_real64
+  real(real64) :: native_ftcrack=1.5e6_real64
+  integer :: native_listglocbeam(NATIVE_MAXG)=0
+  integer, allocatable :: native_lelenrt(:)
   integer, private :: force_unit, force_frame=0
   integer, parameter :: native_nodes(17) = [1,18,35,52,69,86,103,120,137,154,171,188,205,222,239,256,273]
   type(toml_doc_t), private :: doc
@@ -2416,15 +2425,21 @@ contains
         native_gname(g)='L2'; native_gindex(g)=20; native_gnnode(g)=2
         native_beam=.true.
         call glb_beam_orientation(p,g)
+      case('bond_slip')                   ! steel25 pilot: legacy index 25 "steel", 2-node bond-slip spring (translations)
+        if(native_heat) call native_error('GLB: section '//p//': transient_heat with bond_slip is deferred')
+        if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
+          ': formulation does not apply to element bond_slip (2-node bond-slip spring)')
+        native_gname(g)='L2'; native_gindex(g)=25; native_gnnode(g)=2
+        native_bond=.true.
       case('steel')
-        call native_error('GLB: section '//p//': element "steel" (legacy index 25, bond-slip link between a bar '// &
-          'and its host) is deferred: it needs the .glb bond-slip parameters ikindks/doubsig/ktan1/ktan2/coefMpa/'// &
-          'nlocalbeam, which have no TOML keys yet')
+        call native_error('GLB: section '//p//': element "steel" is spelled "bond_slip" in TOML (legacy index 25)')
       case default
-        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2 / B2 / joint)')
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot '// &
+          '(only Q4 / B8 / T4 / L2 / B2 / joint / bond_slip)')
       end select
       seen_el(g)=.true.
     enddo
+    call parse_bond_slip(ng,ename)
     ! [[step]] skeleton: active element sets, reset, increments (load/boundary/controls data: LOA/PRE/MAN)
     nb=doc%count_of('step')
     if(nb<1 .or. nb>NATIVE_MAXB) call native_error('GLB: need 1..'//itoa(NATIVE_MAXB)//' [[step]] tables')
@@ -2559,6 +2574,139 @@ contains
     call native_error("NRT: "//what//" is deferred (temperature pilot: only TRAL ties from 1.set)")
   end subroutine
 
+  ! steel25 pilot: top-level [crack] (ftcrack) and [bond_slip] (the legacy .glb global bond line). Values are passed
+  ! through unchanged; only the representation is checked (DESIGN.md steel25-pilot section 5).
+  subroutine parse_bond_slip(ng,ename)
+    integer, intent(in) :: ng
+    character(len=TOML_LEN_TEXT), intent(in) :: ename(:)
+    character(:), allocatable :: s, q
+    integer :: k, j, n, g, m, first, e
+    real(real64) :: st, r
+    logical :: has, taken(NATIVE_MAXG)
+    if(present_key('crack.@table')) then
+      k=key_index('crack.@table')
+      call glb_check_keys('crack','@table tensile_strength','')
+      if(.not.present_key('crack.tensile_strength')) call native_error('GLB: [crack] needs tensile_strength (legacy ftcrack)')
+      native_ftcrack=number('crack.tensile_strength')
+      if(.not.(native_ftcrack>0)) call native_error('GLB: crack.tensile_strength must be > 0')
+    endif
+    has=present_key('bond_slip.@table')
+    if(native_bond .and. .not.has) call native_error('GLB: element "bond_slip" needs a top-level [bond_slip] table '// &
+      '(legacy .glb bond line: law, unit_factor, normal)')
+    if(has .and. .not.native_bond) call native_error('GLB: [bond_slip] is given but no [[section]] has element "bond_slip"')
+    if(.not.has) return
+    k=key_index('bond_slip.@table')
+    call glb_check_keys('bond_slip','@table law stiffness unit_factor normal', &
+      'normal_stiffness local_bar_sets axial_constraint_elsets')
+    if(.not.present_key('bond_slip.unit_factor')) call native_error('GLB: [bond_slip] needs unit_factor (legacy coefMpa: '// &
+      'model stress units per MPa, 1.0e6 for Pa, 1.0e3 for kPa)')
+    native_coefmpa=number('bond_slip.unit_factor')
+    if(.not.(native_coefmpa>0)) call native_error('GLB: bond_slip.unit_factor must be > 0')
+    if(.not.present_key('bond_slip.law')) call native_error('GLB: [bond_slip] needs law (1..5 or "linear")')
+    k=key_index('bond_slip.law')
+    select case(doc%entry(k)%kind)
+    case(TV_INT)
+      native_ikindks=doc%entry(k)%ivalue
+      if(native_ikindks<1 .or. native_ikindks>5) call native_error('GLB: bond_slip.law must be 1..5 (legacy ikindks) '// &
+        'or "linear"')
+      if(present_key('bond_slip.stiffness')) call native_error('GLB: bond_slip.stiffness applies only to law = "linear"')
+    case(TV_STR)
+      if(doc%entry(k)%svalue/='linear') call native_error('GLB: bond_slip.law must be 1..5 (legacy ikindks) or "linear"')
+      if(.not.present_key('bond_slip.stiffness')) call native_error('GLB: law = "linear" needs bond_slip.stiffness '// &
+        '(bond stress per unit slip, model stress units per m)')
+      st=number('bond_slip.stiffness')
+      if(.not.(st>0)) call native_error('GLB: bond_slip.stiffness must be > 0')
+      ! legacy ikindks<0: ks=10**(-ikindks), ikindks>99: ks=ikindks, in MPa/mm; the solver scales by coefMpa*1000
+      r=st/(native_coefmpa*1000._real64)
+      native_ikindks=0
+      n=nint(log10(r))
+      if(n>=1 .and. n<=99) then
+        if(abs(10._real64**n-r)<=1.e-12_real64*r) native_ikindks=-n
+      endif
+      if(native_ikindks==0 .and. r>99.5_real64 .and. r<2.e9_real64) then
+        if(abs(anint(r)-r)<=1.e-9_real64*r) native_ikindks=nint(r)
+      endif
+      if(native_ikindks==0) call native_error('GLB: bond_slip.stiffness / (unit_factor*1000) must be 10^n (n = 1..99) '// &
+        'or an integer > 99 (the legacy ikindks code of a linear bond law)')
+    case default
+      call native_error('GLB: bond_slip.law must be an integer 1..5 or "linear"')
+    end select
+    s=string_value('bond_slip.normal')
+    select case(s)
+    case('spring')
+      native_doubsig=2
+      if(.not.present_key('bond_slip.normal_stiffness.count')) call native_error('GLB: normal = "spring" needs '// &
+        'bond_slip.normal_stiffness (legacy ktan1 [, ktan2])')
+      n=integer_value('bond_slip.normal_stiffness.count')
+      if(n/=native_ndim-1) call native_error('GLB: bond_slip.normal_stiffness needs '//itoa(native_ndim-1)// &
+        ' value(s) for mesh.dimension '//itoa(native_ndim))
+      native_ktan1=number('bond_slip.normal_stiffness[1]')
+      native_ktan2=native_ktan1
+      if(n==2) native_ktan2=number('bond_slip.normal_stiffness[2]')
+      if(.not.(native_ktan1>0 .and. native_ktan2>0)) call native_error('GLB: bond_slip.normal_stiffness must be > 0')
+      if(present_key('bond_slip.axial_constraint_elsets.count')) call native_error('GLB: bond_slip.axial_constraint_elsets '// &
+        'applies only to normal = "constraint" (legacy lelenrt with doubsig 1)')
+    case('constraint')
+      native_doubsig=1
+      if(present_key('bond_slip.normal_stiffness.count')) call native_error('GLB: bond_slip.normal_stiffness applies only '// &
+        'to normal = "spring" (legacy doubsig 1 does not use ktan1/ktan2)')
+    case default
+      call native_error('GLB: bond_slip.normal must be "spring" (legacy doubsig 2) or "constraint" (doubsig 1)')
+    end select
+    native_nlocalbeam=0; taken=.false.
+    if(present_key('bond_slip.local_bar_sets.count')) then
+      n=integer_value('bond_slip.local_bar_sets.count')
+      if(n<1) call native_error('GLB: bond_slip.local_bar_sets is empty')
+      do j=1,n
+        q=string_value(indexed('bond_slip.local_bar_sets',j))
+        g=bond_elset(q,ng,ename,'local_bar_sets')
+        if(native_gindex(g)/=1 .and. native_gindex(g)/=20) call native_error('GLB: bond_slip.local_bar_sets: "'//q// &
+          '" is not an L2 / B2 element set')
+        if(taken(g)) call native_error('GLB: bond_slip.local_bar_sets lists "'//q//'" twice')
+        taken(g)=.true.
+        native_nlocalbeam=native_nlocalbeam+1
+        native_listglocbeam(native_nlocalbeam)=g
+      enddo
+    endif
+    native_ndimnrt=0; taken=.false.
+    if(present_key('bond_slip.axial_constraint_elsets.count')) then
+      n=integer_value('bond_slip.axial_constraint_elsets.count')
+      if(n<1) call native_error('GLB: bond_slip.axial_constraint_elsets is empty')
+      m=0
+      do j=1,n
+        q=string_value(indexed('bond_slip.axial_constraint_elsets',j))
+        g=bond_elset(q,ng,ename,'axial_constraint_elsets')
+        if(native_gindex(g)/=25) call native_error('GLB: bond_slip.axial_constraint_elsets: "'//q// &
+          '" is not a bond_slip element set')
+        if(taken(g)) call native_error('GLB: bond_slip.axial_constraint_elsets lists "'//q//'" twice')
+        taken(g)=.true.
+        m=m+native_elcounts(g)
+      enddo
+      allocate(native_lelenrt(m))
+      do j=1,n
+        q=string_value(indexed('bond_slip.axial_constraint_elsets',j))
+        g=bond_elset(q,ng,ename,'axial_constraint_elsets')
+        first=sum(native_elcounts(1:g-1))           ! elsets follow the element order of 1.ele
+        do e=1,native_elcounts(g)
+          native_ndimnrt=native_ndimnrt+1
+          native_lelenrt(native_ndimnrt)=first+e
+        enddo
+      enddo
+    endif
+  end subroutine
+
+  integer function bond_elset(q,ng,ename,what) result(g)
+    character(*), intent(in) :: q, what
+    integer, intent(in) :: ng
+    character(len=TOML_LEN_TEXT), intent(in) :: ename(:)
+    integer :: j
+    g=0
+    do j=1,ng
+      if(trim(ename(j))==q) g=j
+    enddo
+    if(g==0) call native_error('GLB: bond_slip.'//what//': undefined element set "'//q//'"')
+  end function
+
   subroutine native_glb_deferred(what)
     character(*), intent(in) :: what
     call native_error("GLB: "//what//" is deferred (GLB pilot) and cannot be driven by TOML")
@@ -2578,9 +2726,13 @@ contains
     logical, allocatable :: used(:)
     real(real64) :: c(3)
     character(1024) :: row
+    logical, allocatable :: barnode(:)
+    integer, allocatable :: bondrow(:,:)
+    integer :: nbond
     nmixed=0; mixed_rows=''
     nd=native_ndim
     allocate(xyz(3,native_points), used(native_points)); xyz=0; used=.false.
+    allocate(barnode(native_points), bondrow(3,native_elements)); barnode=.false.; nbond=0
     if(native_heat) then
       allocate(mesh_ele(8,native_elements)); mesh_ele=0
     endif
@@ -2625,6 +2777,10 @@ contains
         itoa(g)//' (elsets follow the element order of 1.ele)')
       if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
         call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
+      if(native_gindex(g)==1 .or. native_gindex(g)==20) barnode(nodes(1:2))=.true.
+      if(native_gindex(g)==25) then
+        nbond=nbond+1; bondrow(1:2,nbond)=nodes(1:2); bondrow(3,nbond)=k
+      endif
       degen=.false.
       ! user 2026-10-17: a B8 solid row may collapse in any node pattern (as legacy); the 2x2x2 Gauss-point Jacobian
       ! check below decides (a collapse that leaves any Gauss point with det J <= 0 is rejected)
@@ -2682,6 +2838,9 @@ contains
         elseif(q4_face_area(xyz(:,nodes(1:4)))<=0) then
           call native_error('GLB: 1.ele row '//itoa(k)//': joint front face (nodes 1-4) has zero area')
         endif
+      elseif(nn==2 .and. native_gindex(g)==25) then
+        ! steel25 pilot: a bond-slip spring joins a bar node to a host node; zero length (coincident nodes) is normal
+        if(nodes(1)==nodes(2)) call native_error('GLB: 1.ele row '//itoa(k)//': bond_slip element joins a node to itself')
       elseif(nn==2) then
         if(sum((xyz(:,nodes(2))-xyz(:,nodes(1)))**2)<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': L2 element has zero length')
@@ -2716,6 +2875,12 @@ contains
     read(u,'(a)',iostat=ios) row
     if(ios >= 0) call native_error('extra mesh element row')
     close(u)
+    ! steel25 pilot: legacy steel_spring_parameter / Stiff.f90 index 25 need exactly one node of each spring on a
+    ! bar (L2 / B2) element (icpspring), otherwise the solver stops ('stop here!')
+    do j=1,nbond
+      if(count(barnode(bondrow(1:2,j)))/=1) call native_error('GLB: 1.ele row '//itoa(bondrow(3,j))// &
+        ': bond_slip element needs exactly one of its 2 nodes on an L2 / B2 bar element (legacy icpspring)')
+    enddo
     do k=1,native_points
       if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
     enddo
