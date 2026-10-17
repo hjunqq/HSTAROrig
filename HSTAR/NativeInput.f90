@@ -2616,20 +2616,12 @@ contains
       if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
         call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
       degen=.false.
+      ! user 2026-10-17: a B8 solid row may collapse in any node pattern (as legacy); the 2x2x2 Gauss-point Jacobian
+      ! check below decides (a collapse that leaves any Gauss point with det J <= 0 is rejected)
       if(nn==8 .and. native_gindex(g)==9 .and. .not.native_gjoint(g)) then
-        degen=(nodes(3)==nodes(4) .and. nodes(7)==nodes(8) .and. count(nodes(1:8)==nodes(3))==2 .and. &
-               count(nodes(1:8)==nodes(7))==2) .or. &
-              (all(nodes(6:8)==nodes(5)) .and. count(nodes(1:8)==nodes(5))==4)
-        if(degen) then                  ! the remaining distinct nodes must not repeat
-          if(nodes(5)==nodes(8)) then
-            dn(1:5)=nodes(1:5); ndn=5
-          else
-            dn(1:3)=nodes(1:3); dn(4:6)=nodes(5:7); ndn=6
-          endif
-          do j=2,ndn
-            if(any(dn(1:j-1)==dn(j))) degen=.false.
-          enddo
-        endif
+        do j=2,8
+          if(any(nodes(1:j-1)==nodes(j))) degen=.true.
+        enddo
       endif
       ! D3b (train05): Q4 triangle collapse 3=4 (legacy Q4 row with a repeated last node); nodes 1-3 distinct
       if(nn==4 .and. native_gindex(g)==5 .and. .not.native_gjoint(g)) then
@@ -2638,7 +2630,7 @@ contains
       if(.not.degen) then
       do j=2,nn
         if(any(nodes(1:j-1)==nodes(j))) call native_error('GLB: 1.ele row '//itoa(k)//': repeated node'// &
-          ' (only the Q4 triangle 3=4, B8 wedge 3=4,7=8 and pyramid 5=6=7=8 collapses are accepted)')
+          ' (only the Q4 triangle 3=4 collapse and B8 solid collapses are accepted)')
       enddo
       endif
       used(nodes(1:nn))=.true.
@@ -2777,7 +2769,7 @@ contains
     d=a(1)*(b(2)*c(3)-b(3)*c(2))-a(2)*(b(1)*c(3)-b(3)*c(1))+a(3)*(b(1)*c(2)-b(2)*c(1))
   end function
 
-  ! D1: degenerate B8 (legacy wedge = nodes 3=4 and 7=8, pyramid = nodes 5=6=7=8): legacy integrates it with the
+  ! D1: degenerate B8 (any collapse pattern, e.g. wedge 3=4,7=8 / pyramid 5=6=7=8): legacy integrates it with the
   ! 2x2x2 B8 rule, so its Jacobian must be positive at those Gauss points (it is 0 at the collapsed corners).
   real(real64) function b8_gauss_min_jacobian(x) result(dmin)
     real(real64), intent(in) :: x(3,8)
