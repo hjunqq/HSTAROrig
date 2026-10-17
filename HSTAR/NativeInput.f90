@@ -2565,10 +2565,14 @@ contains
     integer :: nodes(8)
     integer :: dn(8), ndn
     logical :: degen
+    integer :: nmixed
+    real(real64) :: jmax
+    character(4096) :: mixed_rows
     real(real64), allocatable :: xyz(:,:)
     logical, allocatable :: used(:)
     real(real64) :: c(3)
     character(1024) :: row
+    nmixed=0; mixed_rows=''
     nd=native_ndim
     allocate(xyz(3,native_points), used(native_points)); xyz=0; used=.false.
     if(native_heat) then
@@ -2668,14 +2672,22 @@ contains
         if(q4_min_jacobian(xyz(1:2,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': Q4 Jacobian is not positive (node order / distortion)')
       elseif(degen) then
-        if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)))<=0) &
-          call native_error('GLB: 1.ele row '//itoa(k)//': degenerate B8 Jacobian is not positive at the Gauss points')
+        ! user 2026-10-17: a collapsed B8 is rejected only if det J <= 0 at all 8 Gauss points; mixed sign is read
+        ! (as legacy) with a warning listing the rows
+        if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)),jmax)<=0) then
+          if(jmax<=0) call native_error('GLB: 1.ele row '//itoa(k)// &
+            ': degenerate B8 Jacobian is not positive at any Gauss point')
+          nmixed=nmixed+1
+          if(len_trim(mixed_rows)<len(mixed_rows)-12) mixed_rows=trim(mixed_rows)//' '//itoa(k)
+        endif
       else
         ! user 2026-10-17: regular B8 checked at the 2x2x2 Gauss points, where legacy evaluates the Jacobian (was corners)
         if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': B8 Jacobian is not positive at the Gauss points (node order / distortion)')
       endif
     enddo
+    if(nmixed>0) write(*,'(a)') 'WARNING native mesh: '//itoa(nmixed)//' degenerate B8 row(s) with mixed-sign'// &
+      ' Jacobian at the Gauss points (read as legacy): 1.ele rows'//trim(mixed_rows)
     read(u,'(a)',iostat=ios) row
     if(ios >= 0) call native_error('extra mesh element row')
     close(u)
@@ -2771,13 +2783,15 @@ contains
 
   ! D1: degenerate B8 (any collapse pattern, e.g. wedge 3=4,7=8 / pyramid 5=6=7=8): legacy integrates it with the
   ! 2x2x2 B8 rule, so its Jacobian must be positive at those Gauss points (it is 0 at the collapsed corners).
-  real(real64) function b8_gauss_min_jacobian(x) result(dmin)
+  real(real64) function b8_gauss_min_jacobian(x, dmax) result(dmin)
     real(real64), intent(in) :: x(3,8)
+    real(real64), intent(out), optional :: dmax
     real(real64), parameter :: xi(8)=[-1,1,1,-1,-1,1,1,-1], et(8)=[-1,-1,1,1,-1,-1,1,1], ze(8)=[-1,-1,-1,-1,1,1,1,1]
-    real(real64) :: p(3), j(3,3), dn(3), g
+    real(real64) :: p(3), j(3,3), dn(3), g, g8
     integer :: ip, a
     g=1._real64/sqrt(3._real64)
     dmin=huge(1._real64)
+    if(present(dmax)) dmax=-huge(1._real64)
     do ip=1,8
       p=g*[xi(ip),et(ip),ze(ip)]
       j=0
@@ -2787,8 +2801,10 @@ contains
         dn(3)=ze(a)*(1+xi(a)*p(1))*(1+et(a)*p(2))/8
         j(:,1)=j(:,1)+x(:,a)*dn(1); j(:,2)=j(:,2)+x(:,a)*dn(2); j(:,3)=j(:,3)+x(:,a)*dn(3)
       enddo
-      dmin=min(dmin, j(1,1)*(j(2,2)*j(3,3)-j(3,2)*j(2,3)) - j(1,2)*(j(2,1)*j(3,3)-j(3,1)*j(2,3)) &
-                     + j(1,3)*(j(2,1)*j(3,2)-j(3,1)*j(2,2)))
+      g8=j(1,1)*(j(2,2)*j(3,3)-j(3,2)*j(2,3)) - j(1,2)*(j(2,1)*j(3,3)-j(3,1)*j(2,3)) &
+         + j(1,3)*(j(2,1)*j(3,2)-j(3,1)*j(2,2))
+      dmin=min(dmin,g8)
+      if(present(dmax)) dmax=max(dmax,g8)
     enddo
   end function
 
