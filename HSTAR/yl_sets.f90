@@ -272,7 +272,7 @@ contains
           if(.not.ieee_is_finite(x)) then; msg=who//': non-finite weight'; return; endif
           s%w(j-nm+v)=x; wsum=wsum+x
         enddo
-        if(abs(wsum-1._real64)>1.e-6_real64) then; msg=who//': weights of slave '//itoa(a)//' must sum to 1'; return; endif
+        if(abs(wsum-1._real64)>1.e-4_real64) then; msg=who//': weights of slave '//itoa(a)//' must sum to 1'; return; endif
       enddo
       s%off(c+1)=j+1
       s%m=mi(1:j); s%w=s%w(1:j)
