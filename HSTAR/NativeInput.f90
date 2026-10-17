@@ -92,6 +92,7 @@ module native_input
   type :: loa_step_t
     real(real64) :: g=0, dir(3)=0, fdir(3)=0
     integer :: gamp=0
+    logical :: gsel(NATIVE_MAXG)=.true.     ! seepage S1: gravity apply_to = [element sets] (legacy tcurvegravity per group)
     type(loa_hyd_t), allocatable :: hyd(:)
   end type
   type(loa_step_t), allocatable :: native_loa(:)
@@ -984,7 +985,23 @@ contains
           endif
           if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": gravity amplitude is required")
           native_loa(s)%gamp=amp_ref(q//".amplitude")
-          if(string_value(q//".apply_to")/="all") call native_error("LOA: step "//itoa(s)//": gravity apply_to must be ""all""")
+          if(native_seep .and. present_key(q//".apply_to.count")) then
+            ! seepage S1: legacy .loa tcurvegravity(1:ngroup) may switch the W-field gravity term on for some groups only
+            native_loa(s)%gsel=.false.
+            if(integer_value(q//".apply_to.count")<1) call native_error("LOA: step "//itoa(s)//": gravity apply_to list is empty")
+            do j=1,integer_value(q//".apply_to.count")
+              nm=string_value(indexed(q//".apply_to",j))
+              idx=0
+              do i=1,native_materials
+                if(trim(native_kname(i))==nm) idx=i
+              enddo
+              if(idx==0) call native_error("LOA: step "//itoa(s)//": gravity apply_to: undefined element set "//nm)
+              if(native_loa(s)%gsel(idx)) call native_error("LOA: step "//itoa(s)//": gravity apply_to lists "//nm//" twice")
+              native_loa(s)%gsel(idx)=.true.
+            enddo
+          elseif(string_value(q//".apply_to")/="all") then
+            call native_error("LOA: step "//itoa(s)//": gravity apply_to must be ""all""")
+          endif
           native_loa(s)%g=g; native_loa(s)%dir=d; native_loa(s)%fdir=fd
           native_gravity(s)=g
         case("hydrostatic")
@@ -1285,6 +1302,7 @@ contains
     k=1
     if(native_loa_toml) k=native_loa(iblk)%gamp
     tcg=k
+    if(native_loa_toml) tcg=merge(k,0,native_loa(iblk)%gsel(1:size(tcg)))
     ! dam profile and GLB=toml: element sets not active in this step carry no gravity curve
     if(native_dam .or. native_glb_toml) tcg=merge(k,0,native_appearance(1:size(tcg),iblk)>0)
   end subroutine
