@@ -302,6 +302,7 @@
             name='SOLID'
             imat=jmat
             if(native_mat_heat(jmat)) property='HEAT'     ! T2: legacy 'HEAT','SOLID',imat
+            if(native_mat_fluid(jmat)) name='WATER'       ! seepage S1: legacy 'MECHANICAL','WATER',imat
             if(native_mat_contact(jmat)) name='CONTACT'   ! D3c: goodman_janbu on a contact = true section
         else
         read(munit,*)property,name,imat
@@ -323,6 +324,7 @@
 
                 if(native_mode) then
                     phase='SOLID'
+                    if(native_mat_fluid(imat)) phase='FLUID'     ! seepage S1
                 else
                 read(munit,*)phase
                 endif
@@ -1148,9 +1150,15 @@
                     end select material_select
 
                 case('FLUID')
-                    if(native_mode) call native_mat_deferred('FLUID phase')
+                    if(native_mode .and. .not.native_mat_fluid(imat)) call native_mat_deferred('FLUID phase')
                     allocate(props(imat)%mechanical%fluid)
+                    if(native_mode) then
+                        density=native_fluid(1,imat)
+                        ratio=native_fluid(2,imat)
+                        bulkw=native_fluid(3,imat)
+                    else
                     read(munit,*)density,ratio,bulkw  !,cx
+                    endif
                     print *,'density,ratio,bulkw,c=',density,ratio,bulkw ,cx
                     props(imat)%mechanical%fluid%density  =density
                     props(imat)%mechanical%fluid%ratio    =ratio
@@ -1159,7 +1167,12 @@
                     props(imat)%mechanical%fluid%c        =sqrt(bulkw/density)
                     !props(imat)%mechanical%fluid%bulkw    =density*cx**2
                     allocate(props(imat)%mechanical%fluid%permeability(ndimn))
+                    if(native_mode) then
+                        props(imat)%mechanical%fluid%iperm=0
+                        props(imat)%mechanical%fluid%permeability(1:ndimn)=native_perm(1:ndimn,imat)
+                    else
                     read(munit,*)props(imat)%mechanical%fluid%iperm,props(imat)%mechanical%fluid%permeability(1:ndimn)
+                    endif
 
 
                     print *,'per=',props(imat)%mechanical%fluid%permeability(1:ndimn)

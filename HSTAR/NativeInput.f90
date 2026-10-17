@@ -143,6 +143,12 @@ module native_input
   ! time_dependent .man increments ([[step.increment]]), PARDISO (.sol implied), HEAT material, DABT curve,
   ! convection on face4 surfaces, cooling pipes (algo 3) and [[tie]] (HSTAR_NATIVE_NRT=toml, .nrt TRAL).
   logical :: native_heat=.false.
+  ! SEEPAGE pilot S1 (seepage-pilot/DESIGN.md): analysis.type = "steady_seepage" -> legacy type_problem Q with the
+  ! pore-pressure field W only (dof 8, nfdof 1, UWCPL 0); [material.fluid] -> legacy MECHANICAL WATER / phase FLUID.
+  logical :: native_seep=.false.
+  logical :: native_mat_fluid(NATIVE_MAXG)=.false.
+  real(real64) :: native_fluid(3,NATIVE_MAXG)=0._real64, native_perm(3,NATIVE_MAXG)=0._real64
+  integer :: native_gid_wh=0
   logical :: native_nrt_toml=.false., native_nrt_receipt_on=.false.
   ! SOL seam (sol-pilot V1-V8): HSTAR_NATIVE_SOL=contract (default: implied .sol records, PROFILE 0 0 1 1 /
   ! heat PARDISO mtype 11 ncpu 2) | toml ([solver] linear = "profile" | "pardiso", [solver.pardiso]
@@ -646,11 +652,17 @@ contains
           case("ux","uy","uz")
             if(native_heat) call native_error("dof "//dn//" not available in a transient_heat analysis (only T) "// &
               "(step "//itoa(s)//" boundary "//itoa(b)//")")
+            if(native_seep) call native_error("dof "//dn//" not available in a steady_seepage analysis (only pore_pressure) "// &
+              "(step "//itoa(s)//" boundary "//itoa(b)//")")
             dof=index("xyz",dn(2:2))
           case("T")
             if(.not.native_heat) call native_error("dof T needs analysis.type ""transient_heat"" (step "//itoa(s)// &
               " boundary "//itoa(b)//")")
             dof=10
+          case("pore_pressure")         ! seepage S1: legacy .pre ifixvar 8 (W)
+            if(.not.native_seep) call native_error("dof pore_pressure needs analysis.type ""steady_seepage"" (step "// &
+              itoa(s)//" boundary "//itoa(b)//")")
+            dof=8
           case("rx","ry","rz")          ! beam pilot C2: legacy slots 4/5/6 (3D), 2D rotation (rz) in slot 4
             if(.not.native_beam) call native_error("rotational dof "//dn//" needs a B2 (beam) section (step "//itoa(s)// &
               " boundary "//itoa(b)//")")
@@ -661,7 +673,7 @@ contains
               dof=3+index("xyz",dn(2:2))
             endif
           case default
-            call native_error("unknown dof "//dn//" (expected ux, uy, uz, rx, ry, rz or T) in step "//itoa(s)//" boundary "//itoa(b))
+            call native_error("unknown dof "//dn//" (expected ux, uy, uz, rx, ry, rz, T or pore_pressure) in step "//itoa(s)//" boundary "//itoa(b))
           end select
           if(dof<=3 .and. dof>ndim_pre) call native_error("dof "//dn//" not available: mesh.dimension is "//itoa(ndim_pre))
           do k=1,size(ns(idx)%nodes)
@@ -1339,6 +1351,14 @@ contains
         call parse_heat_mat(p,nm,i)
         cycle
       endif
+      if(native_seep) then
+        call mat_check_keys(p,"@table name model fluid.@table fluid.density fluid.porosity fluid.bulk_modulus "// &
+          "fluid.permeability.count fluid.permeability[1] fluid.permeability[2] fluid.permeability[3]","material "//nm)
+        if(string_value(p//".model")/="fluid") call native_error("MAT: material "//nm// &
+          ': a steady_seepage analysis needs model "fluid" with [material.fluid]')
+        call parse_fluid_mat(p,nm,i)
+        cycle
+      endif
       call mat_check_keys(p,"@table name model density elastic.@table elastic.youngs_modulus "// &
         "elastic.poisson_ratio thermal.@table thermal.expansion_coefficient creep.@table creep.model "// &
         "creep.kelvin_modulus creep.kelvin_viscosity creep.maxwell_viscosity goodman.@table goodman.softening "// &
@@ -1484,6 +1504,10 @@ contains
         call native_error("MAT: section "//nm//": area / torsion_constant / inertia_y / inertia_z apply only to "// &
           'line elements (element "L2" / "B2")')
       endif
+      if(native_seep .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor") .or. &
+          present_key(p//".layer_thickness"))) &
+        call native_error("MAT: section "//nm//": thickness / gravity_factor / layer_thickness do not apply to a "// &
+          "steady_seepage section (the legacy FLUID phase has none)")
       if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
       v=1._real64
@@ -1618,6 +1642,34 @@ contains
     write(u,"(a,i0,a)") "geometry ",i," ROD_or_BEAM"
     write(u,"(a,4es25.16)") "aera,J,Iy,Iz=",aera,tj,iy,iz
     close(u)
+  end subroutine
+
+  ! [[material]] model = "fluid" (seepage S1): legacy MECHANICAL WATER, 1 phase FLUID: density ratio bulkw /
+  ! iperm=0 permeability(1:ndimn) (Material.f90 FLUID). permeability multiplies the pore-pressure gradient
+  ! (Stiff.f90 HMATRX, Load.f90 gravity term: q = -k (grad p - rho g)), i.e. K/gamma_w in m^2/(Pa s) (DESIGN.md 8.1).
+  subroutine parse_fluid_mat(p,nm,i)
+    character(*), intent(in) :: p, nm
+    integer, intent(in) :: i
+    integer :: j
+    native_mat_fluid(i)=.true.
+    native_fluid(1,i)=number(p//".fluid.density")
+    if(native_fluid(1,i)<=0 .or. native_fluid(1,i)>1.e5_real64) call native_error("MAT: material "//nm// &
+      ": fluid.density out of range (0,1e5] kg/m^3")
+    native_fluid(2,i)=number(p//".fluid.porosity")
+    if(native_fluid(2,i)<=0 .or. native_fluid(2,i)>=1) call native_error("MAT: material "//nm// &
+      ": fluid.porosity out of range (0,1)")
+    native_fluid(3,i)=number(p//".fluid.bulk_modulus")
+    if(native_fluid(3,i)<=0 .or. native_fluid(3,i)>1.e12_real64) call native_error("MAT: material "//nm// &
+      ": fluid.bulk_modulus out of range (0,1e12] Pa")
+    if(integer_value(p//".fluid.permeability.count")/=native_ndim) call native_error("MAT: material "//nm// &
+      ": fluid.permeability needs mesh.dimension ("//itoa(native_ndim)//") entries")
+    do j=1,native_ndim
+      native_perm(j,i)=number(indexed(p//".fluid.permeability",j))
+      if(native_perm(j,i)<0 .or. native_perm(j,i)>1._real64) call native_error("MAT: material "//nm// &
+        ": fluid.permeability out of range [0,1]")
+    enddo
+    if(all(native_perm(1:native_ndim,i)==0)) call native_error("MAT: material "//nm//": fluid.permeability is all zero")
+    native_density(i)=0; native_e(i)=0; native_nu(i)=0
   end subroutine
 
   ! [[material]] model = "heat" (T2): legacy 'HEAT' card alfa(1:ndimn), source_curve, place_curve,
@@ -2326,8 +2378,12 @@ contains
     s=string_value('analysis.type')
     if(s=='transient_heat') then
       native_heat=.true.                  ! temperature pilot phase 2 (T1-T8)
+    elseif(s=='steady_seepage') then
+      native_seep=.true.                  ! seepage pilot S1: legacy type_problem Q, field W only
+      if(present_key('analysis.strength_reduction.@table')) &
+        call native_error('GLB: [analysis.strength_reduction] does not apply to a steady_seepage analysis')
     elseif(s/='static') then
-      call native_error('GLB: analysis.type "'//s//'" is deferred (static, transient_heat)')
+      call native_error('GLB: analysis.type "'//s//'" is deferred (static, transient_heat, steady_seepage)')
     endif
     ! [mesh]
     k=key_index('mesh.@table')
@@ -2378,18 +2434,27 @@ contains
       case('Q4')
         if(native_ndim/=2) call native_error('GLB: section '//p//': element Q4 needs mesh.dimension 2')
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with Q4 is deferred (only B8)')
+        if(native_seep) then
+          if(string_value(p//'.formulation')/='seepage') &
+            call native_error('GLB: section '//p//': a steady_seepage analysis needs formulation "seepage"')
+          native_gps(g)=.false.
+        else
         select case(string_value(p//'.formulation'))
         case('plane_strain'); native_gps(g)=.false.
         case('plane_stress'); native_gps(g)=.true.    ! legacy SPTYPE 'PS' (user 2026-10-17)
         case default
           call native_error('GLB: section '//p//': 2D Q4 formulation must be "plane_strain" or "plane_stress"')
         end select
+        endif
         native_gname(g)='Q4'; native_gindex(g)=5; native_gnnode(g)=4
       case('B8')
         if(native_ndim/=3) call native_error('GLB: section '//p//': element B8 needs mesh.dimension 3')
         if(native_heat) then
           if(string_value(p//'.formulation')/='heat') &
             call native_error('GLB: section '//p//': a transient_heat analysis needs formulation "heat"')
+        elseif(native_seep) then
+          if(string_value(p//'.formulation')/='seepage') &
+            call native_error('GLB: section '//p//': a steady_seepage analysis needs formulation "seepage"')
         elseif(string_value(p//'.formulation')/='solid') then
           call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
         endif
@@ -2399,12 +2464,16 @@ contains
         if(native_heat) then
           if(string_value(p//'.formulation')/='heat') &
             call native_error('GLB: section '//p//': a transient_heat analysis needs formulation "heat"')
+        elseif(native_seep) then
+          if(string_value(p//'.formulation')/='seepage') &
+            call native_error('GLB: section '//p//': a steady_seepage analysis needs formulation "seepage"')
         elseif(string_value(p//'.formulation')/='solid') then
           call native_error('GLB: section '//p//': 3D T4 supports only formulation "solid"')
         endif
         native_gname(g)='T4'; native_gindex(g)=7; native_gnnode(g)=4
       case('joint')                       ! joint pilot D3a: GOODMAN node-pair rows, legacy index 5 (2D Q4 row) / 9 (3D B8 row)
         if(native_heat) call native_error('GLB: section '//p//': element joint does not apply to transient_heat')
+        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
         if(string_value(p//'.formulation')/='goodman') &
           call native_error('GLB: section '//p//': element joint supports only formulation "goodman"')
         native_gjoint(g)=.true.
@@ -2415,11 +2484,13 @@ contains
         endif
       case('L2')                          ! matline L1-L4: 2-node bar (legacy index 1), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with L2 is deferred (only B8)')
+        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
           ': formulation does not apply to element L2 (2-node bar)')
         native_gname(g)='L2'; native_gindex(g)=1; native_gnnode(g)=2
       case('B2')                          ! beam pilot C2: 2-node beam (legacy index 20, b2), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with B2 is deferred')
+        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
           ': formulation does not apply to element B2 (2-node beam)')
         native_gname(g)='L2'; native_gindex(g)=20; native_gnnode(g)=2
@@ -2452,6 +2523,8 @@ contains
       s=string_value(p//'.procedure')
       if(native_heat) then
         if(s/='transient_heat') call native_error('GLB: '//p//'.procedure must be "transient_heat" (analysis.type)')
+      elseif(native_seep) then
+        if(s/='steady_seepage') call native_error('GLB: '//p//'.procedure must be "steady_seepage" (analysis.type)')
       elseif(s/='static') then
         call native_error('GLB: '//p//'.procedure "'//s//'" is deferred (only static)')
       endif
@@ -2513,6 +2586,25 @@ contains
       if(integer_value('output.field.count')/=1) call native_error('GLB: transient_heat output.field must be ["T"]')
       if(string_value('output.field[1]')/='T') call native_error('GLB: transient_heat output.field must be ["T"]')
       native_gid_f=0
+    elseif(native_seep) then
+      ! seepage S1: legacy gid_P (PORE-PRESSURE) is always written, gid_wh (WATER-HEAD) on request
+      call glb_check_keys('output','@table format','field')
+      if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
+      nf=integer_value('output.field.count')
+      has=.false.
+      do j=1,nf
+        s=string_value(indexed('output.field',j))
+        select case(s)
+        case('pore_pressure'); k=1
+        case('water_head'); k=2
+        case default; call native_error('GLB: steady_seepage output.field "'//s//'" is not available (pore_pressure, water_head)')
+        end select
+        if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
+        has(k)=.true.
+      enddo
+      if(.not.has(1)) call native_error('GLB: steady_seepage output.field must contain "pore_pressure"')
+      native_gid_f=0
+      native_gid_wh=merge(1,0,has(2))
     else
     call glb_check_keys('output','@table format stress_averaging','field stress_averaging_exclude')
     if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')

@@ -1102,6 +1102,7 @@
     if(native_mode) then
         mdofn=native_ndim
         if(native_heat) mdofn=10      ! dof list Ux Uy Uz Thxy Thyz Thzx P W A T; only T active
+        if(native_seep) mdofn=8       ! seepage S1: legacy MDOFN 8, only W (slot 8) active
         if(native_beam) mdofn=merge(6,4,native_ndim==3)   ! beam pilot C2: B2 rotations (2D: slot 4, legacy pile_beam)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
@@ -1115,6 +1116,10 @@
         if(native_heat) then
             lmdofn(1:mdofn)=0
             lmdofn(10)=1
+        endif
+        if(native_seep) then
+            lmdofn(1:mdofn)=0
+            lmdofn(8)=1
         endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
@@ -1293,6 +1298,12 @@
             gid_u=0
             gid_s=0
             gid_T=1
+        endif
+        if(native_seep) then          ! output.field = ["pore_pressure"(, "water_head")]
+            gid_u=0
+            gid_s=0
+            gid_P=1
+            gid_wh=native_gid_wh
         endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
@@ -1614,6 +1625,7 @@
             group(igroup)%nrfields=1
             group(igroup)%fieldid='U'
             if(native_heat) group(igroup)%fieldid='T'
+            if(native_seep) group(igroup)%fieldid='W'
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
             if(native_gps(igroup)) group(igroup)%sptype='PS'   ! section formulation "plane_stress"
@@ -1691,6 +1703,7 @@
             if(native_mode) then
                 nfdof=native_ndim
                 if(native_heat) nfdof=1
+                if(native_seep) nfdof=1
                 if(group(igroup)%index==20) nfdof=merge(6,3,native_ndim==3)   ! beam pilot C2: u + rotations
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
@@ -1709,6 +1722,7 @@
                 group(igroup)%dof(ifield)%listdof_f=native_dof_list(1:nfdof)
                 endif
                 if(native_heat) group(igroup)%dof(ifield)%listdof_f=10
+                if(native_seep) group(igroup)%dof(ifield)%listdof_f=8
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
             endif
