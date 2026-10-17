@@ -2679,8 +2679,9 @@ contains
         if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': degenerate B8 Jacobian is not positive at the Gauss points')
       else
-        if(b8_min_jacobian(xyz(:,nodes(1:8)))<=0) &
-          call native_error('GLB: 1.ele row '//itoa(k)//': B8 Jacobian is not positive (node order / distortion)')
+        ! user 2026-10-17: regular B8 checked at the 2x2x2 Gauss points, where legacy evaluates the Jacobian (was corners)
+        if(b8_gauss_min_jacobian(xyz(:,nodes(1:8)))<=0) &
+          call native_error('GLB: 1.ele row '//itoa(k)//': B8 Jacobian is not positive at the Gauss points (node order / distortion)')
       endif
     enddo
     read(u,'(a)',iostat=ios) row
