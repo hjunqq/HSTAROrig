@@ -1,7 +1,9 @@
 ! 1.set reader (sets-pilot/DESIGN.md, S1-S10 confirmed 2026-10-14).
 ! Text, versioned ("hstar-sets 1"), "end" marker, per-set counts, generate ranges, full validation.
 ! Kinds: nset, elset (members; optional "generate" triples start end step), surface (pairs
-! elem local-id; "face" = B8 faces 1..6 / T4 faces 1..4, "edge" = Q4 edges 1..4), tie (slave nmaster masters weights).
+! elem local-id; "face" = B8 faces 1..6 / T4 faces 1..4, "edge" = Q4 edges 1..4; pressure pilot: "face_nodes" =
+! "elem n1 n2 n3 n4" and "edge_nodes" = "elem n1 n2", the face / edge nodes in the order given, legacy as-listed form),
+! tie (slave nmaster masters weights).
 ! No dependency on native_input: errors come back in msg (caller stops with exit code 2).
 module yl_sets
   use iso_fortran_env, only: real64
@@ -9,11 +11,11 @@ module yl_sets
   implicit none
   private
   integer, parameter, public :: SK_NSET=1, SK_ELSET=2, SK_SURFACE=3, SK_TIE=4
-  integer, parameter, public :: SS_PLAIN=0, SS_FACE=1, SS_EDGE=2
+  integer, parameter, public :: SS_PLAIN=0, SS_FACE=1, SS_EDGE=2, SS_FACE_NODES=3, SS_EDGE_NODES=4
   integer, parameter, public :: SETS_LEN_NAME=32, SETS_MAX_LINE=4096
   character(7), parameter, public :: SETS_KIND_NAME(4)=['nset   ','elset  ','surface','tie    ']
   type, public :: set_t
-    integer :: kind=0, sub=SS_PLAIN, n=0
+    integer :: kind=0, sub=SS_PLAIN, n=0, stride=2   ! surface: integers per entry (2, face_nodes 5, edge_nodes 3)
     character(SETS_LEN_NAME) :: name=''
     logical :: generated=.false., referenced=.false.
     integer, allocatable :: m(:)          ! nset/elset members; surface: m(2*i-1)=elem, m(2*i)=local id
@@ -173,7 +175,9 @@ contains
       select case(trim(tok))
       case('face'); s%sub=SS_FACE
       case('edge'); s%sub=SS_EDGE
-      case default; msg=who//': surface type must be face or edge'; return
+      case('face_nodes'); s%sub=SS_FACE_NODES; s%stride=5
+      case('edge_nodes'); s%sub=SS_EDGE_NODES; s%stride=3
+      case default; msg=who//': surface type must be face, edge, face_nodes or edge_nodes'; return
       end select
     case(SK_TIE)
       call push(tok)
@@ -202,7 +206,22 @@ contains
         endif
       enddo
     case(SK_SURFACE)
-      allocate(s%m(2*c), fmark(6,sets_nelem)); fmark=.false.
+      allocate(s%m(s%stride*c), fmark(6,sets_nelem)); fmark=.false.
+      if(s%sub==SS_FACE_NODES .or. s%sub==SS_EDGE_NODES) then
+        do i=1,c
+          call num(a); if(len(msg)>0) return
+          if(a<1 .or. a>sets_nelem) then; msg=who//': element out of range 1..'//itoa(sets_nelem)//': '//itoa(a); return; endif
+          s%m(s%stride*(i-1)+1)=a
+          do j=2,s%stride
+            call num(v); if(len(msg)>0) return
+            s%m(s%stride*(i-1)+j)=v
+          enddo
+          call listed_id(s%sub,a,s%m(s%stride*(i-1)+2:s%stride*i),b,msg,who)
+          if(len(msg)>0) return
+          if(fmark(b,a)) then; msg=who//': duplicate entry element '//itoa(a)//' id '//itoa(b); return; endif
+          fmark(b,a)=.true.
+        enddo
+      else
       do i=1,c
         call num(a); if(len(msg)>0) return
         call num(b); if(len(msg)>0) return
@@ -222,6 +241,7 @@ contains
         fmark(b,a)=.true.
         s%m(2*i-1)=a; s%m(2*i)=b
       enddo
+      endif
     case(SK_TIE)
       cap=4*c
       allocate(mi(cap), s%off(c+1), s%w(cap))
@@ -354,6 +374,43 @@ contains
     else
     n=sets_elnodes(B8_FACE(:,k),e)
     endif
+  end subroutine
+
+  ! face_nodes / edge_nodes entry: the nodes must be one B8 face (any start node, either direction, consecutive nodes
+  ! adjacent on the face) or one Q4 edge (either order) of the element. id = the local face / edge number.
+  subroutine listed_id(sub,e,nd,id,msg,who)
+    integer, intent(in) :: sub,e,nd(:)
+    integer, intent(out) :: id
+    character(:), allocatable, intent(inout) :: msg
+    character(*), intent(in) :: who
+    integer :: k, j, p, q, f(4)
+    logical :: ok
+    id=0
+    if(sub==SS_EDGE_NODES) then
+      if(sets_elnn(e)/=4) then; msg=who//': edge_nodes surfaces need Q4 elements (element '//itoa(e)//')'; return; endif
+      do k=1,4
+        if((nd(1)==sets_elnodes(k,e).and.nd(2)==sets_elnodes(mod(k,4)+1,e)) .or. &
+           (nd(2)==sets_elnodes(k,e).and.nd(1)==sets_elnodes(mod(k,4)+1,e))) id=k
+      enddo
+      if(id==0) then; msg=who//': nodes '//itoa(nd(1))//' '//itoa(nd(2))//' are not an edge of element '//itoa(e); endif
+      return
+    endif
+    if(sets_elnn(e)/=8) then; msg=who//': face_nodes surfaces need B8 elements (element '//itoa(e)//')'; return; endif
+    do k=1,6
+      f=sets_elnodes(B8_FACE(:,k),e)
+      ok=.true.
+      do j=1,4
+        if(count(f==nd(j))/=1) ok=.false.
+      enddo
+      if(.not.ok) cycle
+      do j=1,4                      ! consecutive listed nodes must be adjacent on the face
+        p=findloc(f,nd(j),1); q=findloc(f,nd(mod(j,4)+1),1)
+        if(mod(abs(p-q),4)/=1 .and. abs(p-q)/=3) ok=.false.
+      enddo
+      if(ok) id=k
+    enddo
+    if(id==0) msg=who//': nodes '//itoa(nd(1))//' '//itoa(nd(2))//' '//itoa(nd(3))//' '//itoa(nd(4))// &
+      ' are not a face of element '//itoa(e)//' in face order'
   end subroutine
 
   subroutine sets_receipt(file)

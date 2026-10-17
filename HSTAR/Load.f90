@@ -906,6 +906,11 @@ end subroutine element_in_out
 
        !!
        do iedge=begin_edge,end_edge
+          ! pressure pilot (user 2026-10-16): with TOML input a face / edge of an element whose group is not built in
+          ! this block carries no load (legacy .loa adds it regardless)
+          if(native_mode) then
+             if(appear_process(element(edges(iedge)%aelem)%group,iblks)<=0) cycle
+          endif
           jedge=jedge+1
           edgeload(jedge)%iedge=iedge
           edgeload(jedge)%idelgroup=ipegroup  !2013/3/18
@@ -997,9 +1002,12 @@ end subroutine element_in_out
 !! end of special considering
           else
              press=0.
-             if(native_mode) call native_loa_deferred('per-edge pressure (water==0)')
+             if(native_mode) then
+                 call native_loa_press(iblks,ipegroup,press(edimn+1,1:nnode))
+             else
              read(loadunit,*)i0,(press(edimn+1,inode),inode=1,nnode)   !(press(1:edimn+1,inode),inode=1,nnode)
              lineload=lineload+1
+             endif
           endif
           do ig=1,ngaus
              djacb=edges(iedge)%edgegaus(ig)%djacb
@@ -1023,6 +1031,7 @@ end subroutine element_in_out
           deallocate(press,shape,rr,xload,edload)
        end do !iedge
     end do !ipegroup
+    if(native_mode) edge_load_group=jedge   ! unbuilt faces dropped above
 
     ! get time curve for each group in the block
     ! only the increment is considered.

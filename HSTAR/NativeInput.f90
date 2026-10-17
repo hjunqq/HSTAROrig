@@ -60,14 +60,20 @@ module native_input
   type, private :: loa_surf_t
     character(len=TOML_LEN_TEXT) :: name=""
     integer :: first=0, last=0, kind=2           ! kind 2 = edge2 (LOA edges), 4 = face4 (TEM faces)
+    integer :: nnode=2, index=1                  ! legacy edge group header: Q4 edge (2, index 1) / B8 face (4, index 5)
     logical :: used=.false.
   end type
   type(loa_surf_t), allocatable, private :: native_surf(:)
   integer :: native_loa_nedge=0
-  integer, allocatable :: native_loa_edges(:,:)
+  integer, allocatable :: native_loa_edges(:,:)     ! (5,n): nodes 1..nnode (in legacy order), row 5 = element
+  ! B8 face node order of the 1.set "face" form for face loads: outward normal for the HSTAR B8 numbering
+  ! (face 1 as train04 lists it, 4-3-2-1; faces 2..6 = yl_sets B8_FACE, outward on train04's 160 elements)
+  integer, parameter :: PR_B8_FACE(4,6)=reshape([4,3,2,1, 5,6,7,8, 1,2,6,5, 2,3,7,6, 3,4,8,7, 4,1,5,8],[4,6])
   type :: loa_hyd_t
     integer :: first, last, itcurve
     real(real64) :: cor0, cor1, p0, p1, fact
+    integer :: water=2                             ! legacy water: |water| = coordinate axis (hydrostatic); 0 = pressure
+    real(real64) :: press=0                        ! water=0: value on the local normal at every face node
   end type
   type :: loa_step_t
     real(real64) :: g=0, dir(3)=0, fdir(3)=0
@@ -761,7 +767,7 @@ contains
   subroutine parse_loa()
     character(:), allocatable :: p, q, sp, nm, typ
     integer :: na, i, j, k, n, s, nl, l, ns, ie, total, ng, nh, ip, ii, nnset, idx
-    integer :: e(3)
+    integer :: e(3), wa
     real(real64) :: wl, bt, gw, g, d(3), fd(3)
     integer :: nd
     type(loa_hyd_t), allocatable :: tmp(:)
@@ -825,7 +831,7 @@ contains
       p=indexed("surface",i)
       total=total+integer_value(p//".edges.count")
     enddo
-    allocate(native_loa_edges(3,max(total,1)))
+    allocate(native_loa_edges(5,max(total,1))); native_loa_edges=0
     native_loa_nedge=total
     total=0
     do i=1,ns
@@ -858,7 +864,7 @@ contains
             call native_error("LOA: duplicate edge "//itoa(e(1))//"-"//itoa(e(2))//" in surface "//nm)
         enddo
         total=total+1
-        native_loa_edges(:,total)=e
+        native_loa_edges(1:2,total)=e(1:2); native_loa_edges(5,total)=e(3)
       enddo
       native_surf(i)%last=total
     enddo
@@ -923,10 +929,38 @@ contains
           if(wl<=bt) call native_error("LOA: step "//itoa(s)//": water_level must be above bottom")
           if(gw<0 .or. gw>1.e6_real64) call native_error("LOA: step "//itoa(s)//": unit_weight out of range [0,1e6]")
           if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": hydrostatic amplitude is required")
+          ! vertical axis = legacy water (coordinate index): 2D always y; 3D faces need axis = "x" | "y" | "z"
+          wa=2
+          if(native_ndim==3) then
+            if(.not.present_key(q//".axis")) call native_error("LOA: step "//itoa(s)//": hydrostatic on 3D faces needs "// &
+              'axis = "x", "y" or "z" (the vertical coordinate)')
+            typ=string_value(q//".axis")
+            wa=index('xyz',typ)
+            if(len(typ)/=1 .or. wa==0) call native_error("LOA: step "//itoa(s)//': hydrostatic axis must be "x", "y" or "z"')
+          elseif(present_key(q//".axis")) then
+            if(string_value(q//".axis")/="y") call native_error("LOA: step "//itoa(s)//': 2D hydrostatic axis must be "y"')
+          endif
           nh=nh+1
-          tmp(nh)=loa_hyd_t(native_surf(idx)%first,native_surf(idx)%last,amp_ref(q//".amplitude"),wl,bt,0._real64,wl-bt,gw)
+          tmp(nh)=loa_hyd_t(native_surf(idx)%first,native_surf(idx)%last,amp_ref(q//".amplitude"),wl,bt,0._real64,wl-bt,gw,wa,0._real64)
         case("pressure")
-          call native_error("LOA: step "//itoa(s)//": load type pressure is not accepted with HSTAR_NATIVE_LOA=toml; use hydrostatic")
+          ! pressure pilot: uniform pressure on the normal given by the face / edge node order (user 2026-10-16:
+          ! positive = along that normal, outward for the 1.set face/edge table forms) -> legacy water=0 rows
+          nm=string_value(q//".surface")
+          idx=0
+          do i=1,ns
+            if(trim(native_surf(i)%name)==nm) idx=i
+          enddo
+          if(idx==0) call native_error("LOA: step "//itoa(s)//": undefined surface "//nm)
+          if(srf_step(idx)) call native_error("LOA: step "//itoa(s)//": surface "//nm//" loaded twice")
+          srf_step(idx)=.true.; native_surf(idx)%used=.true.
+          if(native_sets_on) i=sets_find(SK_SURFACE,nm)
+          if(.not.present_key(q//".magnitude")) call native_error("LOA: step "//itoa(s)//": pressure magnitude is required")
+          g=number(q//".magnitude")
+          if(.not.ieee_is_finite(g) .or. abs(g)>1.e12_real64) call native_error("LOA: step "//itoa(s)//": pressure magnitude out of range")
+          if(.not.present_key(q//".amplitude")) call native_error("LOA: step "//itoa(s)//": pressure amplitude is required")
+          nh=nh+1
+          tmp(nh)=loa_hyd_t(native_surf(idx)%first,native_surf(idx)%last,amp_ref(q//".amplitude"),0._real64,0._real64, &
+            0._real64,0._real64,0._real64,0,g)
         case("concentrated")
           call native_error("LOA: step "//itoa(s)//": concentrated loads are global in HSTAR; define them in top-level [[load]]")
         case default
@@ -1086,6 +1120,7 @@ contains
     if(native_loa_toml) then
       loa_edge_group=loa_edge_group+1
       sedge=native_surf(loa_edge_group)%last-native_surf(loa_edge_group)%first+1
+      nnode=native_surf(loa_edge_group)%nnode; index=native_surf(loa_edge_group)%index
     endif
   end subroutine
 
@@ -1093,7 +1128,7 @@ contains
     integer, intent(in) :: tedge
     integer, intent(out) :: lnode(:),aelem
     if(native_loa_toml) then
-      lnode=native_loa_edges(1:2,tedge); aelem=native_loa_edges(3,tedge)
+      lnode=native_loa_edges(1:size(lnode),tedge); aelem=native_loa_edges(5,tedge)
     else
       lnode=native_edges(1:2,tedge); aelem=native_edges(3,tedge)
     endif
@@ -1120,7 +1155,16 @@ contains
     b=1; e=40; itc=1; water=2; code_load=0
     if(native_loa_toml) then
       b=native_loa(iblk)%hyd(ig)%first; e=native_loa(iblk)%hyd(ig)%last; itc=native_loa(iblk)%hyd(ig)%itcurve
+      water=native_loa(iblk)%hyd(ig)%water
     endif
+  end subroutine
+
+  ! water=0 rows (Load.f90 "read i0, press(edimn+1,1:nnode)"): the uniform pressure at every node of the face / edge
+  subroutine native_loa_press(iblk,ig,pr)
+    integer, intent(in) :: iblk,ig
+    real(real64), intent(out) :: pr(:)
+    if(.not.native_loa_toml) call native_error("LOA: per-face pressure rows need HSTAR_NATIVE_LOA=toml")
+    pr=native_loa(iblk)%hyd(ig)%press
   end subroutine
 
   subroutine native_loa_hyd_values(iblk,ig,c0,c1,p0,p1,fact)
@@ -2099,7 +2143,7 @@ contains
       ns=ns+1; total=total+sets(i)%n
     enddo
     if(native_ndim/=3) call native_error("TEM: face surfaces need mesh.dimension 3")
-    allocate(native_surf(ns), native_faces(5,max(total,1)), native_loa_edges(3,1))
+    allocate(native_surf(ns), native_faces(5,max(total,1)), native_loa_edges(5,1))
     native_loa_nedge=0; native_nface=0; k=0
     do i=1,sets_n
       if(sets(i)%kind/=SK_SURFACE) cycle
@@ -2115,34 +2159,57 @@ contains
   end subroutine
 
   subroutine loa_surfaces_from_sets(ns)
+    ! 2D: "edge" (Q4 edge k as legacy (k+1, k)) and "edge_nodes" (as listed); 3D (pressure pilot): "face" (B8 face k in
+    ! the PR_B8_FACE order) and "face_nodes" (as listed). Every surface = one legacy edge group, in file order.
     integer, intent(out) :: ns
-    integer :: i, j, k, total, ie, e(3)
+    integer :: i, j, k, total, ie, e(3), st, el
     character(:), allocatable :: nm
     ns=0; total=0
     do i=1,sets_n
-      if(sets(i)%kind==SK_SURFACE .and. sets(i)%sub==SS_EDGE) then
+      if(sets(i)%kind==SK_SURFACE) then
         ns=ns+1; total=total+sets(i)%n
       endif
     enddo
-    allocate(native_surf(ns), native_loa_edges(3,max(total,1)))
+    allocate(native_surf(ns), native_loa_edges(5,max(total,1))); native_loa_edges=0
     native_loa_nedge=total
     total=0; k=0
     do i=1,sets_n
-      if(.not.(sets(i)%kind==SK_SURFACE .and. sets(i)%sub==SS_EDGE)) cycle
-      k=k+1; nm=trim(sets(i)%name)
+      if(sets(i)%kind/=SK_SURFACE) cycle
+      k=k+1; nm=trim(sets(i)%name); st=sets(i)%stride
       native_surf(k)%name=nm
-      if(native_ndim/=2) call native_error("LOA: surface "//nm//": edge2 surfaces need mesh.dimension 2 (3D faces are deferred)")
       native_surf(k)%first=total+1
+      select case(sets(i)%sub)
+      case(SS_EDGE,SS_EDGE_NODES)
+        if(native_ndim/=2) call native_error("LOA: surface "//nm//": edge surfaces need mesh.dimension 2")
+        native_surf(k)%nnode=2; native_surf(k)%index=1
+      case(SS_FACE,SS_FACE_NODES)
+        if(native_ndim/=3) call native_error("LOA: surface "//nm//": face surfaces need mesh.dimension 3")
+        native_surf(k)%nnode=4; native_surf(k)%index=5; native_surf(k)%kind=4
+      end select
       do j=1,sets(i)%n
-        call sets_edge_nodes(sets(i)%m(2*j-1),sets(i)%m(2*j),e(1),e(2))
-        e(3)=sets(i)%m(2*j-1)
-        do ie=1,total
-          if((native_loa_edges(1,ie)==e(1).and.native_loa_edges(2,ie)==e(2)) .or. &
-             (native_loa_edges(1,ie)==e(2).and.native_loa_edges(2,ie)==e(1))) &
-            call native_error("LOA: duplicate edge "//itoa(e(1))//"-"//itoa(e(2))//" in surface "//nm)
-        enddo
+        el=sets(i)%m(st*(j-1)+1)
         total=total+1
-        native_loa_edges(:,total)=e
+        native_loa_edges(5,total)=el
+        select case(sets(i)%sub)
+        case(SS_EDGE)
+          call sets_edge_nodes(el,sets(i)%m(2*j),e(1),e(2))
+          native_loa_edges(1:2,total)=e(1:2)
+        case(SS_EDGE_NODES)
+          native_loa_edges(1:2,total)=sets(i)%m(st*(j-1)+2:st*j)
+        case(SS_FACE)
+          if(sets_elnn(el)/=8) call native_error("LOA: surface "//nm//": face loads need B8 elements (element "//itoa(el)//")")
+          native_loa_edges(1:4,total)=sets_elnodes(PR_B8_FACE(:,sets(i)%m(2*j)),el)
+        case(SS_FACE_NODES)
+          native_loa_edges(1:4,total)=sets(i)%m(st*(j-1)+2:st*j)
+        end select
+        if(native_surf(k)%nnode==2) then
+          do ie=native_surf(k)%first,total-1
+            if((native_loa_edges(1,ie)==native_loa_edges(1,total).and.native_loa_edges(2,ie)==native_loa_edges(2,total)) .or. &
+               (native_loa_edges(1,ie)==native_loa_edges(2,total).and.native_loa_edges(2,ie)==native_loa_edges(1,total))) &
+              call native_error("LOA: duplicate edge "//itoa(native_loa_edges(1,total))//"-"//itoa(native_loa_edges(2,total))// &
+                " in surface "//nm)
+          enddo
+        endif
       enddo
       native_surf(k)%last=total
     enddo
