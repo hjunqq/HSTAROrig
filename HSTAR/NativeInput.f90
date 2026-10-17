@@ -44,7 +44,7 @@ module native_input
   ! PRE pilot: HSTAR_NATIVE_PRE=contract (default, profile constants) | toml (boundary data from TOML)
   logical :: native_pre_toml=.false., native_pre_receipt_on=.false.
   type, private :: pre_set_t
-    integer :: ifixvar=0, itcurve=0, outfix=1
+    integer :: ifixvar=0, itcurve=0, outfix=1, jfixvar=0
     real(real64) :: value=0._real64
     integer, allocatable :: nodes(:)
   end type
@@ -58,6 +58,7 @@ module native_input
   type, private :: pre_cand_t
     integer :: dof, nset, bnd, itcurve, outfix
     real(real64) :: val
+    integer :: jfix=0
   end type
   type(pre_step_t), allocatable, private :: native_pre(:)
   ! LOA pilot: HSTAR_NATIVE_LOA=contract (default, profile constants) | toml (load data from TOML)
@@ -557,7 +558,9 @@ contains
     integer, allocatable :: owner(:,:)
     character(*), parameter :: dofname(10)=["ux","uy","uz","r4","r5","r6","p7","w8","a9","T "]
     character(:), allocatable :: p, q, sp, nm, dn, amp
-    integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre
+    integer :: nn, i, j, k, n, v, s, nb, b, nd, d, idx, dof, kk, itc, outf, ncand, ndim_pre, jf
+    logical :: ppw
+    character(:), allocatable :: ax
     logical, allocatable :: nref(:)
     real(real64) :: val
     ndim_pre=native_ndim
@@ -625,7 +628,40 @@ contains
         if(idx==0) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined nset "//nm)
         nref(idx)=.true.
         if(native_sets_on) kk=sets_find(SK_NSET,nm)
-        val=number(q//".value")
+        ! seepage S1: a pore_pressure boundary is legacy .pre ifixvar 8, whose value is taken from the amplitude only
+        ! (Fem.f90 prescribed values: jfixvar 0 -> W = gamaw*curve(t); jfixvar +-k -> W = +-(curve(t) - x_k)*gamaw,
+        ! gamaw = 9810 Pa/m, Global.f90); the per-node .pre value is not used, so TOML has no value key here.
+        ppw=.false.
+        do d=1,integer_value(q//".dof.count")
+          if(string_value(indexed(q//".dof",d))=="pore_pressure") ppw=.true.
+        enddo
+        jf=0
+        if(ppw) then
+          if(integer_value(q//".dof.count")/=1) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ": a pore_pressure boundary lists only dof pore_pressure")
+          if(present_key(q//".value")) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ": pore_pressure takes no value: W = 9810 Pa/m * amplitude(t) (head, m), or with water_level_axis "// &
+            "W = 9810 Pa/m * (amplitude(t) - coordinate) (legacy .pre ifixvar 8)")
+          if(.not.present_key(q//".amplitude")) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ": pore_pressure needs amplitude (head or water level in m)")
+          val=0._real64
+          if(present_key(q//".water_level_axis")) then
+            ax=string_value(q//".water_level_axis")
+            select case(ax)
+            case("x","y","z"); jf=index("xyz",ax)
+            case("-x","-y","-z"); jf=-index("xyz",ax(2:2))
+            case default
+              call native_error("step "//itoa(s)//" boundary "//itoa(b)//': water_level_axis must be "x", "y", "z", '// &
+                '"-x", "-y" or "-z"')
+            end select
+            if(abs(jf)>ndim_pre) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": water_level_axis "//ax// &
+              " not available: mesh.dimension is "//itoa(ndim_pre))
+          endif
+        else
+          if(present_key(q//".water_level_axis")) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ": water_level_axis applies only to a pore_pressure boundary")
+          val=number(q//".value")
+        endif
         itc=0
         kk=doc%find(q//".amplitude")
         if(kk>0) then
@@ -683,7 +719,7 @@ contains
             owner(dof,v)=b
           enddo
           ncand=ncand+1
-          cand(ncand)=pre_cand_t(dof,idx,b,itc,outf,val)
+          cand(ncand)=pre_cand_t(dof,idx,b,itc,outf,val,jf)
         enddo
       enddo
       ! canonical order (decision 7): dof ascending, then nset definition order
@@ -701,6 +737,7 @@ contains
         native_pre(s)%sets(i)%itcurve=cand(i)%itcurve
         native_pre(s)%sets(i)%outfix=cand(i)%outfix
         native_pre(s)%sets(i)%value=cand(i)%val
+        native_pre(s)%sets(i)%jfixvar=cand(i)%jfix
         native_pre(s)%sets(i)%nodes=ns(cand(i)%nset)%nodes
       enddo
       deallocate(owner,cand)
@@ -729,7 +766,7 @@ contains
     nfixnods=size(native_pre(iblk)%sets(iset)%nodes)
     itcurve=native_pre(iblk)%sets(iset)%itcurve
     outfix=native_pre(iblk)%sets(iset)%outfix
-    tfixvar=0; jfixvar=0; gamawx=0._real64; nextr=0
+    tfixvar=0; jfixvar=native_pre(iblk)%sets(iset)%jfixvar; gamawx=0._real64; nextr=0
   end subroutine
 
   subroutine native_pre_nodes(iblk,iset,list)
