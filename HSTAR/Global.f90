@@ -1102,6 +1102,7 @@
     if(native_mode) then
         mdofn=native_ndim
         if(native_heat) mdofn=10      ! dof list Ux Uy Uz Thxy Thyz Thzx P W A T; only T active
+        if(native_beam) mdofn=merge(6,4,native_ndim==3)   ! beam pilot C2: B2 rotations (2D: slot 4, legacy pile_beam)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
     endif
@@ -1110,6 +1111,7 @@
     allocate(lmdofn(mdofn),lcdofn(mdofn),order_time_mdofn(mdofn))
     if(native_mode) then
         lmdofn(1:mdofn)=1
+        if(native_beam .and. native_ndim==2) lmdofn(3)=0   ! 2D beam: Ux Uy (no Uz) Thxy, legacy "1 1 0 1"
         if(native_heat) then
             lmdofn(1:mdofn)=0
             lmdofn(10)=1
@@ -1605,6 +1607,7 @@
             group(igroup)%kname=native_kname(igroup)
             group(igroup)%index=native_gindex(igroup)
             group(igroup)%class='CO'
+            if(group(igroup)%index==20) group(igroup)%class='BM'   ! beam pilot C2 (legacy b2 groups are BM)
             group(igroup)%nrfields=1
             group(igroup)%fieldid='U'
             if(native_heat) group(igroup)%fieldid='T'
@@ -1668,9 +1671,13 @@
             'rfields)',text)
         !write(7,*)'order-Time=', (group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)
 
-        if(native_mode .and. (group(igroup)%index==20.or.group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26)) call native_glb_deferred('read_glb_element_groups')
+        if(native_mode .and. (group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26)) call native_glb_deferred('read_glb_element_groups')
+        if(native_mode) then
+            if(group(igroup)%index==20) group(igroup)%point_direct=native_pdir(:,igroup)   ! beam pilot C2
+        else
         if(group(igroup)%index==20.or.group(igroup)%index==21.or.group(igroup)%index==22.or.group(igroup)%index==26) &
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg) group(igroup)%point_direct   !20230910
+        endif
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_element_groups', &
                 'group(igroup)%point_direct',text)
         if(group(igroup)%index==20)print *,'group(igroup)%point_direct=',group(igroup)%point_direct
@@ -1680,6 +1687,7 @@
             if(native_mode) then
                 nfdof=native_ndim
                 if(native_heat) nfdof=1
+                if(group(igroup)%index==20) nfdof=merge(6,3,native_ndim==3)   ! beam pilot C2: u + rotations
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
             endif
@@ -1690,7 +1698,12 @@
             mdof(ifield)=nfdof
             allocate(group(igroup)%dof(ifield)%listdof_f(nfdof))
             if(native_mode) then
+                if(group(igroup)%index==20) then
+                    if(native_ndim==3) group(igroup)%dof(ifield)%listdof_f=[1,2,3,4,5,6]
+                    if(native_ndim==2) group(igroup)%dof(ifield)%listdof_f=[1,2,4]
+                else
                 group(igroup)%dof(ifield)%listdof_f=native_dof_list(1:nfdof)
+                endif
                 if(native_heat) group(igroup)%dof(ifield)%listdof_f=10
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
@@ -2225,8 +2238,7 @@
                     deallocate(listf,rintf)
                 endif
 
-                if(title_intp(1:4)=='ROTA')then
-                    if(native_mode) call native_nrt_deferred('ROTA under .nrt translg=88')  ! D1: only TRAL from [[tie]] dof="U"
+                if(title_intp(1:4)=='ROTA')then   ! beam pilot C2: native rows from a 1.set rotation_tie ([[tie]] dof="UR")
 
                     !if(ndimn==2.and.title_intp(1:5)=='ROTAZ')then
                     if(ndimn==2)then   !20221130
@@ -2234,7 +2246,11 @@
                         trans(itotv)%nintf=nintf
                         allocate(trans(itotv)%listf(nintf),trans(itotv)%rintf(nintf))
                         do idofn=1,nintf
+                            if(native_mode) then
+                                call native_nrt_rota_row(itrans,idofn,jpoin,jdimn,f0)
+                            else
                             read(nrtunit,*)jpoin,jdimn,f0
+                            endif
                             trans(itotv)%listf(idofn)=nodfn(jdimn,jpoin)
                             trans(itotv)%rintf(idofn)=f0
 
@@ -2247,7 +2263,11 @@
                         trans(itotv)%nintf=nintf
                         allocate(trans(itotv)%listf(nintf),trans(itotv)%rintf(nintf))
                         do idofn=1,nintf
+                            if(native_mode) then
+                                call native_nrt_rota_row(itrans,idofn,jpoin,jdimn,f0)
+                            else
                             read(nrtunit,*)jpoin,jdimn,f0
+                            endif
                             trans(itotv)%listf(idofn)=nodfn(jdimn,jpoin)
                             trans(itotv)%rintf(idofn)=f0
                         end do
@@ -2258,7 +2278,11 @@
                         trans(itotv)%nintf=nintf
                         allocate(trans(itotv)%listf(nintf),trans(itotv)%rintf(nintf))
                         do idofn=1,nintf
+                            if(native_mode) then
+                                call native_nrt_rota_row(itrans,idofn,jpoin,jdimn,f0)
+                            else
                             read(nrtunit,*)jpoin,jdimn,f0
+                            endif
                             trans(itotv)%listf(idofn)=nodfn(jdimn,jpoin)
                             trans(itotv)%rintf(idofn)=f0
                         end do
@@ -2269,7 +2293,11 @@
                         trans(itotv)%nintf=nintf
                         allocate(trans(itotv)%listf(nintf),trans(itotv)%rintf(nintf))
                         do idofn=1,nintf
+                            if(native_mode) then
+                                call native_nrt_rota_row(itrans,idofn,jpoin,jdimn,f0)
+                            else
                             read(nrtunit,*)jpoin,jdimn,f0
+                            endif
                             trans(itotv)%listf(idofn)=nodfn(jdimn,jpoin)
                             trans(itotv)%rintf(idofn)=f0
                         end do

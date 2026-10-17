@@ -278,7 +278,7 @@ if(kpload==1)then !20210502
     do iplgroup=1,nplgroup
        if(native_mode) then
            pload(iplgroup)%order_time_curve=native_pl(iplgroup)%itcurve
-           pload(iplgroup)%nudofn=2
+           pload(iplgroup)%nudofn=native_pl(iplgroup)%nudofn   ! 2D 2, 3D 3, with moments mdofn (beam pilot C2)
            pload(iplgroup)%npload=size(native_pl(iplgroup)%nodes)
            nline=3
        else

@@ -3,23 +3,26 @@
 ! Kinds: nset, elset (members; optional "generate" triples start end step), surface (pairs
 ! elem local-id; "face" = B8 faces 1..6 / T4 faces 1..4, "edge" = Q4 edges 1..4; pressure pilot: "face_nodes" =
 ! "elem n1 n2 n3 n4" and "edge_nodes" = "elem n1 n2", the face / edge nodes in the order given, legacy as-listed form),
-! tie (slave nmaster masters weights).
+! tie (slave nmaster masters weights); beam pilot C2: rotation_tie (slave axis nterm (node component weight)*nterm),
+! legacy .nrt 88 ROTAX/ROTAY/ROTAZ rows: rotation dof axis of slave = sum(weight * displacement component of node).
 ! No dependency on native_input: errors come back in msg (caller stops with exit code 2).
 module yl_sets
   use iso_fortran_env, only: real64
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   implicit none
   private
-  integer, parameter, public :: SK_NSET=1, SK_ELSET=2, SK_SURFACE=3, SK_TIE=4
+  integer, parameter, public :: SK_NSET=1, SK_ELSET=2, SK_SURFACE=3, SK_TIE=4, SK_RTIE=5
   integer, parameter, public :: SS_PLAIN=0, SS_FACE=1, SS_EDGE=2, SS_FACE_NODES=3, SS_EDGE_NODES=4
   integer, parameter, public :: SETS_LEN_NAME=32, SETS_MAX_LINE=4096
-  character(7), parameter, public :: SETS_KIND_NAME(4)=['nset   ','elset  ','surface','tie    ']
+  character(12), parameter, public :: SETS_KIND_NAME(5)=['nset        ','elset       ','surface     ','tie         ', &
+    'rotation_tie']
   type, public :: set_t
     integer :: kind=0, sub=SS_PLAIN, n=0, stride=2   ! surface: integers per entry (2, face_nodes 5, edge_nodes 3)
     character(SETS_LEN_NAME) :: name=''
     logical :: generated=.false., referenced=.false.
     integer, allocatable :: m(:)          ! nset/elset members; surface: m(2*i-1)=elem, m(2*i)=local id
     integer, allocatable :: off(:)        ! tie: record i occupies m(off(i):off(i+1)-1) = slave, masters...
+                                          ! rotation_tie: slave, axis, then (node, component) pairs; w at the node slot
     real(real64), allocatable :: w(:)     ! tie weights, aligned with the masters
   end type
   type(set_t), allocatable, public :: sets(:)
@@ -76,12 +79,13 @@ contains
       case('elset'); k=SK_ELSET
       case('surface'); k=SK_SURFACE
       case('tie'); k=SK_TIE
+      case('rotation_tie'); k=SK_RTIE
       case default
         if(is_int(tok) .and. sets_n>0) then
           msg='SETS: '//trim(SETS_KIND_NAME(sets(sets_n)%kind))//' '//trim(sets(sets_n)%name)// &
               ': more entries than its count '//itoa(sets(sets_n)%n)//' (line '//itoa(line_)//')'
         else
-          msg='SETS: unknown set kind "'//trim(tok)//'" (line '//itoa(line_)//'; expected nset, elset, surface, tie or end)'
+          msg='SETS: unknown set kind "'//trim(tok)//'" (line '//itoa(line_)//'; expected nset, elset, surface, tie, rotation_tie or end)'
         endif
         goto 9
       end select
@@ -179,7 +183,7 @@ contains
       case('edge_nodes'); s%sub=SS_EDGE_NODES; s%stride=3
       case default; msg=who//': surface type must be face, edge, face_nodes or edge_nodes'; return
       end select
-    case(SK_TIE)
+    case(SK_TIE,SK_RTIE)
       call push(tok)
     end select
     lim=merge(sets_npoin,sets_nelem,s%kind/=SK_ELSET .and. s%kind/=SK_SURFACE)
@@ -272,6 +276,37 @@ contains
       enddo
       s%off(c+1)=j+1
       s%m=mi(1:j); s%w=s%w(1:j)
+    case(SK_RTIE)
+      cap=8*c
+      allocate(mi(cap), s%off(c+1), s%w(cap))
+      j=0
+      do i=1,c
+        s%off(i)=j+1
+        call num(a); if(len(msg)>0) return
+        call num(st); if(len(msg)>0) return
+        call num(nm); if(len(msg)>0) return
+        if(a<1 .or. a>sets_npoin) then; msg=who//': node out of range 1..'//itoa(sets_npoin)//': '//itoa(a); return; endif
+        if(st<1 .or. st>3) then; msg=who//': record '//itoa(i)//': axis must be 1, 2 or 3 (x, y, z)'; return; endif
+        if(nm<1 .or. nm>16) then; msg=who//': record '//itoa(i)//': number of terms must be 1..16'; return; endif
+        do while(j+2+2*nm>cap)
+          call grow()
+        enddo
+        j=j+1; mi(j)=a; s%w(j)=0
+        j=j+1; mi(j)=st; s%w(j)=0
+        do v=1,nm
+          call num(b); if(len(msg)>0) return
+          if(b<1 .or. b>sets_npoin) then; msg=who//': node out of range 1..'//itoa(sets_npoin)//': '//itoa(b); return; endif
+          if(b==a) then; msg=who//': node '//itoa(a)//' is tied to itself'; return; endif
+          call num(lim); if(len(msg)>0) return
+          if(lim<1 .or. lim>3) then; msg=who//': record '//itoa(i)//': component must be 1, 2 or 3'; return; endif
+          call realnum(x); if(len(msg)>0) return
+          if(.not.ieee_is_finite(x)) then; msg=who//': non-finite weight'; return; endif
+          j=j+1; mi(j)=b; s%w(j)=x
+          j=j+1; mi(j)=lim; s%w(j)=0
+        enddo
+      enddo
+      s%off(c+1)=j+1
+      s%m=mi(1:j); s%w=s%w(1:j)
     end select
   contains
     subroutine add(v)
@@ -329,6 +364,36 @@ contains
         do k=sets(i)%off(r)+1,sets(i)%off(r+1)-1
           if(slave(sets(i)%m(k))) then
             msg='SETS: tie '//trim(sets(i)%name)//': master node '//itoa(sets(i)%m(k))//' is itself a slave (chained ties)'; return
+          endif
+        enddo
+      enddo
+    enddo
+    ! rotation_tie: (slave, axis) once; a term node must not be a TRAL slave (chained)
+    deallocate(slave); allocate(slave(max(3*sets_npoin,1))); slave=.false.
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_RTIE) cycle
+      do r=1,sets(i)%n
+        k=3*(sets(i)%m(sets(i)%off(r))-1)+sets(i)%m(sets(i)%off(r)+1)
+        if(slave(k)) then
+          msg='SETS: rotation_tie '//trim(sets(i)%name)//': slave node '//itoa(sets(i)%m(sets(i)%off(r)))// &
+              ' axis '//itoa(sets(i)%m(sets(i)%off(r)+1))//' is tied twice'; return
+        endif
+        slave(k)=.true.
+      enddo
+    enddo
+    deallocate(slave); allocate(slave(max(sets_npoin,1))); slave=.false.
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_TIE) cycle
+      do r=1,sets(i)%n
+        slave(sets(i)%m(sets(i)%off(r)))=.true.
+      enddo
+    enddo
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_RTIE) cycle
+      do r=1,sets(i)%n
+        do k=sets(i)%off(r)+2,sets(i)%off(r+1)-1,2
+          if(slave(sets(i)%m(k))) then
+            msg='SETS: rotation_tie '//trim(sets(i)%name)//': term node '//itoa(sets(i)%m(k))//' is a tie slave (chained ties)'; return
           endif
         enddo
       enddo

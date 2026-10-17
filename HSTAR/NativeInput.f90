@@ -24,6 +24,9 @@ module native_input
   character(10) :: native_gname(NATIVE_MAXG)='Q4'
   character(20) :: native_kname(NATIVE_MAXG)='Default'
   integer :: native_gindex(NATIVE_MAXG)=5, native_gnnode(NATIVE_MAXG)=4
+  ! beam pilot C2: B2 = legacy index 20 (b2, 2-node beam). point_direct from section.orientation.node_pair (0 0 = default).
+  integer :: native_pdir(2,NATIVE_MAXG)=0
+  logical :: native_beam=.false.                  ! any B2 section: legacy mdofn 6 (3D) / 4 (2D, rotation in slot 4)
   integer, private :: force_unit, force_frame=0
   integer, parameter :: native_nodes(17) = [1,18,35,52,69,86,103,120,137,154,171,188,205,222,239,256,273]
   type(toml_doc_t), private :: doc
@@ -83,7 +86,8 @@ module native_input
   type(loa_step_t), allocatable :: native_loa(:)
   type :: loa_pl_t
     integer :: itcurve=0
-    real(real64) :: comp(3)=0
+    real(real64) :: comp(6)=0
+    integer :: nudofn=2
     integer, allocatable :: nodes(:)
   end type
   type(loa_pl_t), allocatable :: native_pl(:)
@@ -182,6 +186,8 @@ module native_input
   integer :: native_pipe_algo=3
   type :: nrt_tie_t
     integer :: slave=0
+    integer :: axis=0                             ! 0 = TRAL; 1..3 = ROTAX/ROTAY/ROTAZ (C2, rotation_tie set)
+    integer, allocatable :: comps(:)              ! ROTA: displacement component of each term node
     integer, allocatable :: masters(:)
     real(real64), allocatable :: weights(:)
   end type
@@ -635,10 +641,17 @@ contains
             if(.not.native_heat) call native_error("dof T needs analysis.type ""transient_heat"" (step "//itoa(s)// &
               " boundary "//itoa(b)//")")
             dof=10
-          case("rx","ry","rz")
-            call native_error("rotational dof "//dn//" is not supported in the PRE pilot (step "//itoa(s)//" boundary "//itoa(b)//")")
+          case("rx","ry","rz")          ! beam pilot C2: legacy slots 4/5/6 (3D), 2D rotation (rz) in slot 4
+            if(.not.native_beam) call native_error("rotational dof "//dn//" needs a B2 (beam) section (step "//itoa(s)// &
+              " boundary "//itoa(b)//")")
+            if(native_ndim==2) then
+              if(dn/="rz") call native_error("dof "//dn//" not available in 2D (only rz) (step "//itoa(s)//" boundary "//itoa(b)//")")
+              dof=4
+            else
+              dof=3+index("xyz",dn(2:2))
+            endif
           case default
-            call native_error("unknown dof "//dn//" (expected ux, uy, uz or T) in step "//itoa(s)//" boundary "//itoa(b))
+            call native_error("unknown dof "//dn//" (expected ux, uy, uz, rx, ry, rz or T) in step "//itoa(s)//" boundary "//itoa(b))
           end select
           if(dof<=3 .and. dof>ndim_pre) call native_error("dof "//dn//" not available: mesh.dimension is "//itoa(ndim_pre))
           do k=1,size(ns(idx)%nodes)
@@ -1012,6 +1025,22 @@ contains
       do j=1,native_ndim
         native_pl(ip)%comp(j)=number(p//".components["//itoa(j)//"]")
       enddo
+      native_pl(ip)%nudofn=2                        ! legacy native default (2D); 3D below
+      if(native_ndim==3) native_pl(ip)%nudofn=3
+      if(present_key(p//".moments.count")) then    ! beam pilot C2: nodal moments -> legacy pxyz rotation slots
+        if(.not.native_beam) call native_error("LOA: load "//itoa(ip)//": moments need a B2 (beam) section")
+        if(native_ndim==3) then
+          if(integer_value(p//".moments.count")/=3) call native_error("LOA: load "//itoa(ip)//": moments needs 3 entries (mx, my, mz)")
+          do j=1,3
+            native_pl(ip)%comp(3+j)=number(p//".moments["//itoa(j)//"]")
+          enddo
+          native_pl(ip)%nudofn=6
+        else
+          if(integer_value(p//".moments.count")/=1) call native_error("LOA: load "//itoa(ip)//": moments needs 1 entry (mz) in 2D")
+          native_pl(ip)%comp(4)=number(p//".moments[1]")
+          native_pl(ip)%nudofn=4
+        endif
+      endif
       if(maxval(abs(native_pl(ip)%comp))>1.e12_real64) call native_error("LOA: load "//itoa(ip)//": component out of range")
       if(.not.present_key(p//".amplitude")) call native_error("LOA: load "//itoa(ip)//": amplitude is required")
       native_pl(ip)%itcurve=amp_ref(p//".amplitude")
@@ -1363,6 +1392,8 @@ contains
       sname(k)=nm
       call mat_check_keys(p,"@table name elset element formulation material thickness gravity_factor "// &
         "area torsion_constant inertia_y inertia_z contact layer_thickness gap.@table gap.initial gap.value "// &
+        "orientation.@table orientation.node_pair.count orientation.node_pair[1] orientation.node_pair[2] "// &
+        "orientation.vector.count orientation.vector[1] orientation.vector[2] orientation.vector[3] "// &
         "gap.tension_limit gap.use_tension_limit","section "//nm)
       el=string_value(p//".elset")
       g=0
@@ -1431,12 +1462,12 @@ contains
       elseif(present_key(p//".layer_thickness")) then
         call native_error("MAT: section "//nm//': layer_thickness applies only to model "mc_joint" sections')
       endif
-      if(et=="L2") then
-        call section_geometry(p,nm,i)
+      if(et=="L2" .or. et=="B2") then
+        call section_geometry(p,nm,i,et)
       elseif(present_key(p//".area") .or. present_key(p//".torsion_constant") .or. present_key(p//".inertia_y") &
              .or. present_key(p//".inertia_z")) then
         call native_error("MAT: section "//nm//": area / torsion_constant / inertia_y / inertia_z apply only to "// &
-          'line elements (element "L2")')
+          'line elements (element "L2" / "B2")')
       endif
       if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
@@ -1458,13 +1489,13 @@ contains
 
   ! matline M5/M6: L2 section data. area (legacy aera) is required, J/Iy/Iz are optional (default 0, legacy
   ! decks write "A 0 0 0"); a bar takes its cross-section from area, so thickness is rejected.
-  subroutine section_geometry(p,nm,i)
-    character(*), intent(in) :: p, nm
+  subroutine section_geometry(p,nm,i,et)
+    character(*), intent(in) :: p, nm, et
     integer, intent(in) :: i
     real(real64) :: v
-    if(.not.present_key(p//".area")) call native_error("MAT: section "//nm//': element "L2" needs area (m^2)')
+    if(.not.present_key(p//".area")) call native_error("MAT: section "//nm//': element "'//et//'" needs area (m^2)')
     if(present_key(p//".thickness")) call native_error("MAT: section "//nm// &
-      ': thickness does not apply to element "L2" (the bar cross-section is area)')
+      ': thickness does not apply to element "'//et//'" (the line-element cross-section is area)')
     v=number(p//".area")
     if(.not.(v>0 .and. v<=1.e3_real64)) call native_error("MAT: section "//nm//": area out of range (0,1e3] m^2")
     native_area(i)=v
@@ -2049,6 +2080,31 @@ contains
   ! GLB pilot (HSTAR_NATIVE_GLB=toml, glb-pilot/DESIGN.md G1-G12): global control from TOML.
   ! Counts (nodes, elements, groups, materials, steps, dofs) are derived, never keys (G4).
   ! ---------------------------------------------------------------------------
+  ! beam pilot C2: section.orientation = { node_pair = [p1, p2] } -> legacy group point_direct (3D only; local z =
+  ! coord(p2) - coord(p1), used as given, Elements.f90 direct_beam). Omitted -> 0 0 (legacy default rule).
+  subroutine glb_beam_orientation(p,g)
+    character(*), intent(in) :: p
+    integer, intent(in) :: g
+    integer :: j
+    native_pdir(:,g)=0
+    if(.not.present_key(p//'.orientation.@table')) return
+    if(native_ndim/=3) call native_error('GLB: section '//p//': orientation applies only to mesh.dimension 3 '// &
+      '(2D beams take the in-plane normal)')
+    if(present_key(p//'.orientation.vector.count')) call native_error('GLB: section '//p// &
+      ': orientation.vector is deferred (the solver orients a beam from two nodes, legacy point_direct; use node_pair)')
+    if(.not.present_key(p//'.orientation.node_pair.count')) call native_error('GLB: section '//p// &
+      ': orientation needs node_pair = [p1, p2]')
+    if(integer_value(p//'.orientation.node_pair.count')/=2) call native_error('GLB: section '//p// &
+      ': orientation.node_pair needs exactly 2 node ids')
+    do j=1,2
+      native_pdir(j,g)=integer_value(p//'.orientation.node_pair['//itoa(j)//']')
+      if(native_pdir(j,g)<1 .or. native_pdir(j,g)>native_points) call native_error('GLB: section '//p// &
+        ': orientation.node_pair node out of range 1..'//itoa(native_points))
+    enddo
+    if(native_pdir(1,g)==native_pdir(2,g)) call native_error('GLB: section '//p// &
+      ': orientation.node_pair needs two different nodes')
+  end subroutine
+
   subroutine glb_check_keys(p,allowed,lists)
     character(*), intent(in) :: p, allowed, lists
     character(len=TOML_LEN_PATH) :: rest
@@ -2344,12 +2400,19 @@ contains
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
           ': formulation does not apply to element L2 (2-node bar)')
         native_gname(g)='L2'; native_gindex(g)=1; native_gnnode(g)=2
+      case('B2')                          ! beam pilot C2: 2-node beam (legacy index 20, b2), 2D or 3D
+        if(native_heat) call native_error('GLB: section '//p//': transient_heat with B2 is deferred')
+        if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
+          ': formulation does not apply to element B2 (2-node beam)')
+        native_gname(g)='L2'; native_gindex(g)=20; native_gnnode(g)=2
+        native_beam=.true.
+        call glb_beam_orientation(p,g)
       case('steel')
         call native_error('GLB: section '//p//': element "steel" (legacy index 25, bond-slip link between a bar '// &
           'and its host) is deferred: it needs the .glb bond-slip parameters ikindks/doubsig/ktan1/ktan2/coefMpa/'// &
           'nlocalbeam, which have no TOML keys yet')
       case default
-        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2 / joint)')
+        call native_error('GLB: section '//p//': element "'//s//'" is deferred in the GLB pilot (only Q4 / B8 / T4 / L2 / B2 / joint)')
       end select
       seen_el(g)=.true.
     enddo
@@ -2867,9 +2930,10 @@ contains
   subroutine parse_nrt()
     ! [[tie]] (T7, HSTAR_NATIVE_NRT=toml): set = name of a tie set in 1.set, dof = "T".
     ! Legacy .nrt TRAL: T(slave) = sum(weights*T(masters)); slave/chain/weight checks are done by yl_sets.
-    integer :: n, i, j, k, r, nt, o1, o2
+    integer :: n, i, j, k, r, nt, o1, o2, q
     character(:), allocatable :: p, nm
     integer, allocatable :: idx(:)
+    logical :: rot
     n=doc%count_of("tie")
     if(n>0 .and. .not.native_sets_on) call native_error("NRT: [[tie]] needs [mesh] sets_file (ties are tie sets in 1.set)")
     allocate(idx(n)); nt=0
@@ -2877,6 +2941,7 @@ contains
       p=indexed("tie",i)
       k=key_index(p//".@table")
       call glb_check_keys(p,"@table set dof","")
+      rot=.false.
       select case(string_value(p//".dof"))
       case("T")
         if(.not.native_heat) call native_error("NRT: tie "//itoa(i)//": dof ""T"" needs analysis.type 'transient_heat'")
@@ -2886,12 +2951,20 @@ contains
         if(any(native_gindex(1:native_materials)==1)) call native_error("NRT: tie "//itoa(i)// &
           ": dof ""U"" with L2 elements is deferred (rotational dofs / ROTA rows)")
         native_nrt_dof_u=.true.
+      case("UR")                          ! beam pilot C2: legacy .nrt 88 ROTAX/Y/Z rows from a 1.set rotation_tie set
+        if(.not.native_beam) call native_error("NRT: tie "//itoa(i)//": dof ""UR"" needs a B2 (beam) section")
+        native_nrt_dof_u=.true.; rot=.true.
       case default
-        call native_error("NRT: tie "//itoa(i)//": dof must be ""T"" (transient_heat) or ""U"" (displacements)")
+        call native_error("NRT: tie "//itoa(i)//": dof must be ""T"" (transient_heat), ""U"" (displacements) or ""UR"" (rotations)")
       end select
       nm=string_value(p//".set")
-      idx(i)=sets_find(SK_TIE,nm)
-      if(idx(i)==0) call native_error("NRT: tie "//itoa(i)//": undefined tie set "//nm)
+      if(rot) then
+        idx(i)=sets_find(SK_RTIE,nm)
+        if(idx(i)==0) call native_error("NRT: tie "//itoa(i)//": undefined rotation_tie set "//nm)
+      else
+        idx(i)=sets_find(SK_TIE,nm)
+        if(idx(i)==0) call native_error("NRT: tie "//itoa(i)//": undefined tie set "//nm)
+      endif
       do j=1,i-1
         if(idx(j)==idx(i)) call native_error("NRT: tie set "//nm//" listed twice")
       enddo
@@ -2902,6 +2975,24 @@ contains
       do r=1,sets(idx(i))%n
         k=k+1
         o1=sets(idx(i))%off(r); o2=sets(idx(i))%off(r+1)-1
+        if(sets(idx(i))%kind==SK_RTIE) then
+          native_tie(k)%slave=sets(idx(i))%m(o1)
+          native_tie(k)%axis=sets(idx(i))%m(o1+1)
+          if(native_ndim==2 .and. native_tie(k)%axis/=3) call native_error("NRT: rotation_tie set "// &
+            trim(sets(idx(i))%name)//": 2D rotation ties need axis 3 (z)")
+          q=(o2-o1-1)/2
+          allocate(native_tie(k)%masters(q),native_tie(k)%comps(q),native_tie(k)%weights(q))
+          do j=1,q
+            native_tie(k)%masters(j)=sets(idx(i))%m(o1+2*j)
+            native_tie(k)%comps(j)=sets(idx(i))%m(o1+2*j+1)
+            native_tie(k)%weights(j)=sets(idx(i))%w(o1+2*j)
+          enddo
+          if(native_ndim==2 .and. any(native_tie(k)%comps>2)) call native_error("NRT: rotation_tie set "// &
+            trim(sets(idx(i))%name)//": 2D term component must be 1 or 2")
+          if(native_tie(k)%slave>native_points .or. any(native_tie(k)%masters>native_points)) &
+            call native_error("NRT: rotation_tie set "//trim(sets(idx(i))%name)//": node out of range")
+          cycle
+        endif
         native_tie(k)%slave=sets(idx(i))%m(o1)
         native_tie(k)%masters=sets(idx(i))%m(o1+1:o2)
         native_tie(k)%weights=sets(idx(i))%w(o1+1:o2)
@@ -3025,6 +3116,15 @@ contains
     character(*), intent(out) :: title
     integer, intent(out) :: ipoin,nintf
     title='TRAL'; ipoin=native_tie(i)%slave; nintf=size(native_tie(i)%masters)
+    if(native_tie(i)%axis>0) title='ROTA'//'XYZ'(native_tie(i)%axis:native_tie(i)%axis)
+  end subroutine
+
+  ! beam pilot C2: term k of ROTA tie i as the legacy row "jpoin jdimn f0"
+  subroutine native_nrt_rota_row(i,k,jpoin,jdimn,f0)
+    integer, intent(in) :: i,k
+    integer, intent(out) :: jpoin,jdimn
+    real(real64), intent(out) :: f0
+    jpoin=native_tie(i)%masters(k); jdimn=native_tie(i)%comps(k); f0=native_tie(i)%weights(k)
   end subroutine
 
   subroutine native_nrt_tie_data(i,listf,rintf)
