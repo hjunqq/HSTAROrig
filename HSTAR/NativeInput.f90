@@ -2727,12 +2727,12 @@ contains
     real(real64) :: c(3)
     character(1024) :: row
     logical, allocatable :: barnode(:)
-    integer, allocatable :: bondrow(:,:)
-    integer :: nbond
+    integer, allocatable :: bondrow(:,:), barrow(:,:)
+    integer :: nbond, nbar, b
     nmixed=0; mixed_rows=''
     nd=native_ndim
     allocate(xyz(3,native_points), used(native_points)); xyz=0; used=.false.
-    allocate(barnode(native_points), bondrow(3,native_elements)); barnode=.false.; nbond=0
+    allocate(barnode(native_points), bondrow(4,native_elements), barrow(3,native_elements)); nbond=0; nbar=0
     if(native_heat) then
       allocate(mesh_ele(8,native_elements)); mesh_ele=0
     endif
@@ -2777,9 +2777,11 @@ contains
         itoa(g)//' (elsets follow the element order of 1.ele)')
       if(any(nodes(1:nn)<1) .or. any(nodes(1:nn)>native_points)) &
         call native_error('GLB: 1.ele row '//itoa(k)//': node out of range 1..'//itoa(native_points))
-      if(native_gindex(g)==1 .or. native_gindex(g)==20) barnode(nodes(1:2))=.true.
+      if(native_gindex(g)==1 .or. native_gindex(g)==20) then
+        nbar=nbar+1; barrow(1:2,nbar)=nodes(1:2); barrow(3,nbar)=g
+      endif
       if(native_gindex(g)==25) then
-        nbond=nbond+1; bondrow(1:2,nbond)=nodes(1:2); bondrow(3,nbond)=k
+        nbond=nbond+1; bondrow(1:2,nbond)=nodes(1:2); bondrow(3,nbond)=k; bondrow(4,nbond)=g
       endif
       degen=.false.
       ! user 2026-10-17: a B8 solid row may collapse in any node pattern (as legacy); the 2x2x2 Gauss-point Jacobian
@@ -2876,10 +2878,20 @@ contains
     if(ios >= 0) call native_error('extra mesh element row')
     close(u)
     ! steel25 pilot: legacy steel_spring_parameter / Stiff.f90 index 25 need exactly one node of each spring on a
-    ! bar (L2 / B2) element (icpspring), otherwise the solver stops ('stop here!')
-    do j=1,nbond
-      if(count(barnode(bondrow(1:2,j)))/=1) call native_error('GLB: 1.ele row '//itoa(bondrow(3,j))// &
-        ': bond_slip element needs exactly one of its 2 nodes on an L2 / B2 bar element (legacy icpspring)')
+    ! bar (L2 / B2) element (icpspring), otherwise the solver stops ('stop here!'). Legacy counts only the bar
+    ! elements of groups built in the current block (appear), so the rule is checked per step.
+    do b=1,native_blocks
+      if(nbond==0) exit
+      barnode=.false.
+      do j=1,nbar
+        if(native_appearance(barrow(3,j),b)>0) barnode(barrow(1:2,j))=.true.
+      enddo
+      do j=1,nbond
+        if(native_appearance(bondrow(4,j),b)==0) cycle
+        if(count(barnode(bondrow(1:2,j)))/=1) call native_error('GLB: 1.ele row '//itoa(bondrow(3,j))// &
+          ': bond_slip element needs exactly one of its 2 nodes on an L2 / B2 bar element of a built set in step '// &
+          itoa(b)//' (legacy icpspring)')
+      enddo
     enddo
     do k=1,native_points
       if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
