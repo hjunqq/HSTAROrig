@@ -7668,16 +7668,38 @@
     if(Bparameter/=0.and.iblks==1)rewind(mainunit)  !20230902
     if(Bparameter/=0.and.iblks==1)rewind(upliftunit)
 
-    read(mainunit,*)text
+    if(native_mode) text='TOML-03'      ! seepage S1: .man from [step.controls] (as static_U)
+    if(.not.native_mode) read(mainunit,*)text
+    if(native_mode) then
+        nincs=1
+    else
     read(mainunit,*)nincs
+    endif
 
     if(ngaps/=0.or.nrcsteel/=0)allocate(tofor0(ntotv)) !!ctt2005
 
 
 
     do iincs=1,lincs
+        if(native_mode) then
+            miter=native_iterations(iblks)
+            ditime=native_ditime(iblks)
+            noutn=1
+            noutf=1
+            nstep=native_substeps(iblks)
+            inc_step=1
+            nresta=1
+            cwater=0.
+            Qstatic=0
+        else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
+        endif
+        if(native_mode) then
+            toler_force=native_tol_force(iblks)
+            toler_var(1:mdofn)=native_tol_dof(iblks)
+        else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
+        endif
         if(cwater/=0.and.delgroup>0)then
             do idelgroup=1,delgroup
                 read(mainunit,*)text
@@ -7693,10 +7715,32 @@
 
     xtime=0.0
     do iincs=lincs+1,nincs
+        if(native_mode) then
+            miter=native_iterations(iblks)
+            ditime=native_ditime(iblks)
+            noutn=1
+            noutf=1
+            nstep=native_substeps(iblks)
+            inc_step=1
+            nresta=1
+            cwater=0.
+            Qstatic=0
+        else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
+        endif
+        if(native_mode) then
+            toler_force=native_tol_force(iblks)
+            toler_var(1:mdofn)=native_tol_dof(iblks)
+        else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
+        endif
+        if(native_mode) call native_stage_receipt(iblks,appear,group(1:ngroup)%matno,uinitial(iblks), &
+            gravy,nstep,miter,edge_load_group,tcurvegravity)
+        if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
+            toler_force,toler_var(1:mdofn))
 
         if(cwater/=0.and.delgroup>0)then
+            if(native_mode) call native_man_deferred('water-level coefficients (cwater/=0)')
             allocate(coef_water(delgroup,nstep))
             do idelgroup=1,delgroup
                 read(mainunit,*)i0,coef_water(idelgroup,:)

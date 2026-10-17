@@ -1559,9 +1559,9 @@ contains
         call native_error("MAT: section "//nm//": area / torsion_constant / inertia_y / inertia_z apply only to "// &
           'line elements (element "L2" / "B2")')
       endif
-      if(native_seep .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor") .or. &
-          present_key(p//".layer_thickness"))) &
-        call native_error("MAT: section "//nm//": thickness / gravity_factor / layer_thickness do not apply to a "// &
+      ! seepage S1: layer_thickness (legacy elcod_local, back-node rebuild for any group) is kept on Q4 / B8 sections
+      if(native_seep .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
+        call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a "// &
           "steady_seepage section (the legacy FLUID phase has none)")
       if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
