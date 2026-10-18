@@ -885,14 +885,25 @@ contains
         trim(merge(", dabt",repeat(" ",6),native_heat))//")")
       if(.not.present_key(p//".before_first")) call native_error("LOA: amplitude "//nm//": before_first is required (only ""zero"")")
       if(string_value(p//".before_first")/="zero") call native_error("LOA: amplitude "//nm//": before_first must be ""zero""")
+      if(present_key(p//".points_file")) then
+        ! seepage pilot S2: a long amplitude (e.g. a legacy WATERLEVEL record, one "time value" per point) does not
+        ! fit the TOML subset's one-line arrays (1023 characters); it is read from a "time value" file next to the TOML
+        if(.not.native_seep) call native_error("LOA: amplitude "//nm//": points_file is available for seepage analyses only")
+        if(present_key(p//".points.count")) call native_error("LOA: amplitude "//nm//": give points or points_file, not both")
+        call amp_points_file(i,nm,string_value(p//".points_file"))
+        n=size(native_amp(i)%t)
+      else
       n=integer_value(p//".points.count")
       if(n<2 .or. n>1000) call native_error("LOA: amplitude "//nm//": points must have 2..1000 entries")
       allocate(native_amp(i)%t(n),native_amp(i)%f(n))
+      endif
       do j=1,n
+        if(.not.present_key(p//".points_file")) then
         q=indexed(p//".points",j)
         if(integer_value(q//".count")/=2) call native_error("LOA: amplitude "//nm//": each point is [time, factor]")
         native_amp(i)%t(j)=number(q//"[1]")
         native_amp(i)%f(j)=number(q//"[2]")
+        endif
         if(abs(native_amp(i)%f(j))>1.e6_real64 .or. abs(native_amp(i)%t(j))>1.e9_real64) &
           call native_error("LOA: amplitude "//nm//": value out of range")
         if(j>1) then
@@ -2066,6 +2077,7 @@ contains
     if(.not.native_seep_tr) call native_error('GLB: [initial_condition] applies only to analysis.type "transient_seepage"')
     k=key_index('initial_condition.@table')
     call glb_check_keys('initial_condition','@table pore_pressure.@table pore_pressure.file pore_pressure.format','')
+    if(present_key("initial_condition.pore_pressure.@table")) k=key_index("initial_condition.pore_pressure.@table")
     if(.not.present_key('initial_condition.pore_pressure.file')) &
       call native_error('GLB: [initial_condition.pore_pressure] needs file and format = "node-value"')
     if(string_value('initial_condition.pore_pressure.format')/='node-value') &
@@ -2079,6 +2091,39 @@ contains
   end subroutine
 
   ! node-value file -> node numbers and values (list-directed, as the legacy read_initial reads .inw)
+  subroutine amp_points_file(i,nm,fn)
+    ! seepage pilot S2: amplitude points from a file next to the TOML, one "time value" row per point
+    integer, intent(in) :: i
+    character(*), intent(in) :: nm, fn
+    integer :: u, ios, n, j
+    real(real64) :: a, b
+    logical :: ex
+    character(len=512) :: line
+    if(len_trim(fn)==0 .or. index(fn,'/')>0) call native_error("LOA: amplitude "//nm//": points_file must be a file name next to the TOML")
+    inquire(file=trim(fn),exist=ex)
+    if(.not.ex) call native_error("LOA: amplitude "//nm//": points_file "//trim(fn)//" not found")
+    do j=1,2
+      open(newunit=u,file=trim(fn),status='old',action='read')
+      n=0
+      do
+        read(u,'(a)',iostat=ios) line
+        if(ios/=0) exit
+        if(len_trim(line)==0) cycle
+        read(line,*,iostat=ios) a, b
+        if(ios/=0) call native_error("LOA: amplitude "//nm//": points_file row "//itoa(n+1)//": expected ""time value""")
+        n=n+1
+        if(j==2) then
+          native_amp(i)%t(n)=a; native_amp(i)%f(n)=b
+        endif
+      enddo
+      close(u)
+      if(j==1) then
+        if(n<2 .or. n>1000) call native_error("LOA: amplitude "//nm//": points_file must have 2..1000 rows")
+        allocate(native_amp(i)%t(n),native_amp(i)%f(n))
+      endif
+    enddo
+  end subroutine
+
   subroutine native_pw0_read(npoin,nodes,vals,n)
     integer, intent(in) :: npoin
     integer, allocatable, intent(out) :: nodes(:)
@@ -2513,6 +2558,7 @@ contains
     if(native_seep_tr) then
       if(.not.present_key('analysis.time.theta')) &
         call native_error('GLB: a transient_seepage analysis needs [analysis.time] theta (legacy THETA1)')
+      k=key_index("analysis.time.@table")
       native_theta=number('analysis.time.theta')
       if(native_theta<=0 .or. native_theta>1) call native_error('GLB: analysis.time.theta out of range (0,1]')
     elseif(present_key('analysis.time.@table')) then
