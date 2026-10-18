@@ -3066,6 +3066,8 @@ contains
     real(real64) :: c(3)
     character(1024) :: row
     logical, allocatable :: barnode(:)
+    integer :: norphan
+    character(len=200) :: orphan_ids
     integer, allocatable :: bondrow(:,:), barrow(:,:)
     integer :: nbond, nbar, b
     nmixed=0; mixed_rows=''
@@ -3232,11 +3234,17 @@ contains
           itoa(b)//' (legacy icpspring)')
       enddo
     enddo
+    ! seepage S3 (TEMPORARY, Huijun 2026-10-18): orphan nodes should not exist; allowed for seepage only, with a warning.
+    ! legacy gives them a W dof with zero stiffness, held by the 1e20 diagonal (Fem.f90), W = 0
+    norphan=0; orphan_ids=''
     do k=1,native_points
-      ! seepage S3: legacy decks may carry nodes outside every element (dam_seepage_3d: 1.cor rows far outside
-      ! the mesh); legacy gives them a W dof with zero stiffness, held by the 1e20 diagonal (Fem.f90), W = 0
-      if(.not.used(k) .and. .not.native_seep) call native_error('GLB: node '//itoa(k)//' is not used by any element')
+      if(used(k)) cycle
+      if(.not.native_seep) call native_error('GLB: node '//itoa(k)//' is not used by any element')
+      norphan=norphan+1
+      if(norphan<=10) orphan_ids=trim(orphan_ids)//' '//itoa(k)
     enddo
+    if(norphan>0) write(*,'(a)') 'WARNING native mesh: '//itoa(norphan)//' node(s) not used by any element '// &
+      '(allowed for seepage only, temporary; W held at 0); first:'//trim(orphan_ids)
     if(native_heat) call heat_check_mesh_refs()
   end subroutine
 
