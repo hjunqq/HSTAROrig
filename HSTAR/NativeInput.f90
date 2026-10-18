@@ -2222,6 +2222,8 @@ contains
   ! seepage S4 (DESIGN 13.1-3): [output.initial_stress] step / dimension / coef1 / coef2 -> legacy winit = -step,
   ! the values legacy reads from the terminal before writing the 1.inw initial-stress file (Output.f90 out_next_write)
   subroutine parse_initial_stress()
+    integer :: k
+    k=key_index('output.initial_stress.@table')
     native_inistr=.true.
     native_inistr_step=integer_value('output.initial_stress.step')
     if(native_inistr_step<1 .or. native_inistr_step>native_blocks) call native_error('GLB: output.initial_stress.step '// &
