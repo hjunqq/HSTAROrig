@@ -1704,6 +1704,7 @@ contains
   ! [[material]] model = "fluid" (seepage S1): legacy MECHANICAL WATER, 1 phase FLUID: density ratio bulkw /
   ! iperm=0 permeability(1:ndimn) (Material.f90 FLUID). permeability multiplies the pore-pressure gradient
   ! (Stiff.f90 HMATRX, Load.f90 gravity term: q = -k (grad p - rho g)), i.e. K/gamma_w in m^2/(Pa s) (DESIGN.md 8.1).
+  ! TOML fluid.permeability unit: m^2/(Pa s) = K[m/s]/9810, the legacy meaning (decided, DESIGN.md 9); no conversion.
   subroutine parse_fluid_mat(p,nm,i)
     character(*), intent(in) :: p, nm
     integer, intent(in) :: i
