@@ -1307,6 +1307,7 @@
             gid_s=0
             gid_P=1
             gid_wh=native_gid_wh
+            gid_wv=native_gid_wv
         endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &

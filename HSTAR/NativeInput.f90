@@ -159,7 +159,7 @@ module native_input
   character(len=24) :: native_atype='static'
   logical :: native_mat_fluid(NATIVE_MAXG)=.false.
   real(real64) :: native_fluid(3,NATIVE_MAXG)=0._real64, native_perm(3,NATIVE_MAXG)=0._real64
-  integer :: native_gid_wh=0
+  integer :: native_gid_wh=0, native_gid_wv=0
   logical :: native_nrt_toml=.false., native_nrt_receipt_on=.false.
   ! SOL seam (sol-pilot V1-V8): HSTAR_NATIVE_SOL=contract (default: implied .sol records, PROFILE 0 0 1 1 /
   ! heat PARDISO mtype 11 ncpu 2) | toml ([solver] linear = "profile" | "pardiso", [solver.pardiso]
@@ -2736,8 +2736,9 @@ contains
         select case(s)
         case('pore_pressure'); k=1
         case('water_head'); k=2
+        case('flow_velocity'); k=3      ! seepage S2: legacy gid_wv (nodal flow velocity, GiD "flow_velocity")
         case default; call native_error('GLB: '//trim(native_atype)//' output.field "'//s// &
-          '" is not available (pore_pressure, water_head)')
+          '" is not available (pore_pressure, water_head, flow_velocity)')
         end select
         if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
         has(k)=.true.
@@ -2745,6 +2746,7 @@ contains
       if(.not.has(1)) call native_error('GLB: '//trim(native_atype)//' output.field must contain "pore_pressure"')
       native_gid_f=0
       native_gid_wh=merge(1,0,has(2))
+      native_gid_wv=merge(1,0,has(3))
     else
     call glb_check_keys('output','@table format stress_averaging','field stress_averaging_exclude')
     if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
