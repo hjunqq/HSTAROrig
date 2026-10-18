@@ -1060,7 +1060,8 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
-    if (nflow/=0 .and. native_mode)then    ! seepage S3: list from the seepage_face nset (1.set order)
+    if(native_mode)then
+      if(nflow/=0)then    ! seepage S3: list from the seepage_face nset (1.set order)
         nfreeflownode=0
         if(native_face_on) nfreeflownode=size(native_face_nodes)
         if(nfreeflownode/=0)then
@@ -1068,17 +1069,19 @@
             listfreeflownode=native_face_nodes
         endif
         if(native_face_thr_on) seep_face_thr=native_face_thr
-    elseif (nflow/=0)then
+      endif
+    else
+    if (nflow/=0)then
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfreeflownode
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
             'nfreeflownode',text)
         if(nfreeflownode/=0)then
             allocate(listfreeflownode(nfreeflownode))
-            if(native_mode) call native_glb_deferred('read_glb_problem_type')
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)listfreeflownode
             if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
                 'listfreeflownode',text)
         endif
+    endif
     endif
 
     ! temperature
