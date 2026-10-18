@@ -1736,8 +1736,13 @@ contains
     if(native_fluid(1,i)<=0 .or. native_fluid(1,i)>1.e5_real64) call native_error("MAT: material "//nm// &
       ": fluid.density out of range (0,1e5] kg/m^3")
     native_fluid(2,i)=number(p//".fluid.porosity")
-    if(native_fluid(2,i)<=0 .or. native_fluid(2,i)>=1) call native_error("MAT: material "//nm// &
-      ": fluid.porosity out of range (0,1)")
+    ! seepage S2: legacy decks use ratio 1.0 (xfj_seepage_transient), storage ratio/bulkw is then 1/bulkw
+    if(native_seep) then
+      if(native_fluid(2,i)<=0 .or. native_fluid(2,i)>1) call native_error("MAT: material "//nm// &
+        ": fluid.porosity out of range (0,1]")
+    elseif(native_fluid(2,i)<=0 .or. native_fluid(2,i)>=1) then
+      call native_error("MAT: material "//nm//": fluid.porosity out of range (0,1)")
+    endif
     native_fluid(3,i)=number(p//".fluid.bulk_modulus")
     if(native_fluid(3,i)<=0 .or. native_fluid(3,i)>1.e12_real64) call native_error("MAT: material "//nm// &
       ": fluid.bulk_modulus out of range (0,1e12] Pa")
@@ -2839,6 +2844,14 @@ contains
     native_points=glb_count_rows(trim(native_mesh_prefix)//'.cor')
     native_elements=glb_count_rows(trim(native_mesh_prefix)//'.ele')
     if(native_points<1) call native_error('GLB: 1.cor has no rows')
+    if(native_pw0_on) then      ! seepage S2: the initial pore pressure file is checked before any output is opened
+      block
+        integer, allocatable :: pw0n(:)
+        real(real64), allocatable :: pw0v(:)
+        integer :: pw0c
+        call native_pw0_read(native_points,pw0n,pw0v,pw0c)
+      end block
+    endif
     ! orientation node ids: checked here, after 1.cor is counted (sections are parsed before the mesh counts)
     if(any(native_pdir(:,1:ng)>native_points)) call native_error('GLB: orientation.node_pair node out of range 1..'// &
       itoa(native_points))
