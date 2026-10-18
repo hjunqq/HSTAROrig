@@ -148,6 +148,15 @@ module native_input
   ! SEEPAGE pilot S1 (seepage-pilot/DESIGN.md): analysis.type = "steady_seepage" -> legacy type_problem Q with the
   ! pore-pressure field W only (dof 8, nfdof 1, UWCPL 0); [material.fluid] -> legacy MECHANICAL WATER / phase FLUID.
   logical :: native_seep=.false.
+  ! SEEPAGE pilot S2: analysis.type = "transient_seepage" -> legacy type_problem S (first-order theta method,
+  ! Fem.f90 time_dependent) on the same W field / FLUID materials; [analysis.time] theta = legacy THETA1;
+  ! [[step.increment]] = legacy time_dependent increment cards; optional [initial_condition.pore_pressure]
+  ! node-value file = legacy winit=1 .inw PORE-PRESSURE block (read_initial default case, W only, order 0).
+  logical :: native_seep_tr=.false.
+  real(real64) :: native_theta=1._real64
+  logical :: native_pw0_on=.false.
+  character(len=256) :: native_pw0_file=''
+  character(len=24) :: native_atype='static'
   logical :: native_mat_fluid(NATIVE_MAXG)=.false.
   real(real64) :: native_fluid(3,NATIVE_MAXG)=0._real64, native_perm(3,NATIVE_MAXG)=0._real64
   integer :: native_gid_wh=0
@@ -370,7 +379,7 @@ contains
       if(native_density(i)<0 .or. native_density(i)>1.e6_real64) call native_error('density out of range [0,1e6]')   ! D3: 0 allowed (massless/weightless fill)
     enddo
     do i=1,native_blocks
-      if(native_heat) exit                 ! transient_heat: increments come from [[step.increment]] (parse_man)
+      if(native_heat .or. native_seep_tr) exit   ! transient_heat / transient_seepage: [[step.increment]] (parse_man)
       if(.not.native_loa_toml) native_gravity(i)=number(indexed('step',i)//'.load[1].magnitude')
       native_substeps(i)=integer_value(indexed('step',i)//'.controls.substeps')
       native_iterations(i)=integer_value(indexed('step',i)//'.controls.max_iterations')
@@ -689,7 +698,8 @@ contains
           case("ux","uy","uz")
             if(native_heat) call native_error("dof "//dn//" not available in a transient_heat analysis (only T) "// &
               "(step "//itoa(s)//" boundary "//itoa(b)//")")
-            if(native_seep) call native_error("dof "//dn//" not available in a steady_seepage analysis (only pore_pressure) "// &
+            if(native_seep) call native_error("dof "//dn//" not available in a "//trim(native_atype)// &
+              " analysis (only pore_pressure) "// &
               "(step "//itoa(s)//" boundary "//itoa(b)//")")
             dof=index("xyz",dn(2:2))
           case("T")
@@ -697,7 +707,8 @@ contains
               " boundary "//itoa(b)//")")
             dof=10
           case("pore_pressure")         ! seepage S1: legacy .pre ifixvar 8 (W)
-            if(.not.native_seep) call native_error("dof pore_pressure needs analysis.type ""steady_seepage"" (step "// &
+            if(.not.native_seep) call native_error("dof pore_pressure needs analysis.type ""steady_seepage"" or "// &
+              """transient_seepage"" (step "// &
               itoa(s)//" boundary "//itoa(b)//")")
             dof=8
           case("rx","ry","rz")          ! beam pilot C2: legacy slots 4/5/6 (3D), 2D rotation (rz) in slot 4
@@ -1412,7 +1423,7 @@ contains
         call mat_check_keys(p,"@table name model fluid.@table fluid.density fluid.porosity fluid.bulk_modulus "// &
           "fluid.permeability.count fluid.permeability[1] fluid.permeability[2] fluid.permeability[3]","material "//nm)
         if(string_value(p//".model")/="fluid") call native_error("MAT: material "//nm// &
-          ': a steady_seepage analysis needs model "fluid" with [material.fluid]')
+          ': a '//trim(native_atype)//' analysis needs model "fluid" with [material.fluid]')
         call parse_fluid_mat(p,nm,i)
         cycle
       endif
@@ -1564,7 +1575,7 @@ contains
       ! seepage S1: layer_thickness (legacy elcod_local, back-node rebuild for any group) is kept on Q4 / B8 sections
       if(native_seep .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a "// &
-          "steady_seepage section (the legacy FLUID phase has none)")
+          trim(native_atype)//" section (the legacy FLUID phase has none)")
       if(native_heat .and. (present_key(p//".thickness") .or. present_key(p//".gravity_factor"))) &
         call native_error("MAT: section "//nm//": thickness / gravity_factor do not apply to a transient_heat section")
       v=1._real64
@@ -2046,6 +2057,55 @@ contains
     man_owned = in_list(trim(path(d+11:)),"time_increment tolerance_force tolerance_dof")
   end function
 
+  ! seepage pilot S2: [initial_condition.pore_pressure] file = "...", format = "node-value"
+  ! (one "node value" pair per line, Pa; legacy winit=1 .inw PORE-PRESSURE block). transient_seepage only.
+  subroutine parse_initial_pw()
+    integer :: k
+    logical :: ex
+    if(.not.present_key('initial_condition.@table')) return
+    if(.not.native_seep_tr) call native_error('GLB: [initial_condition] applies only to analysis.type "transient_seepage"')
+    k=key_index('initial_condition.@table')
+    call glb_check_keys('initial_condition','@table pore_pressure.@table pore_pressure.file pore_pressure.format','')
+    if(.not.present_key('initial_condition.pore_pressure.file')) &
+      call native_error('GLB: [initial_condition.pore_pressure] needs file and format = "node-value"')
+    if(string_value('initial_condition.pore_pressure.format')/='node-value') &
+      call native_error('GLB: initial_condition.pore_pressure.format must be "node-value"')
+    native_pw0_file=string_value('initial_condition.pore_pressure.file')
+    if(len_trim(native_pw0_file)==0 .or. index(native_pw0_file,'/')>0) &
+      call native_error('GLB: initial_condition.pore_pressure.file must be a file name next to the TOML')
+    inquire(file=trim(native_pw0_file),exist=ex)
+    if(.not.ex) call native_error('GLB: initial_condition.pore_pressure.file '//trim(native_pw0_file)//' not found')
+    native_pw0_on=.true.
+  end subroutine
+
+  ! node-value file -> node numbers and values (list-directed, as the legacy read_initial reads .inw)
+  subroutine native_pw0_read(npoin,nodes,vals,n)
+    integer, intent(in) :: npoin
+    integer, allocatable, intent(out) :: nodes(:)
+    real(real64), allocatable, intent(out) :: vals(:)
+    integer, intent(out) :: n
+    integer :: u, ios, ln, ip
+    real(real64) :: v
+    character(len=512) :: row
+    logical, allocatable :: seen(:)
+    allocate(nodes(npoin), vals(npoin), seen(npoin)); seen=.false.; n=0; ln=0
+    open(newunit=u,file=trim(native_pw0_file),status='old',action='read')
+    do
+      read(u,'(a)',iostat=ios) row
+      if(ios/=0) exit
+      ln=ln+1
+      if(len_trim(row)==0) cycle
+      read(row,*,iostat=ios) ip, v
+      if(ios/=0) call native_error('GLB: '//trim(native_pw0_file)//' line '//itoa(ln)//': expected "node value"')
+      if(ip<1 .or. ip>npoin) call native_error('GLB: '//trim(native_pw0_file)//' line '//itoa(ln)//': node '// &
+        itoa(ip)//' out of range 1..'//itoa(npoin))
+      if(seen(ip)) call native_error('GLB: '//trim(native_pw0_file)//': node '//itoa(ip)//' listed twice')
+      seen(ip)=.true.; n=n+1; nodes(n)=ip; vals(n)=v
+    enddo
+    close(u)
+    if(n==0) call native_error('GLB: '//trim(native_pw0_file)//' has no "node value" rows')
+  end subroutine
+
   ! transient_heat (T3): [[step.increment]] = one legacy time_dependent increment card.
   subroutine parse_man_heat()
     integer :: i, j, n, k
@@ -2074,7 +2134,7 @@ contains
   subroutine parse_man()
     integer :: i
     character(:), allocatable :: p
-    if(native_heat) then
+    if(native_heat .or. native_seep_tr) then
       call parse_man_heat()
       return
     endif
@@ -2412,7 +2472,7 @@ contains
     ! [analysis] (G3: static only)
     if(.not.present_key('analysis.type')) call native_error('GLB: [analysis] type = "static" is required with HSTAR_NATIVE_GLB=toml')
     k=key_index('analysis.@table')
-    call glb_check_keys('analysis','@table type strength_reduction.@table strength_reduction.factor '// &
+    call glb_check_keys('analysis','@table type time.@table time.theta strength_reduction.@table strength_reduction.factor '// &
       'strength_reduction.amplitude strength_reduction.reset_state_each_increment_from_step','')
     if(present_key('analysis.strength_reduction.@table')) then        ! D3b: legacy kstab / MAT_DE + mat_curve
       k=key_index('analysis.strength_reduction.@table')
@@ -2434,15 +2494,31 @@ contains
       endif
     endif
     s=string_value('analysis.type')
+    native_atype=s
     if(s=='transient_heat') then
       native_heat=.true.                  ! temperature pilot phase 2 (T1-T8)
     elseif(s=='steady_seepage') then
       native_seep=.true.                  ! seepage pilot S1: legacy type_problem Q, field W only
       if(present_key('analysis.strength_reduction.@table')) &
         call native_error('GLB: [analysis.strength_reduction] does not apply to a steady_seepage analysis')
+    elseif(s=='transient_seepage') then
+      native_seep=.true.                  ! seepage pilot S2: legacy type_problem S, field W only
+      native_seep_tr=.true.
+      if(present_key('analysis.strength_reduction.@table')) &
+        call native_error('GLB: [analysis.strength_reduction] does not apply to a transient_seepage analysis')
     elseif(s/='static') then
-      call native_error('GLB: analysis.type "'//s//'" is deferred (static, transient_heat, steady_seepage)')
+      call native_error('GLB: analysis.type "'//s//'" is deferred (static, transient_heat, steady_seepage, '// &
+        'transient_seepage)')
     endif
+    if(native_seep_tr) then
+      if(.not.present_key('analysis.time.theta')) &
+        call native_error('GLB: a transient_seepage analysis needs [analysis.time] theta (legacy THETA1)')
+      native_theta=number('analysis.time.theta')
+      if(native_theta<=0 .or. native_theta>1) call native_error('GLB: analysis.time.theta out of range (0,1]')
+    elseif(present_key('analysis.time.@table')) then
+      call native_error('GLB: [analysis.time] applies only to analysis.type "transient_seepage"')
+    endif
+    call parse_initial_pw()
     ! [mesh]
     k=key_index('mesh.@table')
     call glb_check_keys('mesh','@table file format dimension sets_file sets_sha256','')
@@ -2531,7 +2607,7 @@ contains
         native_gname(g)='T4'; native_gindex(g)=7; native_gnnode(g)=4
       case('joint')                       ! joint pilot D3a: GOODMAN node-pair rows, legacy index 5 (2D Q4 row) / 9 (3D B8 row)
         if(native_heat) call native_error('GLB: section '//p//': element joint does not apply to transient_heat')
-        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
+        if(native_seep) call native_error('GLB: section '//p//': a '//trim(native_atype)//' analysis supports only Q4 / T4 / B8 sections')
         if(string_value(p//'.formulation')/='goodman') &
           call native_error('GLB: section '//p//': element joint supports only formulation "goodman"')
         native_gjoint(g)=.true.
@@ -2542,13 +2618,13 @@ contains
         endif
       case('L2')                          ! matline L1-L4: 2-node bar (legacy index 1), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with L2 is deferred (only B8)')
-        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
+        if(native_seep) call native_error('GLB: section '//p//': a '//trim(native_atype)//' analysis supports only Q4 / T4 / B8 sections')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
           ': formulation does not apply to element L2 (2-node bar)')
         native_gname(g)='L2'; native_gindex(g)=1; native_gnnode(g)=2
       case('B2')                          ! beam pilot C2: 2-node beam (legacy index 20, b2), 2D or 3D
         if(native_heat) call native_error('GLB: section '//p//': transient_heat with B2 is deferred')
-        if(native_seep) call native_error('GLB: section '//p//': a steady_seepage analysis supports only Q4 / T4 / B8 sections')
+        if(native_seep) call native_error('GLB: section '//p//': a '//trim(native_atype)//' analysis supports only Q4 / T4 / B8 sections')
         if(present_key(p//'.formulation')) call native_error('GLB: section '//p// &
           ': formulation does not apply to element B2 (2-node beam)')
         native_gname(g)='L2'; native_gindex(g)=20; native_gnnode(g)=2
@@ -2576,13 +2652,14 @@ contains
     do i=1,nb
       p=indexed('step',i)
       k=key_index(p//'.@table')
-      if(.not.native_heat) k=key_index(p//'.controls.@table')
+      if(.not.(native_heat .or. native_seep_tr)) k=key_index(p//'.controls.@table')
       if(len(string_value(p//'.name'))==0) call native_error('GLB: empty step name: '//p)
       s=string_value(p//'.procedure')
       if(native_heat) then
         if(s/='transient_heat') call native_error('GLB: '//p//'.procedure must be "transient_heat" (analysis.type)')
       elseif(native_seep) then
-        if(s/='steady_seepage') call native_error('GLB: '//p//'.procedure must be "steady_seepage" (analysis.type)')
+        if(s/=trim(native_atype)) call native_error('GLB: '//p//'.procedure must be "'//trim(native_atype)// &
+          '" (analysis.type)')
       elseif(s/='static') then
         call native_error('GLB: '//p//'.procedure "'//s//'" is deferred (only static)')
       endif
@@ -2591,7 +2668,11 @@ contains
       if(doc%entry(k)%kind/=TV_BOOL) call native_error('expected boolean: '//p//'.reset_state')
       native_reset(i)=merge(1,0,doc%entry(k)%lvalue)
       if(native_heat .and. native_reset(i)/=0) call native_error('GLB: '//p//'.reset_state must be false in a transient_heat analysis')
-      if(.not.native_heat) then
+      if(native_seep_tr .and. native_reset(i)/=0) &
+        call native_error('GLB: '//p//'.reset_state must be false in a transient_seepage analysis')
+      if(native_seep_tr .and. present_key(p//'.controls.@table')) &
+        call native_error('GLB: '//p//': a transient_seepage step takes [[step.increment]], not [step.controls]')
+      if(.not.(native_heat .or. native_seep_tr)) then
       if(integer_value(p//'.controls.increments')/=1) call native_error('GLB: '//p//'.controls.increments must be 1')
       s=string_value(p//'.controls.stiffness_update')
       if(s/='first_iteration' .and. s/='every_iteration') &
@@ -2655,12 +2736,13 @@ contains
         select case(s)
         case('pore_pressure'); k=1
         case('water_head'); k=2
-        case default; call native_error('GLB: steady_seepage output.field "'//s//'" is not available (pore_pressure, water_head)')
+        case default; call native_error('GLB: '//trim(native_atype)//' output.field "'//s// &
+          '" is not available (pore_pressure, water_head)')
         end select
         if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
         has(k)=.true.
       enddo
-      if(.not.has(1)) call native_error('GLB: steady_seepage output.field must contain "pore_pressure"')
+      if(.not.has(1)) call native_error('GLB: '//trim(native_atype)//' output.field must contain "pore_pressure"')
       native_gid_f=0
       native_gid_wh=merge(1,0,has(2))
     else

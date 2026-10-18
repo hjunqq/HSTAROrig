@@ -987,6 +987,7 @@
             type_solver='PARDISO'
             type_nl=10
         endif
+        if(native_seep_tr) type_problem='S'   ! seepage S2: first-order transient (time_dependent)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
     endif
@@ -1129,6 +1130,7 @@
     if(native_mode) then
         order_time_mdofn(1:mdofn)=0
         if(native_heat) order_time_mdofn(10)=1
+        if(native_seep_tr) order_time_mdofn(8)=1   ! seepage S2: W first order in time
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
     endif
@@ -1143,6 +1145,7 @@
         beeta2=0.25
         theta1=1.0
         if(native_heat) theta1=0.5    ! Crank-Nicolson, as the legacy temperature decks
+        if(native_seep_tr) theta1=native_theta   ! seepage S2: [analysis.time] theta (legacy THETA1)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)beeta1,beeta2,theta1
     endif
@@ -1679,6 +1682,7 @@
         if(native_mode) then
             group(igroup)%order_time=0
             if(native_heat) group(igroup)%order_time(2,1)=1
+            if(native_seep_tr) group(igroup)%order_time(2,1)=1   ! seepage S2: legacy group ORDER_TIME 0 1
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
         endif

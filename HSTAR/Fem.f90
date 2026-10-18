@@ -1703,6 +1703,7 @@
 
         write(7,*)'ninit=',ninit,'iblks=',iblks,'restart=',restart
         if(ninit/=0.and.iblks==1.and.restart==0)call read_initial
+        if(native_mode.and.native_pw0_on.and.iblks==1.and.restart==0)call native_initial_pw  ! seepage S2
 
         if(native_mode) call native_transition(iblks,'before',maxval(abs(result_zero)))
         if (uinitial(iblks)==1) then
@@ -15207,6 +15208,25 @@
 
     end subroutine read_permanent_strain
     !20231215YL
+
+    ! seepage pilot S2: [initial_condition.pore_pressure] in place of the legacy winit=1 .inw PORE-PRESSURE
+    ! block; the same statements as read_initial "case default" for W (slot 8) with time order 0.
+    subroutine native_initial_pw
+    integer(ink) n,i,ipoin,totvi
+    integer,allocatable::nodes(:)
+    real(irk),allocatable::vals(:)
+    real(irk) v
+    call native_pw0_read(npoin,nodes,vals,n)
+    do i=1,n
+        ipoin=nodes(i)
+        v=vals(i)
+        if(v<=0)v=0.      ! legacy read_initial: W at or below 0 is taken as 0
+        totvi=nodfn(lmdofn(8),ipoin)
+        if(totvi/=0)result_zero(totvi)=v
+        prstat(ipoin)=v
+    end do
+    deallocate(nodes,vals)
+    end subroutine native_initial_pw
 
     subroutine read_initial
 
