@@ -3607,7 +3607,11 @@
     write(initwunit,*)wngroup,kinit_g
     if(wngroup/=0) then  !20220304
         print *,'give me the vdimn,coef1 and coef2?'
+        if(native_mode) then            ! seepage S4: [output.initial_stress] dimension / coef1 / coef2
+            vdimn=nint(native_inistr_v(1)); coef1=native_inistr_v(2); coef2=native_inistr_v(3)
+        else
         read *,vdimn,coef1,coef2
+        endif
 
         DO igroup =1,ngroup
             field1= group(igroup)%fieldid(1:1)

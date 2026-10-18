@@ -302,7 +302,7 @@
             name='SOLID'
             imat=jmat
             if(native_mat_heat(jmat)) property='HEAT'     ! T2: legacy 'HEAT','SOLID',imat
-            if(native_mat_fluid(jmat)) name='WATER'       ! seepage S1: legacy 'MECHANICAL','WATER',imat
+            if(native_mat_fluid(jmat) .and. .not.native_uw) name='WATER'   ! seepage S1: legacy 'MECHANICAL','WATER',imat
             if(native_mat_contact(jmat)) name='CONTACT'   ! D3c: goodman_janbu on a contact = true section
         else
         read(munit,*)property,name,imat
@@ -317,6 +317,7 @@
             allocate(props(imat)%mechanical)
             if(native_mode) then
                 nphase=1
+                if(native_uw) nphase=2          ! seepage S4: SOLID + FLUID phases
             else
             read(munit,*)nphase
             endif
@@ -325,6 +326,7 @@
                 if(native_mode) then
                     phase='SOLID'
                     if(native_mat_fluid(imat)) phase='FLUID'     ! seepage S1
+                    if(native_uw) phase=merge('SOLID','FLUID',iphase==1)   ! seepage S4
                 else
                 read(munit,*)phase
                 endif

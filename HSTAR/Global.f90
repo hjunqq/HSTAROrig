@@ -914,6 +914,7 @@
         ninit=0
         kinit=0
         winit=0
+        if(native_inistr) winit=-native_inistr_step   ! seepage S4: [output.initial_stress] (DESIGN 13.1-3)
         nblks=native_blocks
         nlinks=0
         nonsym=0
@@ -989,6 +990,7 @@
             type_nl=10
         endif
         if(native_seep_tr) type_problem='S'   ! seepage S2: first-order transient (time_dependent)
+        if(native_uw_tr) type_problem='S'     ! seepage S4: consolidation (time_dependent, U and W first order)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)type_problem,type_solver,type_load,type_nl,stabpw,nlayer,kglb,state_change,Bparameter,balgor,upliftin   !20220409
     endif
@@ -1034,6 +1036,7 @@
         kgmat=0
         nswkw=1
         uwcpl=0
+        if(native_uw) uwcpl=2         ! seepage S4: drained u-p (H + Q, no storage), DESIGN 8.2 / 13
         NGRAV=1
         nflow=0
         if(native_flow_charge) nflow=1   ! seepage S3: [[step.boundary]] type seepage_face / output.field flow_charge
@@ -1116,6 +1119,7 @@
         mdofn=native_ndim
         if(native_heat) mdofn=10      ! dof list Ux Uy Uz Thxy Thyz Thzx P W A T; only T active
         if(native_seep) mdofn=8       ! seepage S1: legacy MDOFN 8, only W (slot 8) active
+        if(native_uw) mdofn=8         ! seepage S4: Ux Uy Uz + W (slots 1-3, 8)
         if(native_beam) mdofn=merge(6,4,native_ndim==3)   ! beam pilot C2: B2 rotations (2D: slot 4, legacy pile_beam)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
@@ -1134,6 +1138,11 @@
             lmdofn(1:mdofn)=0
             lmdofn(8)=1
         endif
+        if(native_uw) then
+            lmdofn(1:mdofn)=0
+            lmdofn(1:3)=1
+            lmdofn(8)=1
+        endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
     endif
@@ -1143,6 +1152,7 @@
         order_time_mdofn(1:mdofn)=0
         if(native_heat) order_time_mdofn(10)=1
         if(native_seep_tr) order_time_mdofn(8)=1   ! seepage S2: W first order in time
+        if(native_uw_tr) order_time_mdofn([1,2,3,8])=1   ! seepage S4: legacy S UW decks "1 1 1 0 0 0 0 1"
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)order_time_mdofn(1:mdofn) !0,no the freedom;1,sppead;2,acceleration
     endif
@@ -1157,7 +1167,7 @@
         beeta2=0.25
         theta1=1.0
         if(native_heat) theta1=0.5    ! Crank-Nicolson, as the legacy temperature decks
-        if(native_seep_tr) theta1=native_theta   ! seepage S2: [analysis.time] theta (legacy THETA1)
+        if(native_seep_tr .or. native_uw_tr) theta1=native_theta   ! seepage S2/S4: [analysis.time] theta (legacy THETA1)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)beeta1,beeta2,theta1
     endif
@@ -1321,6 +1331,7 @@
             gid_wh=native_gid_wh
             gid_wv=native_gid_wv
         endif
+        if(native_uw) gid_P=native_gid_p   ! seepage S4: PORE-PRESSURE with u / s
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
@@ -1642,6 +1653,10 @@
             group(igroup)%fieldid='U'
             if(native_heat) group(igroup)%fieldid='T'
             if(native_seep) group(igroup)%fieldid='W'
+            if(native_uw) then                 ! seepage S4: 17 / 18 two-field groups
+                group(igroup)%nrfields=2
+                group(igroup)%fieldid='UW'
+            endif
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
             if(native_gps(igroup)) group(igroup)%sptype='PS'   ! section formulation "plane_stress"
@@ -1696,6 +1711,7 @@
             group(igroup)%order_time=0
             if(native_heat) group(igroup)%order_time(2,1)=1
             if(native_seep_tr) group(igroup)%order_time(2,1)=1   ! seepage S2: legacy group ORDER_TIME 0 1
+            if(native_uw_tr) group(igroup)%order_time(2,1:2)=1   ! seepage S4: legacy group ORDER_TIME 0 1 0 1
         else
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)(group(igroup)%order_time(:,ifield),ifield=1,group(igroup)%nrfields)  !907
         endif
@@ -1721,6 +1737,7 @@
                 nfdof=native_ndim
                 if(native_heat) nfdof=1
                 if(native_seep) nfdof=1
+                if(native_uw) nfdof=merge(3,1,ifield==1)   ! seepage S4: field 1 U (1 2 3), field 2 W (8)
                 if(group(igroup)%index==20) nfdof=merge(6,3,native_ndim==3)   ! beam pilot C2: u + rotations
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
@@ -1740,6 +1757,7 @@
                 endif
                 if(native_heat) group(igroup)%dof(ifield)%listdof_f=10
                 if(native_seep) group(igroup)%dof(ifield)%listdof_f=8
+                if(native_uw .and. ifield==2) group(igroup)%dof(ifield)%listdof_f=8
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
             endif
