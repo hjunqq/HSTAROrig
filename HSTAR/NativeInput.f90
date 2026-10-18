@@ -3233,7 +3233,9 @@ contains
       enddo
     enddo
     do k=1,native_points
-      if(.not.used(k)) call native_error('GLB: node '//itoa(k)//' is not used by any element')
+      ! seepage S3: legacy decks may carry nodes outside every element (dam_seepage_3d: 1.cor rows far outside
+      ! the mesh); legacy gives them a W dof with zero stiffness, held by the 1e20 diagonal (Fem.f90), W = 0
+      if(.not.used(k) .and. .not.native_seep) call native_error('GLB: node '//itoa(k)//' is not used by any element')
     enddo
     if(native_heat) call heat_check_mesh_refs()
   end subroutine
