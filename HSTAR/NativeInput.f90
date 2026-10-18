@@ -1744,8 +1744,13 @@ contains
       call native_error("MAT: material "//nm//": fluid.porosity out of range (0,1)")
     endif
     native_fluid(3,i)=number(p//".fluid.bulk_modulus")
-    if(native_fluid(3,i)<=0 .or. native_fluid(3,i)>1.e12_real64) call native_error("MAT: material "//nm// &
-      ": fluid.bulk_modulus out of range (0,1e12] Pa")
+    ! seepage S2: legacy decks give a very large bulkw for (nearly) no storage, e.g. 1.45e14 in xfj_seepage_transient
+    if(native_seep) then
+      if(native_fluid(3,i)<=0 .or. native_fluid(3,i)>1.e20_real64) call native_error("MAT: material "//nm// &
+        ": fluid.bulk_modulus out of range (0,1e20] Pa")
+    elseif(native_fluid(3,i)<=0 .or. native_fluid(3,i)>1.e12_real64) then
+      call native_error("MAT: material "//nm//": fluid.bulk_modulus out of range (0,1e12] Pa")
+    endif
     if(integer_value(p//".fluid.permeability.count")/=native_ndim) call native_error("MAT: material "//nm// &
       ": fluid.permeability needs mesh.dimension ("//itoa(native_ndim)//") entries")
     do j=1,native_ndim
