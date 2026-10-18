@@ -8071,7 +8071,7 @@
                             do ii=1,nfreeflownode
                                 ipoin=listfreeflownode(ii)
                                 itotv=nodfn(lmdofn(8),ipoin)
-                                if (totveq(itotv)/=0.and.(result_zero(itotv)>.1  &
+                                if (totveq(itotv)/=0.and.(result_zero(itotv)>seep_face_thr  &
                                     .or.(result_zero(itotv)>0..and.flowrate(ipoin)>0.))) then
                                     global_stiff1(iseq(totveq(itotv)))=1.e20
                                     rvector(totveq(itotv))=0.
@@ -16307,7 +16307,7 @@
         do ii=1,nfreeflownode
             ipoin=listfreeflownode(ii)
             itotv=nodfn(lmdofn(8),ipoin)
-            if (totveq(itotv)/=0.and.(result_zero(itotv)>.1  &
+            if (totveq(itotv)/=0.and.(result_zero(itotv)>seep_face_thr  &
                 .or.(result_zero(itotv)>0..and.flowrate(ipoin)>0.))) then
                 refor(itotv)=0.
             endif

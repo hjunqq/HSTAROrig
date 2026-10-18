@@ -185,6 +185,7 @@
     integer(ink) npface,ftfunit,mat_curve
     integer(ink),allocatable::np_to_face(:),list_npface(:),ldofs_space(:),listp_space(:),listfreeflownode(:),nndex(:),nndex_bt(:) !ssorpbcg
     integer(ink),allocatable::iffix(:)
+    real   (irk)::seep_face_thr=.1    ! seepage S3: legacy literal .1 (Fem.f90 seepage face); TOML threshold overrides
     real   (irk),allocatable::fixed(:)
     real   (irk),allocatable::ftfor(:,:),flowrate(:)
     real   (irk),allocatable::fmass(:), floae(:),floai(:),fexta(:) !!nstoks
@@ -1035,6 +1036,7 @@
         uwcpl=0
         NGRAV=1
         nflow=0
+        if(native_flow_charge) nflow=1   ! seepage S3: [[step.boundary]] type seepage_face / output.field flow_charge
         ECWPIPE=0
         if(native_heat) then          ! T5: ECWPIPE=2 (0 leaves group%water_pipe unallocated); no mass/stiffness tables
             nmass=999
@@ -1058,8 +1060,15 @@
     if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
         'text',text)
     print *,text
-    if (nflow/=0)then
-        if(native_mode) call native_glb_deferred('read_glb_problem_type')
+    if (nflow/=0 .and. native_mode)then    ! seepage S3: list from the seepage_face nset (1.set order)
+        nfreeflownode=0
+        if(native_face_on) nfreeflownode=size(native_face_nodes)
+        if(nfreeflownode/=0)then
+            allocate(listfreeflownode(nfreeflownode))
+            listfreeflownode=native_face_nodes
+        endif
+        if(native_face_thr_on) seep_face_thr=native_face_thr
+    elseif (nflow/=0)then
         read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfreeflownode
         if(glb_ios/=0) call glb_read_error(glb_ios,glb_msg,'read_glb_problem_type', &
             'nfreeflownode',text)

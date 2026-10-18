@@ -160,6 +160,10 @@ module native_input
   logical :: native_mat_fluid(NATIVE_MAXG)=.false.
   real(real64) :: native_fluid(3,NATIVE_MAXG)=0._real64, native_perm(3,NATIVE_MAXG)=0._real64
   integer :: native_gid_wh=0, native_gid_wv=0
+  ! seepage S3: seepage face (legacy .glb nflow + nfreeflownode/listfreeflownode); flow_charge output <=> nflow 1
+  logical :: native_flow_charge=.false., native_face_on=.false., native_face_thr_on=.false.
+  integer, allocatable :: native_face_nodes(:)
+  real(real64) :: native_face_thr=0.1_real64
   logical :: native_nrt_toml=.false., native_nrt_receipt_on=.false.
   ! SOL seam (sol-pilot V1-V8): HSTAR_NATIVE_SOL=contract (default: implied .sol records, PROFILE 0 0 1 1 /
   ! heat PARDISO mtype 11 ncpu 2) | toml ([solver] linear = "profile" | "pardiso", [solver.pardiso]
@@ -403,6 +407,8 @@ contains
     if(native_type_nl==4 .and. .not.(any_mcj .or. any(native_mat_contact))) call native_error('GLB: stiffness_update '// &
       '"every_iteration" needs an mc_joint or goodman_janbu material (joint pilot D3b / D3c)')
     if(native_loa_toml) call loa_check_used()
+    if(native_face_on .and. .not.native_flow_charge) call native_error('GLB: a seepage_face boundary needs output.field '// &
+      '"flow_charge" (legacy nflow 1 always writes it)')
     if(native_tem_toml .and. .not.native_heat) call parse_tem()
     native_pre_curve1 = (.not.native_pre_toml .and. native_dam) .or. pre_used_curve1
     if(native_sets_on) then
@@ -638,6 +644,29 @@ contains
         if(idx==0) call native_error("step "//itoa(s)//" boundary "//itoa(b)//": undefined nset "//nm)
         nref(idx)=.true.
         if(native_sets_on) kk=sets_find(SK_NSET,nm)
+        if(present_key(q//".type")) then
+          ! seepage S3: legacy nflow /= 0 + listfreeflownode (Fem.f90: a listed node with W > 0.1, or W > 0 and outflow,
+          ! is held at W = 0 in that iteration); one list for the whole analysis, so one seepage_face entry in step 1
+          if(string_value(q//".type")/="seepage_face") call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ': type must be "seepage_face" (the only boundary type; other boundaries give dof)')
+          if(.not.native_seep .or. native_seep_tr) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ': seepage_face needs analysis.type "steady_seepage"')
+          if(native_face_on) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+            ": only one seepage_face boundary (legacy has one list)")
+          if(present_key(q//".dof.count") .or. present_key(q//".value") .or. present_key(q//".amplitude") .or. &
+             present_key(q//".water_level_axis") .or. present_key(q//".output_reactions")) &
+            call native_error("step "//itoa(s)//" boundary "//itoa(b)//": seepage_face takes nset and optional threshold only")
+          if(present_key(q//".threshold")) then
+            native_face_thr=number(q//".threshold"); native_face_thr_on=.true.
+            if(.not.(native_face_thr>0 .and. native_face_thr<=1.e9_real64)) call native_error("step "//itoa(s)// &
+              " boundary "//itoa(b)//": seepage_face threshold out of range (0,1e9] Pa")
+          endif
+          native_face_on=.true.
+          native_face_nodes=ns(idx)%nodes
+          cycle
+        endif
+        if(present_key(q//".threshold")) call native_error("step "//itoa(s)//" boundary "//itoa(b)// &
+          ": threshold applies only to a seepage_face boundary")
         ! seepage S1: a pore_pressure boundary is legacy .pre ifixvar 8, whose value is taken from the amplitude only
         ! (Fem.f90 prescribed values: jfixvar 0 -> W = gamaw*curve(t); jfixvar +-k -> W = +-(curve(t) - x_k)*gamaw,
         ! gamaw = 9810 Pa/m, Global.f90); the per-node .pre value is not used, so TOML has no value key here.
@@ -743,6 +772,12 @@ contains
         enddo
         cand(j+1)=t
       enddo
+      if(native_face_on .and. s==1) then
+        do k=1,size(native_face_nodes)
+          if(owner(8,native_face_nodes(k))/=0) call native_error("step 1: node "//itoa(native_face_nodes(k))// &
+            " is both seepage_face and pore_pressure (boundary "//itoa(owner(8,native_face_nodes(k)))//")")
+        enddo
+      endif
       allocate(native_pre(s)%sets(ncand))
       do i=1,ncand
         native_pre(s)%sets(i)%ifixvar=cand(i)%dof
@@ -2793,8 +2828,10 @@ contains
         case('pore_pressure'); k=1
         case('water_head'); k=2
         case('flow_velocity'); k=3      ! seepage S2: legacy gid_wv (nodal flow velocity, GiD "flow_velocity")
+        case('flow_charge'); k=4        ! seepage S3: legacy nflow /= 0 (nodal flow, GiD "flow_charge")
+          if(native_seep_tr) call native_error('GLB: output.field "flow_charge" needs analysis.type "steady_seepage"')
         case default; call native_error('GLB: '//trim(native_atype)//' output.field "'//s// &
-          '" is not available (pore_pressure, water_head, flow_velocity)')
+          '" is not available (pore_pressure, water_head, flow_velocity, flow_charge)')
         end select
         if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
         has(k)=.true.
@@ -2803,6 +2840,7 @@ contains
       native_gid_f=0
       native_gid_wh=merge(1,0,has(2))
       native_gid_wv=merge(1,0,has(3))
+      native_flow_charge=has(4)
     else
     call glb_check_keys('output','@table format stress_averaging','field stress_averaging_exclude')
     if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
