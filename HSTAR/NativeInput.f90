@@ -2650,6 +2650,9 @@ contains
       native_doubsig=1
       if(present_key('bond_slip.normal_stiffness.count')) call native_error('GLB: bond_slip.normal_stiffness applies only '// &
         'to normal = "spring" (legacy doubsig 1 does not use ktan1/ktan2)')
+      if(.not.present_key('bond_slip.local_bar_sets.count')) call native_error('GLB: normal = "constraint" needs '// &
+        'bond_slip.local_bar_sets (legacy doubsig 1 builds the normal constraint only on bars of listglocbeam; '// &
+        'without it no normal constraint is built)')
     case default
       call native_error('GLB: bond_slip.normal must be "spring" (legacy doubsig 2) or "constraint" (doubsig 1)')
     end select
