@@ -1,6 +1,6 @@
 ! TOML-03/04: two bounded profiles. No solver state mirror or legacy-card emitter.
 module native_input
-  use iso_fortran_env, only: real64, error_unit
+  use iso_fortran_env, only: real64, error_unit, int8, int32, int64
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use yl_authoring_toml
   use yl_sets
@@ -158,6 +158,21 @@ module native_input
   ! [[material]] linear_elastic + [material.fluid] -> legacy MECHANICAL SOLID with phases SOLID + FLUID.
   logical :: native_uw=.false., native_uw_tr=.false.
   integer :: native_gid_p=0
+  ! UT pilot (ut-pilot/DESIGN.md 7-11): static B8 / T4 sections with formulation "thermo_mechanical" -> legacy 18 / 17
+  ! two-field UT groups (U dofs 1-3 + T dof 10, MDOFN 10); the temperature is a given field: [temperature] source
+  ! "field_file" (legacy outir = from_step > 0, file htf1 or legacy_oit) or "per_elset" (legacy outir < 0, all zero).
+  logical :: native_ut=.false., native_gut(NATIVE_MAXG)=.false.
+  integer :: native_outintr=0, native_gid_t=0
+  logical :: native_temp_htf=.true.
+  character(len=1024) :: native_temp_path=''
+  real(real64) :: native_temp_pre(3,NATIVE_MAXG)=0._real64
+  ! transient_heat [output.temperature_field]: the per-step temperature increments (legacy .oit) as an htf1 file
+  logical :: native_htf_out=.false.
+  character(len=1024) :: native_htf_out_file=''
+  integer(int64) :: native_htf_nrec=0
+  character(len=32) :: native_mesh_sha=''
+  ! water level (user 2026-10-20): [[step.water_level]] = legacy .man cwater /= 0 per-substep water levels
+  logical :: native_wl_on=.false.
   ! [output.initial_stress] (DESIGN 13.1-3): legacy winit = -step writes 1.inw after that step and reads
   ! vdimn, coef1, coef2 from the terminal (Output.f90 out_next_write); natively they come from the TOML.
   logical :: native_inistr=.false.
@@ -430,6 +445,7 @@ contains
     enddo
     if(native_glb_toml) then
       call validate_mesh_general()
+      call native_temp_file_check()       ! UT pilot: before any output is opened
     else
       call validate_mesh()
     endif
@@ -1521,6 +1537,9 @@ contains
         native_alfa(i)=number(p//".thermal.expansion_coefficient")
         if(native_alfa(i)<0 .or. native_alfa(i)>1.e-2_real64) &
           call native_error("MAT: material "//nm//": expansion_coefficient out of range [0,1e-2] 1/K")
+      elseif(native_ut) then              ! UT pilot (user 2026-10-20): no default for thermo_mechanical
+        call native_error("MAT: material "//nm//": a thermo_mechanical analysis needs "// &
+          "[material.thermal] expansion_coefficient (no default)")
       endif
       call parse_creep(p,nm,i)
       if(s=="goodman_fcm") call parse_goodman_fcm(p,nm,i)
@@ -2591,7 +2610,7 @@ contains
     character(:), allocatable :: s, p, q, nm, el
     character(len=TOML_LEN_TEXT) :: ename(NATIVE_MAXG)
     integer :: i, j, k, n, ng, nb, nsec, nf, g, total
-    logical :: has(7), act(NATIVE_MAXG), seen_el(NATIVE_MAXG)
+    logical :: has(8), act(NATIVE_MAXG), seen_el(NATIVE_MAXG)
     if(integer_value('version')/=1) call native_error('GLB: version must be 1')
     ! [case]
     k=key_index('case.@table')
@@ -2734,10 +2753,13 @@ contains
         elseif(native_uw) then
           if(string_value(p//'.formulation')/='coupled') &
             call native_error('GLB: section '//p//': a '//trim(native_atype)//' analysis needs formulation "coupled"')
+        elseif(string_value(p//'.formulation')=='thermo_mechanical') then
+          native_gut(g)=.true.                ! UT pilot: legacy 18 (U + T), DESIGN 7
         elseif(string_value(p//'.formulation')/='solid') then
-          call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid"')
+          call native_error('GLB: section '//p//': 3D B8 supports only formulation "solid" or "thermo_mechanical"')
         endif
         native_gname(g)='B8'; native_gindex(g)=9; native_gnnode(g)=8
+        if(native_gut(g)) native_gindex(g)=18     ! UT pilot
         if(native_uw) native_gindex(g)=18     ! seepage S4: b8c8 (U + W)
       case('T4')                          ! joint pilot D1 (J2): 4-node tetrahedron, legacy index 7 (h4, Elements.f90:412)
         if(native_ndim/=3) call native_error('GLB: section '//p//': element T4 needs mesh.dimension 3')
@@ -2750,10 +2772,13 @@ contains
         elseif(native_uw) then
           if(string_value(p//'.formulation')/='coupled') &
             call native_error('GLB: section '//p//': a '//trim(native_atype)//' analysis needs formulation "coupled"')
+        elseif(string_value(p//'.formulation')=='thermo_mechanical') then
+          native_gut(g)=.true.                ! UT pilot: legacy 17 (U + T), DESIGN 7
         elseif(string_value(p//'.formulation')/='solid') then
-          call native_error('GLB: section '//p//': 3D T4 supports only formulation "solid"')
+          call native_error('GLB: section '//p//': 3D T4 supports only formulation "solid" or "thermo_mechanical"')
         endif
         native_gname(g)='T4'; native_gindex(g)=7; native_gnnode(g)=4
+        if(native_gut(g)) native_gindex(g)=17     ! UT pilot
         if(native_uw) native_gindex(g)=17     ! seepage S4: h4c4 (U + W)
       case('joint')                       ! joint pilot D3a: GOODMAN node-pair rows, legacy index 5 (2D Q4 row) / 9 (3D B8 row)
         if(native_heat) call native_error('GLB: section '//p//': element joint does not apply to transient_heat')
@@ -2797,6 +2822,12 @@ contains
       seen_el(g)=.true.
     enddo
     call parse_bond_slip(ng,ename)
+    native_ut=any(native_gut(1:ng))
+    if(native_ut) then                    ! UT pilot: every group a 17 / 18 UT group (DESIGN 7; no mixed fields)
+      if(.not.all(native_gut(1:ng))) call native_error('GLB: a thermo_mechanical analysis needs formulation '// &
+        '"thermo_mechanical" in every section (B8 / T4 only; legacy groups 18 / 17 UT)')
+      if(trim(native_atype)/='static') call native_error('GLB: formulation "thermo_mechanical" needs analysis.type "static"')
+    endif
     ! [[step]] skeleton: active element sets, reset, increments (load/boundary/controls data: LOA/PRE/MAN)
     nb=doc%count_of('step')
     if(nb<1 .or. nb>NATIVE_MAXB) call native_error('GLB: need 1..'//itoa(NATIVE_MAXB)//' [[step]] tables')
@@ -2876,7 +2907,18 @@ contains
     ! [output] (G6)
     k=key_index('output.@table')
     if(native_heat) then
-      call glb_check_keys('output','@table format','field')
+      call glb_check_keys('output','@table format temperature_field.@table temperature_field.file','field')
+      if(present_key('output.temperature_field.@table')) then   ! UT pilot DESIGN 9: htf1 writer (legacy outiw > 0)
+        k=key_index('output.temperature_field.@table')
+        nm=string_value('output.temperature_field.file')
+        if(len(nm)<5 .or. len(nm)>200) call native_error('GLB: output.temperature_field.file must be a file name '// &
+          'of 5..200 characters ending in ".htf"')
+        if(nm(len(nm)-3:)/='.htf') call native_error('GLB: output.temperature_field.file must end in ".htf"')
+        if(index(nm,'/')>0 .or. index(nm,achar(92))>0) call native_error('GLB: output.temperature_field.file must be '// &
+          'a file name (written next to the TOML file)')
+        native_htf_out=.true.
+        native_htf_out_file=native_mesh_prefix(1:len_trim(native_mesh_prefix)-1)//nm
+      endif
       if(string_value('output.format')/='gid') call native_error('GLB: output.format must be "gid"')
       if(integer_value('output.field.count')/=1) call native_error('GLB: transient_heat output.field must be ["T"]')
       if(string_value('output.field[1]')/='T') call native_error('GLB: transient_heat output.field must be ["T"]')
@@ -2944,8 +2986,10 @@ contains
       case('pore_pressure'); k=7           ! seepage S4: legacy gid_P = 1 (UW analyses)
         if(.not.native_uw) call native_error('GLB: output.field "pore_pressure" in a '//trim(native_atype)// &
           ' analysis is not available (consolidation / steady_coupled; seepage analyses list it on their own)')
+      case('T'); k=8                       ! UT pilot: legacy gid_T = 1 (TEMPERATURE of the given field)
+        if(.not.native_ut) call native_error('GLB: output.field "T" in a static analysis needs thermo_mechanical sections')
       case default; call native_error('GLB: output.field "'//s//'" is deferred (only u, s, f; ms, ep, yield with mc_joint; '// &
-        'pore_pressure in UW analyses)')
+        'pore_pressure in UW analyses; T with thermo_mechanical)')
       end select
       if(has(k)) call native_error('GLB: output.field "'//s//'" listed twice')
       has(k)=.true.
@@ -2954,6 +2998,7 @@ contains
     native_gid_f=merge(1,0,has(3))
     native_gid_ms=merge(1,0,has(4)); native_gid_ep=merge(1,0,has(5)); native_gid_y=merge(1,0,has(6))
     native_gid_p=merge(1,0,has(7))
+    native_gid_t=merge(1,0,has(8))
     if(native_uw .and. .not.has(7)) call native_error('GLB: a '//trim(native_atype)//' output.field must contain "pore_pressure"')
     endif
     ! derived mesh counts (G4); full checks in validate_mesh_general
@@ -2976,6 +3021,7 @@ contains
     do g=1,ng
       if(.not.seen_el(g)) native_gnnode(g)=4   ! MAT reports the missing section
     enddo
+    call parse_temperature()              ! UT pilot DESIGN 9-10
   end subroutine
 
   subroutine native_nrt_deferred(what)
@@ -3165,6 +3211,7 @@ contains
       xyz(:,k)=c
     enddo
     close(u)
+    call native_mesh_sha_set(xyz)         ! UT pilot: htf1 mesh check value
     open(newunit=u,file=trim(native_mesh_prefix)//'.ele',status='old',action='read',iostat=ios)
     if(ios /= 0) call native_error('cannot open mesh 1.ele')
     g=1; last=native_elcounts(1)
@@ -4054,5 +4101,262 @@ contains
     read(u,'(a)',iostat=ios) row
     if(ios >= 0) call native_error('extra mesh element row')
     close(u)
+  end subroutine
+  ! ---------------------------------------------------------------- UT pilot (ut-pilot/DESIGN.md sections 7-11)
+  ! [temperature] (static thermo_mechanical): source "field_file" (legacy outintr = from_step > 0, file htf1 or
+  ! legacy_oit) or "per_elset" (legacy outintr < 0, all-zero 1.tem group records only, DESIGN 10.7).
+  subroutine parse_temperature()
+    character(:), allocatable :: s, p, nm
+    integer :: k, n, i, j, g
+    logical :: hit(NATIVE_MAXG)
+    if(.not.present_key('temperature.@table')) then
+      if(native_ut) call native_error('TEM: a thermo_mechanical analysis needs [temperature] (source "field_file" or '// &
+        '"per_elset"; the temperature is a given field, legacy outir /= 0)')
+      return
+    endif
+    k=key_index('temperature.@table')
+    if(.not.native_ut) call native_error('TEM: [temperature] applies only to thermo_mechanical sections (UT pilot)')
+    call glb_check_keys('temperature','@table source file format from_step','elset')
+    s=string_value('temperature.source')
+    select case(s)
+    case('field_file')
+      if(doc%count_of('temperature.elset')>0) call native_error('TEM: temperature.elset applies only to source "per_elset"')
+      nm=string_value('temperature.file')
+      if(len(nm)<1 .or. len(nm)>200) call native_error('TEM: temperature.file must be a file name of 1..200 characters')
+      if(index(nm,'/')>0 .or. index(nm,achar(92))>0) call native_error('TEM: temperature.file must be a file name next to '// &
+        'the TOML file (no directory part)')
+      native_temp_htf=.true.
+      if(present_key('temperature.format')) then
+        select case(string_value('temperature.format'))
+        case('htf1'); native_temp_htf=.true.
+        case('legacy_oit'); native_temp_htf=.false.
+        case default; call native_error('TEM: temperature.format must be "htf1" (default) or "legacy_oit"')
+        end select
+      endif
+      native_temp_path=native_mesh_prefix(1:len_trim(native_mesh_prefix)-1)//nm
+      native_outintr=integer_value('temperature.from_step')
+      if(native_outintr<1 .or. native_outintr>native_blocks) call native_error('TEM: temperature.from_step must be a '// &
+        'step number 1..'//itoa(native_blocks)//' (legacy outir)')
+    case('per_elset')
+      if(present_key('temperature.file') .or. present_key('temperature.format') .or. present_key('temperature.from_step')) &
+        call native_error('TEM: file / format / from_step apply only to source "field_file"')
+      n=doc%count_of('temperature.elset')
+      if(n/=native_materials) call native_error('TEM: source "per_elset" needs one [[temperature.elset]] per element set ('// &
+        itoa(native_materials)//', legacy 1.tem reads one record per group), found '//itoa(n))
+      hit=.false.
+      do i=1,n
+        p=indexed('temperature.elset',i)
+        k=key_index(p//'.@table')
+        call glb_check_keys(p,'@table elset start_time initial amplitude','')
+        nm=string_value(p//'.elset')
+        g=0
+        do j=1,native_materials
+          if(trim(native_kname(j))==nm) g=j
+        enddo
+        if(g==0) call native_error('TEM: '//p//': undefined element set "'//nm//'"')
+        if(hit(g)) call native_error('TEM: element set "'//nm//'" listed twice in [[temperature.elset]]')
+        hit(g)=.true.
+        native_temp_pre(1,g)=number(p//'.start_time')
+        native_temp_pre(2,g)=number(p//'.initial')
+        if(present_key(p//'.amplitude')) call native_error('TEM: '//p//': amplitude: only all-zero per-group temperatures '// &
+          'are supported (DESIGN 10.7; legacy temp_var_curve 0)')
+        if(native_temp_pre(1,g)/=0 .or. native_temp_pre(2,g)/=0) call native_error('TEM: '//p//': start_time and initial '// &
+          'must be 0 (only all-zero per-group temperatures are supported, DESIGN 10.7)')
+      enddo
+      native_outintr=-1
+    case default
+      call native_error('TEM: temperature.source must be "field_file" or "per_elset"')
+    end select
+  end subroutine
+
+  ! records the static steps read from the temperature field: legacy trstep = sum of nstep over the blocks
+  ! from outir on (Fem.f90 static_U: trstep = trstep0 + istep, native inc_step = 1)
+  integer function native_temp_records_needed() result(n)
+    integer :: b
+    n=0
+    do b=max(native_outintr,1),native_blocks
+      n=n+native_substeps(b)
+    enddo
+  end function
+
+  ! temperature field file checks before any output is opened (DESIGN 9): htf1 header (magic, version, header length,
+  ! byte order, real size, npoin, record count, content 1 = increments, node order 1, mesh sha256) or a legacy .oit
+  ! (no header: size a multiple of npoin*8)
+  subroutine native_temp_file_check()
+    integer :: u, ios, need, i
+    integer(int64) :: fsize, nrec, recl, st, np
+    integer(int32) :: ver, hl, bo, rs, ct, od
+    character(8) :: magic
+    character(32) :: msha
+    if(native_outintr<=0) return
+    need=native_temp_records_needed()
+    inquire(file=trim(native_temp_path),size=fsize,iostat=ios)
+    if(ios/=0 .or. fsize<0) call native_error('TEM: cannot open temperature.file '//trim(native_temp_path))
+    if(.not.native_temp_htf) then
+      recl=int(native_points,int64)*8
+      if(fsize==0 .or. mod(fsize,recl)/=0) call native_error('TEM: legacy_oit file size '//i64toa(fsize)// &
+        ' is not a positive multiple of npoin*8 = '//i64toa(recl)//' (wrong mesh?)')
+      if(fsize/recl<need) call native_error('TEM: legacy_oit file has '//i64toa(fsize/recl)//' records, the steps from '// &
+        'from_step on need '//itoa(need))
+      return
+    endif
+    if(fsize<128) call native_error('TEM: '//trim(native_temp_path)//' is not an htf1 file (shorter than its header)')
+    open(newunit=u,file=trim(native_temp_path),access='stream',form='unformatted',status='old',action='read',iostat=ios)
+    if(ios/=0) call native_error('TEM: cannot open temperature.file '//trim(native_temp_path))
+    read(u,pos=1) magic, ver, hl, bo, rs, np, nrec, ct, od, msha
+    if(magic/='HSTARTF'//achar(0)) call native_error('TEM: '//trim(native_temp_path)//': not an htf1 file (magic)')
+    if(ver/=1) call native_error('TEM: htf format version '//itoa(int(ver))//' (only 1)')
+    if(hl/=128) call native_error('TEM: htf header length '//itoa(int(hl))//' (htf1: 128)')
+    if(bo/=int(z'01020304',int32)) call native_error('TEM: htf byte order check failed (not little-endian)')
+    if(rs/=8) call native_error('TEM: htf real size '//itoa(int(rs))//' (htf1: 8)')
+    if(np/=native_points) call native_error('TEM: htf npoin '//i64toa(np)//' does not match the mesh ('// &
+      itoa(native_points)//' nodes)')
+    if(ct/=1) call native_error('TEM: htf content '//itoa(int(ct))//': only 1 = temperature increments per step '// &
+      '(legacy .oit meaning) is supported')
+    if(od/=1) call native_error('TEM: htf node order '//itoa(int(od))//' (htf1: 1 = mesh node ids 1..npoin)')
+    if(msha/=native_mesh_sha) call native_error('TEM: htf mesh sha256 '//sha_hex(msha)//' does not match this mesh ('// &
+      sha_hex(native_mesh_sha)//')')
+    recl=16+8*np
+    if(fsize/=128+nrec*recl) call native_error('TEM: htf size '//i64toa(fsize)//' does not match its header ('// &
+      i64toa(nrec)//' records of '//i64toa(recl)//' bytes)')
+    if(nrec<need) call native_error('TEM: htf file has '//i64toa(nrec)//' records, the steps from from_step on need '//itoa(need))
+    do i=1,int(nrec)
+      read(u,pos=129+(i-1)*recl) st
+      if(st/=i) call native_error('TEM: htf record '//itoa(i)//' carries step '//i64toa(st))
+    enddo
+    close(u)
+  end subroutine
+
+  ! legacy read(outint,rec=irec) midt for an htf1 file opened with access='stream'
+  subroutine native_htf_read(u,irec,n,v)
+    integer, intent(in) :: u, irec, n
+    real(real64), intent(out) :: v(n)
+    integer(int64) :: st
+    read(u,pos=129+int(irec-1,int64)*(16+8*int(n,int64))) st
+    if(st/=irec) call native_error('TEM: htf record '//itoa(irec)//' carries step '//i64toa(st))
+    read(u,pos=129+int(irec-1,int64)*(16+8*int(n,int64))+16) v
+  end subroutine
+
+  ! [output.temperature_field] (transient_heat): header now, nstep back-filled after every record
+  subroutine native_htf_open(u,n)
+    integer, intent(in) :: u, n
+    integer(int8) :: zero(48)
+    zero=0
+    native_htf_nrec=0
+    open(u,file=trim(native_htf_out_file),access='stream',form='unformatted',status='replace',action='write')
+    write(u,pos=1) 'HSTARTF'//achar(0), 1_int32, 128_int32, int(z'01020304',int32), 8_int32, int(n,int64), 0_int64, &
+      1_int32, 1_int32, native_mesh_sha, zero
+  end subroutine
+
+  subroutine native_htf_write(u,time,v,n)
+    integer, intent(in) :: u, n
+    real(real64), intent(in) :: time, v(n)
+    native_htf_nrec=native_htf_nrec+1
+    write(u,pos=129+(native_htf_nrec-1)*(16+8*int(n,int64))) native_htf_nrec, time, v
+    write(u,pos=33) native_htf_nrec
+  end subroutine
+
+  function i64toa(i) result(s)
+    integer(int64), intent(in) :: i
+    character(:), allocatable :: s
+    character(24) :: b
+    write(b,'(i0)') i
+    s=trim(b)
+  end function
+
+  function sha_hex(d) result(s)
+    character(32), intent(in) :: d
+    character(64) :: s
+    character(16), parameter :: hx='0123456789abcdef'
+    integer :: i, c
+    do i=1,32
+      c=ichar(d(i:i))
+      s(2*i-1:2*i)=hx(c/16+1:c/16+1)//hx(mod(c,16)+1:mod(c,16)+1)
+    enddo
+  end function
+
+  ! SHA-256 (FIPS 180-4) of a byte string; 32-bit words held in int64 and masked
+  subroutine sha256_bytes(msg,digest)
+    integer(int8), intent(in) :: msg(:)
+    character(32), intent(out) :: digest
+    integer(int64), parameter :: M=int(z'FFFFFFFF',int64)
+    integer(int64), parameter :: K(64)=[ &
+      int(z'428a2f98',int64),int(z'71374491',int64),int(z'b5c0fbcf',int64),int(z'e9b5dba5',int64), &
+      int(z'3956c25b',int64),int(z'59f111f1',int64),int(z'923f82a4',int64),int(z'ab1c5ed5',int64), &
+      int(z'd807aa98',int64),int(z'12835b01',int64),int(z'243185be',int64),int(z'550c7dc3',int64), &
+      int(z'72be5d74',int64),int(z'80deb1fe',int64),int(z'9bdc06a7',int64),int(z'c19bf174',int64), &
+      int(z'e49b69c1',int64),int(z'efbe4786',int64),int(z'0fc19dc6',int64),int(z'240ca1cc',int64), &
+      int(z'2de92c6f',int64),int(z'4a7484aa',int64),int(z'5cb0a9dc',int64),int(z'76f988da',int64), &
+      int(z'983e5152',int64),int(z'a831c66d',int64),int(z'b00327c8',int64),int(z'bf597fc7',int64), &
+      int(z'c6e00bf3',int64),int(z'd5a79147',int64),int(z'06ca6351',int64),int(z'14292967',int64), &
+      int(z'27b70a85',int64),int(z'2e1b2138',int64),int(z'4d2c6dfc',int64),int(z'53380d13',int64), &
+      int(z'650a7354',int64),int(z'766a0abb',int64),int(z'81c2c92e',int64),int(z'92722c85',int64), &
+      int(z'a2bfe8a1',int64),int(z'a81a664b',int64),int(z'c24b8b70',int64),int(z'c76c51a3',int64), &
+      int(z'd192e819',int64),int(z'd6990624',int64),int(z'f40e3585',int64),int(z'106aa070',int64), &
+      int(z'19a4c116',int64),int(z'1e376c08',int64),int(z'2748774c',int64),int(z'34b0bcb5',int64), &
+      int(z'391c0cb3',int64),int(z'4ed8aa4a',int64),int(z'5b9cca4f',int64),int(z'682e6ff3',int64), &
+      int(z'748f82ee',int64),int(z'78a5636f',int64),int(z'84c87814',int64),int(z'8cc70208',int64), &
+      int(z'90befffa',int64),int(z'a4506ceb',int64),int(z'bef9a3f7',int64),int(z'c67178f2',int64)]
+    integer(int64) :: h(8), w(64), a, b, c, d, e, f, g, hh, t1, t2, s0, s1, ch, mj, bits
+    integer(int64) :: n, total, ib, i, j, p
+    integer :: byte
+    h=[int(z'6a09e667',int64),int(z'bb67ae85',int64),int(z'3c6ef372',int64),int(z'a54ff53a',int64), &
+       int(z'510e527f',int64),int(z'9b05688c',int64),int(z'1f83d9ab',int64),int(z'5be0cd19',int64)]
+    n=size(msg,kind=int64)
+    total=((n+8)/64+1)*64
+    bits=n*8
+    do ib=0,total/64-1
+      do j=0,15
+        w(j+1)=0
+        do i=0,3
+          p=ib*64+j*4+i
+          if(p<n) then
+            byte=iand(int(msg(p+1)),255)
+          elseif(p==n) then
+            byte=128
+          elseif(p>=total-8) then
+            byte=int(iand(ishft(bits,-8*int(total-1-p)),255_int64))
+          else
+            byte=0
+          endif
+          w(j+1)=ior(ishft(w(j+1),8),int(byte,int64))
+        enddo
+      enddo
+      do j=17,64
+        s0=ieor(ieor(rotr(w(j-15),7),rotr(w(j-15),18)),ishft(w(j-15),-3))
+        s1=ieor(ieor(rotr(w(j-2),17),rotr(w(j-2),19)),ishft(w(j-2),-10))
+        w(j)=iand(w(j-16)+s0+w(j-7)+s1,M)
+      enddo
+      a=h(1); b=h(2); c=h(3); d=h(4); e=h(5); f=h(6); g=h(7); hh=h(8)
+      do j=1,64
+        s1=ieor(ieor(rotr(e,6),rotr(e,11)),rotr(e,25))
+        ch=ieor(iand(e,f),iand(ieor(e,M),g))
+        t1=iand(hh+s1+ch+K(j)+w(j),M)
+        s0=ieor(ieor(rotr(a,2),rotr(a,13)),rotr(a,22))
+        mj=ieor(ieor(iand(a,b),iand(a,c)),iand(b,c))
+        t2=iand(s0+mj,M)
+        hh=g; g=f; f=e; e=iand(d+t1,M); d=c; c=b; b=a; a=iand(t1+t2,M)
+      enddo
+      h=iand(h+[a,b,c,d,e,f,g,hh],M)
+    enddo
+    do j=1,8
+      do i=0,3
+        digest(4*(j-1)+i+1:4*(j-1)+i+1)=achar(int(iand(ishft(h(j),-8*(3-i)),255_int64)))
+      enddo
+    enddo
+  contains
+    integer(int64) function rotr(x,r)
+      integer(int64), intent(in) :: x
+      integer, intent(in) :: r
+      rotr=ior(ishft(x,-r),iand(ishft(x,32-r),M))
+    end function
+  end subroutine
+
+  ! htf1 mesh check value: sha256 of the coordinates x, y, z (z = 0 in 2D) of nodes 1..npoin as little-endian real*8
+  subroutine native_mesh_sha_set(xyz)
+    real(real64), intent(in) :: xyz(:,:)
+    integer(int8), allocatable :: b(:)
+    b=transfer(xyz,[0_int8])
+    call sha256_bytes(b,native_mesh_sha)
   end subroutine
 end module native_input

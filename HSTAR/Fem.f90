@@ -160,13 +160,21 @@
     !endif
 
     if(type_problem=='Q')then   !20200220
-        if(outintr>0) then
+        if(outintr>0 .and. native_mode) then   ! UT pilot: [temperature] field_file (checked in native_start)
+            if(native_temp_htf) then
+                open(outint,file=trim(native_temp_path),access='stream',form='unformatted',status='old',action='read')
+            else
+                open(outint,file=trim(native_temp_path),RECL=npoin*irk,FORM='BINARY',ACCESS='DIRECT',status='old',action='read')
+            endif
+        elseif(outintr>0) then
             open(outint,file=probn(1:len1)//'.oit',RECL=npoin*irk,FORM='BINARY',ACCESS='DIRECT')
             !elseif(outintw>0)then   !20230402
             !    open(outint,file=probn(1:len1)//'.oit',RECL=npoin*irk,FORM='BINARY')
         endif
     else
-        if(outintw>0.and.restart/=0) then  !20230402
+        if(outintw>0.and.native_mode) then  ! UT pilot: [output.temperature_field] htf1
+            call native_htf_open(outint,npoin)
+        elseif(outintw>0.and.restart/=0) then  !20230402
             open(outint,file=probn(1:len1)//'.oit',FORM='BINARY', &
                 ACCESS='append')
         elseif(outintw>0.and.restart==0) then
@@ -9368,7 +9376,11 @@
 
             if (outintw/=0) then
                 !write(7,*)'resultm(931)=',resultm(931),'result_zero(931)=',result_zero(931)
+                if(native_mode .and. native_htf_out) then   ! UT pilot: htf1 record (step, time, increments)
+                    call native_htf_write(outint,dble(ttime),resultm,npoin)
+                else
                 write(outint)resultm
+                endif
             endif
 
             if(istep/nresta*nresta==istep)call resta_read_write(-1)
@@ -12784,12 +12796,20 @@
         midt=0.
         icdofn=lmdofn(10)
         if(inc_step==1) then
+            if(native_mode .and. native_temp_htf) then   ! UT pilot: htf1 record trstep
+                call native_htf_read(outint,trstep,npoin,midt)
+            else
             read(outint,rec=trstep)midt
+            endif
         else
             allocate(dmidt(npoin))
             do mistep=trstep-inc_step+1,trstep  !cj042 add step interpolation for thermal stress 20191120
                 print *, 'mistep=',mistep,'trstep=',trstep
+                if(native_mode .and. native_temp_htf) then
+                    call native_htf_read(outint,mistep,npoin,dmidt)
+                else
                 read(outint,rec=mistep)dmidt
+                endif
                 midt=midt+dmidt
             end do
             deallocate(dmidt)

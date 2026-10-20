@@ -924,7 +924,9 @@
         if(native_heat) then          ! transient_heat (T3/T6): nonsymmetric PARDISO, no .oit file
             nonsym=1
             outintw=-1
+            if(native_htf_out) outintw=1   ! UT pilot: [output.temperature_field] (htf1 instead of .oit)
         endif
+        if(native_ut) outintr=native_outintr   ! UT pilot: [temperature] from_step / per_elset (-1)
         neuman=0
         equvs=0
         type_ABC='FIX'
@@ -1041,7 +1043,7 @@
         nflow=0
         if(native_flow_charge) nflow=1   ! seepage S3: [[step.boundary]] type seepage_face / output.field flow_charge
         ECWPIPE=0
-        if(native_heat) then          ! T5: ECWPIPE=2 (0 leaves group%water_pipe unallocated); no mass/stiffness tables
+        if(native_heat .or. native_ut) then   ! UT pilot: the legacy UT decks carry the same 999 / ECWPIPE 2 line          ! T5: ECWPIPE=2 (0 leaves group%water_pipe unallocated); no mass/stiffness tables
             nmass=999
             nsmat=999
             nhmat=999
@@ -1120,6 +1122,7 @@
         if(native_heat) mdofn=10      ! dof list Ux Uy Uz Thxy Thyz Thzx P W A T; only T active
         if(native_seep) mdofn=8       ! seepage S1: legacy MDOFN 8, only W (slot 8) active
         if(native_uw) mdofn=8         ! seepage S4: Ux Uy Uz + W (slots 1-3, 8)
+        if(native_ut) mdofn=10        ! UT pilot: Ux Uy Uz + T (slots 1-3, 10), legacy "1 1 1 0 0 0 0 0 0 1"
         if(native_beam) mdofn=merge(6,4,native_ndim==3)   ! beam pilot C2: B2 rotations (2D: slot 4, legacy pile_beam)
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)mdofn
@@ -1142,6 +1145,11 @@
             lmdofn(1:mdofn)=0
             lmdofn(1:3)=1
             lmdofn(8)=1
+        endif
+        if(native_ut) then
+            lmdofn(1:mdofn)=0
+            lmdofn(1:3)=1
+            lmdofn(10)=1
         endif
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)lmdofn(1:mdofn) !0,no the freedom;1,the freedom occur
@@ -1332,6 +1340,7 @@
             gid_wv=native_gid_wv
         endif
         if(native_uw) gid_P=native_gid_p   ! seepage S4: PORE-PRESSURE with u / s
+        if(native_ut) gid_T=native_gid_t   ! UT pilot: output.field "T"
     else
     read(gunit,*,iostat=glb_ios,iomsg=glb_msg)gid_u,gid_s,gid_ms,gid_f,gid_rot,gid_v,gid_a,gid_T,gid_P,  &
         gid_Pv,gid_ep,gid_Y,gid_FC,gid_Ns,gid_Ss,gid_Mxy,gid_bem,gid_wh,gid_wv,gid_bcs  !20210328
@@ -1657,6 +1666,10 @@
                 group(igroup)%nrfields=2
                 group(igroup)%fieldid='UW'
             endif
+            if(native_ut) then                 ! UT pilot: 17 / 18 two-field groups U + T
+                group(igroup)%nrfields=2
+                group(igroup)%fieldid='UT'
+            endif
             group(igroup)%special='ST'
             group(igroup)%sptype='PE'
             if(native_gps(igroup)) group(igroup)%sptype='PS'   ! section formulation "plane_stress"
@@ -1738,6 +1751,7 @@
                 if(native_heat) nfdof=1
                 if(native_seep) nfdof=1
                 if(native_uw) nfdof=merge(3,1,ifield==1)   ! seepage S4: field 1 U (1 2 3), field 2 W (8)
+                if(native_ut) nfdof=merge(3,1,ifield==1)   ! UT pilot: field 1 U (1 2 3), field 2 T (10)
                 if(group(igroup)%index==20) nfdof=merge(6,3,native_ndim==3)   ! beam pilot C2: u + rotations
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)nfdof
@@ -1758,6 +1772,7 @@
                 if(native_heat) group(igroup)%dof(ifield)%listdof_f=10
                 if(native_seep) group(igroup)%dof(ifield)%listdof_f=8
                 if(native_uw .and. ifield==2) group(igroup)%dof(ifield)%listdof_f=8
+                if(native_ut .and. ifield==2) group(igroup)%dof(ifield)%listdof_f=10
             else
             read(gunit,*,iostat=glb_ios,iomsg=glb_msg)group(igroup)%dof(ifield)%listdof_f(1:nfdof)
             endif
