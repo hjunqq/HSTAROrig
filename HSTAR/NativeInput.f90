@@ -2640,6 +2640,7 @@ contains
       endif
       do i=1,n
         p=indexed("surface",i)
+        j=key_index(p//".@table")
         call glb_check_keys(p,"@table name kind faces_file","")
         nm=string_value(p//".name")
         if(len(nm)==0) call native_error("LOA: empty surface name: "//p)
