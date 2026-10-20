@@ -101,12 +101,13 @@
     if(outintr<0)then   !20200226
 	do igroup=1,ngroup
         allocate(group(igroup)%temp_pre)
+         if(native_mode) text='TOML-03'
+         if(.not.native_mode) read(tunit,*)text
          if(native_mode) then   ! UT pilot: [temperature] source "per_elset" (all zero, DESIGN 10.7)
             group(igroup)%temp_pre%time0=native_temp_pre(1,igroup)
             group(igroup)%temp_pre%temp0=native_temp_pre(2,igroup)
             group(igroup)%temp_pre%temp_var_curve=0
          else
-         read(tunit,*)text
 	        read(tunit,*)group(igroup)%temp_pre%time0,group(igroup)%temp_pre%temp0, &
                          group(igroup)%temp_pre%temp_var_curve	       
          endif
