@@ -255,7 +255,9 @@ contains
         call num(a); if(len(msg)>0) return
         call num(nm); if(len(msg)>0) return
         if(a<1 .or. a>sets_npoin) then; msg=who//': node out of range 1..'//itoa(sets_npoin)//': '//itoa(a); return; endif
-        if(nm<1 .or. nm>8) then; msg=who//': tie '//itoa(i)//': number of masters must be 1..8'; return; endif
+        ! legacy .nrt TRAL rows: nintf is unbounded (allocatable listf/rintf, Global.f90 read_nrt_constraints);
+        ! UT pilot (user 2026-10-21): no cap beyond legacy
+        if(nm<1) then; msg=who//': tie '//itoa(i)//': number of masters must be >= 1'; return; endif
         do while(j+1+2*nm>cap)
           call grow()
         enddo
@@ -263,7 +265,7 @@ contains
         do v=1,nm
           call num(b); if(len(msg)>0) return
           if(b<1 .or. b>sets_npoin) then; msg=who//': node out of range 1..'//itoa(sets_npoin)//': '//itoa(b); return; endif
-          if(b==a) then; msg=who//': node '//itoa(a)//' is tied to itself'; return; endif
+          ! self tie (slave among its own masters): accepted, stored as legacy reads it (UT pilot, user 2026-10-21)
           j=j+1; mi(j)=b
         enddo
         wsum=0
@@ -347,7 +349,7 @@ contains
   ! ties over all tie sets: a slave appears once; no slave is a master (no chains)
   subroutine check_ties(msg)
     character(:), allocatable, intent(inout) :: msg
-    logical, allocatable :: slave(:)
+    logical, allocatable :: slave(:), selft(:)
     integer :: i, r, k
     allocate(slave(max(sets_npoin,1))); slave=.false.
     do i=1,sets_n
@@ -358,11 +360,21 @@ contains
         slave(k)=.true.
       enddo
     enddo
+    ! self ties (UT pilot, user 2026-10-21): a master that is a slave is accepted only when that slave is self tied
+    ! (its own row lists it); legacy stores every row as read, so such rows are passed on unchanged
+    allocate(selft(max(sets_npoin,1))); selft=.false.
+    do i=1,sets_n
+      if(sets(i)%kind/=SK_TIE) cycle
+      do r=1,sets(i)%n
+        k=sets(i)%m(sets(i)%off(r))
+        if(any(sets(i)%m(sets(i)%off(r)+1:sets(i)%off(r+1)-1)==k)) selft(k)=.true.
+      enddo
+    enddo
     do i=1,sets_n
       if(sets(i)%kind/=SK_TIE) cycle
       do r=1,sets(i)%n
         do k=sets(i)%off(r)+1,sets(i)%off(r+1)-1
-          if(slave(sets(i)%m(k))) then
+          if(slave(sets(i)%m(k)) .and. .not.selft(sets(i)%m(k))) then
             msg='SETS: tie '//trim(sets(i)%name)//': master node '//itoa(sets(i)%m(k))//' is itself a slave (chained ties)'; return
           endif
         enddo

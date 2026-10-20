@@ -950,7 +950,9 @@ contains
       if(present_key(p//".points_file")) then
         ! seepage pilot S2: a long amplitude (e.g. a legacy WATERLEVEL record, one "time value" per point) does not
         ! fit the TOML subset's one-line arrays (1023 characters); it is read from a "time value" file next to the TOML
-        if(.not.native_seep) call native_error("LOA: amplitude "//nm//": points_file is available for seepage analyses only")
+        ! UT pilot (user 2026-10-21): also for transient_heat (the 289-increment xfj thermal curve)
+        if(.not.(native_seep .or. native_heat)) call native_error("LOA: amplitude "//nm// &
+          ": points_file is available for seepage and transient_heat analyses only")
         if(present_key(p//".points.count")) call native_error("LOA: amplitude "//nm//": give points or points_file, not both")
         call amp_points_file(i,nm,string_value(p//".points_file"))
         n=size(native_amp(i)%t)
@@ -977,6 +979,8 @@ contains
     if(native_heat .and. .not.native_sets_on) call native_error("TEM: a transient_heat analysis needs [mesh] sets_file "// &
       "(convection faces are face sets in 1.set; T9)")
     if(native_sets_on .and. native_heat) then
+      if(doc%count_of("surface")>0) call native_error("TEM: faces_file surfaces are for mechanical loads only "// &
+        "(convection faces are face sets in 1.set)")
       call heat_surfaces_from_sets(ns)
     elseif(native_sets_on) then
       call loa_surfaces_from_sets(ns)
@@ -2483,7 +2487,12 @@ contains
     integer :: j
     if(.not.native_glb_toml) call native_error("SETS: mesh.sets_file needs HSTAR_NATIVE_GLB=toml")
     if(doc%count_of("nset")>0) call native_error("SETS: inline [[nset]] is not allowed with mesh.sets_file (define it in 1.set)")
-    if(doc%count_of("surface")>0) call native_error("SETS: inline [[surface]] is not allowed with mesh.sets_file (define it in 1.set)")
+    ! UT pilot (user 2026-10-21): a [[surface]] whose faces are listed in faces_file (rows "n1 n2 n3 n4 element" as the
+    ! legacy .loa edge group lists them) is the one TOML surface form allowed next to 1.set
+    do j=1,doc%count_of("surface")
+      if(.not.present_key(indexed("surface",j)//".faces_file")) call native_error("SETS: inline [[surface]] is not "// &
+        "allowed with mesh.sets_file (define it in 1.set, or list its faces in faces_file)")
+    enddo
     if(doc%count_of("elset")>0) call native_error("SETS: inline [[elset]] is not allowed with mesh.sets_file (define it in 1.set)")
     f=string_value('mesh.sets_file')
     if(len(f)==0 .or. len(f)>64 .or. scan(f,'/'//achar(92))>0) &
@@ -2606,6 +2615,78 @@ contains
       enddo
       native_surf(k)%last=total
     enddo
+    if(doc%count_of("surface")>0) call loa_surfaces_files(ns)
+  end subroutine
+
+  subroutine loa_surfaces_files(ns)
+    ! UT pilot (user 2026-10-21): [[surface]] kind "face4" with faces_file = file next to the TOML (same style as amplitude
+    ! points_file), one face per row "n1 n2 n3 n4 element" in the legacy .loa order (index 5 face group). The rows are
+    ! taken as listed (repeated nodes of collapsed elements kept, as legacy reads them); appended after the 1.set surfaces.
+    integer, intent(inout) :: ns
+    type(loa_surf_t), allocatable :: s2(:)
+    integer, allocatable :: e2(:,:)
+    integer :: i, j, n, nf, u, ios, r, total, v(5), pass
+    character(:), allocatable :: p, nm, fn
+    character(len=512) :: line
+    logical :: ex
+    n=doc%count_of("surface")
+    allocate(s2(ns+n)); s2(1:ns)=native_surf(1:ns)
+    total=native_loa_nedge
+    do pass=1,2
+      if(pass==2) then
+        allocate(e2(5,max(total,1))); e2=0
+        if(native_loa_nedge>0) e2(:,1:native_loa_nedge)=native_loa_edges(:,1:native_loa_nedge)
+        total=native_loa_nedge
+      endif
+      do i=1,n
+        p=indexed("surface",i)
+        call glb_check_keys(p,"@table name kind faces_file","")
+        nm=string_value(p//".name")
+        if(len(nm)==0) call native_error("LOA: empty surface name: "//p)
+        if(string_value(p//".kind")/="face4") call native_error('LOA: surface '//nm//': faces_file needs kind = "face4"')
+        if(native_ndim/=3) call native_error("LOA: surface "//nm//": face4 surfaces need mesh.dimension 3")
+        do j=1,ns+i-1
+          if(trim(s2(j)%name)==nm) call native_error("LOA: duplicate surface name: "//nm)
+        enddo
+        fn=string_value(p//".faces_file")
+        if(len_trim(fn)==0 .or. scan(fn,'/'//achar(92))>0) call native_error("LOA: surface "//nm// &
+          ": faces_file must be a file name next to the TOML")
+        inquire(file=trim(fn),exist=ex)
+        if(.not.ex) call native_error("LOA: surface "//nm//": faces_file "//trim(fn)//" not found")
+        if(pass==2) then
+          s2(ns+i)%name=nm; s2(ns+i)%first=total+1; s2(ns+i)%nnode=4; s2(ns+i)%index=5; s2(ns+i)%kind=4
+        endif
+        open(newunit=u,file=trim(fn),status='old',action='read')
+        nf=0; r=0
+        do
+          read(u,'(a)',iostat=ios) line
+          if(ios/=0) exit
+          r=r+1
+          if(len_trim(line)==0) cycle
+          read(line,*,iostat=ios) v
+          if(ios/=0) call native_error("LOA: surface "//nm//': faces_file line '//itoa(r)//': expected "n1 n2 n3 n4 element"')
+          if(any(v(1:4)<1) .or. any(v(1:4)>native_points)) call native_error("LOA: surface "//nm//": faces_file line "// &
+            itoa(r)//": node out of range 1.."//itoa(native_points))
+          if(v(5)<1 .or. v(5)>native_elements) call native_error("LOA: surface "//nm//": faces_file line "//itoa(r)// &
+            ": element out of range 1.."//itoa(native_elements))
+          if(allocated(mesh_ele)) then
+            do j=1,4
+              if(.not.any(mesh_ele(:,v(5))==v(j))) call native_error("LOA: surface "//nm//": faces_file line "//itoa(r)// &
+                ": node "//itoa(v(j))//" is not a node of element "//itoa(v(5)))
+            enddo
+          endif
+          nf=nf+1; total=total+1
+          if(pass==2) then
+            e2(1:4,total)=v(1:4); e2(5,total)=v(5)
+          endif
+        enddo
+        close(u)
+        if(nf<1) call native_error("LOA: surface "//nm//" has no faces")
+        if(pass==2) s2(ns+i)%last=total
+      enddo
+    enddo
+    call move_alloc(s2,native_surf); call move_alloc(e2,native_loa_edges)
+    native_loa_nedge=total; ns=ns+n
   end subroutine
 
   subroutine parse_glb()
