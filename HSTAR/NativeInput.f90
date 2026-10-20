@@ -94,6 +94,7 @@ module native_input
     integer :: gamp=0
     logical :: gsel(NATIVE_MAXG)=.true.     ! seepage S1: gravity apply_to = [element sets] (legacy tcurvegravity per group)
     type(loa_hyd_t), allocatable :: hyd(:)
+    real(real64), allocatable :: wlev(:,:)   ! [[step.water_level]] levels (hydrostatic load, substep)
   end type
   type(loa_step_t), allocatable :: native_loa(:)
   type :: loa_pl_t
@@ -1143,6 +1144,7 @@ contains
       if(ng==0) call native_error("LOA: step "//itoa(s)//": one gravity load is required")
       native_loa(s)%hyd=tmp(1:nh)
       deallocate(tmp)
+      call parse_water_level(s,sp,nh,ns)
     enddo
     do i=1,ns
       if(.not.native_surf(i)%used) call native_error("LOA: unreferenced surface "//trim(native_surf(i)%name))
@@ -4358,5 +4360,73 @@ contains
     integer(int8), allocatable :: b(:)
     b=transfer(xyz,[0_int8])
     call sha256_bytes(b,native_mesh_sha)
+  end subroutine
+  ! [[step.water_level]] (user 2026-10-20): legacy .man cwater /= 0 + one water-level row per hydrostatic group
+  ! (Fem.f90 static_U coef_water(delgroup,nstep)); Load.f90 step_water_pressure then sets, at every substep,
+  ! press = -max(level - x_axis, 0) * gamaw on the faces of that load (gamaw = 9810, Global.f90 42).
+  subroutine parse_water_level(s,sp,nh,ns)
+    integer, intent(in) :: s, nh, ns
+    character(*), intent(in) :: sp
+    character(:), allocatable :: q, nm
+    integer :: n, i, j, k, idx, ih, nlev
+    logical :: hit(max(nh,1))
+    n=doc%count_of(sp//'.water_level')
+    if(n==0) return
+    if(native_heat .or. native_seep .or. native_uw .or. trim(native_atype)/='static') &
+      call native_error('LOA: step '//itoa(s)//': [[step.water_level]] applies only to static analyses')
+    if(n/=nh) call native_error('LOA: step '//itoa(s)//': [[step.water_level]] needs one entry per hydrostatic load '// &
+      'of the step ('//itoa(nh)//' loads; legacy reads one water-level row per hydrostatic group), found '//itoa(n))
+    hit=.false.
+    do i=1,n
+      q=indexed(sp//'.water_level',i)
+      k=key_index(q//'.@table')
+      call glb_check_keys(q,'@table surface unit_weight','levels')
+      nm=string_value(q//'.surface')
+      idx=0
+      do j=1,ns
+        if(trim(native_surf(j)%name)==nm) idx=j
+      enddo
+      if(idx==0) call native_error('LOA: step '//itoa(s)//': water_level: undefined surface '//nm)
+      ih=0
+      do j=1,nh
+        if(native_loa(s)%hyd(j)%water/=0 .and. native_loa(s)%hyd(j)%first==native_surf(idx)%first .and. &
+           native_loa(s)%hyd(j)%last==native_surf(idx)%last) ih=j
+      enddo
+      if(ih==0) call native_error('LOA: step '//itoa(s)//': water_level: surface '//nm//' carries no hydrostatic load '// &
+        'in this step')
+      if(hit(ih)) call native_error('LOA: step '//itoa(s)//': water_level: surface '//nm//' listed twice')
+      hit(ih)=.true.
+      if(number(q//'.unit_weight')/=9810._real64) call native_error('LOA: step '//itoa(s)//': water_level unit_weight '// &
+        'must be 9810 (the legacy per-substep water pressure uses the fixed gamaw = 9810 N/m^3)')
+      nlev=integer_value(q//'.levels.count')
+      if(nlev<1) call native_error('LOA: step '//itoa(s)//': water_level levels is empty')
+      if(i==1) allocate(native_loa(s)%wlev(nh,nlev))
+      if(size(native_loa(s)%wlev,2)/=nlev) call native_error('LOA: step '//itoa(s)//': every water_level needs the same '// &
+        'number of levels (one per substep)')
+      do j=1,nlev
+        native_loa(s)%wlev(ih,j)=number(indexed(q//'.levels',j))
+        if(.not.ieee_is_finite(native_loa(s)%wlev(ih,j))) call native_error('LOA: step '//itoa(s)//': water_level '// &
+          'levels must be finite')
+      enddo
+    enddo
+    native_wl_on=.true.
+  end subroutine
+
+  integer function native_water_level_flag(iblk) result(c)
+    integer, intent(in) :: iblk
+    c=0
+    if(.not.allocated(native_loa)) return
+    if(iblk<1 .or. iblk>size(native_loa)) return
+    if(allocated(native_loa(iblk)%wlev)) c=1
+  end function
+
+  subroutine native_water_levels(iblk,ng,n,cw)
+    integer, intent(in) :: iblk, ng, n
+    real(real64), intent(out) :: cw(ng,n)
+    if(size(native_loa(iblk)%wlev,1)/=ng) call native_error('LOA: step '//itoa(iblk)//': water_level entries ('// &
+      itoa(size(native_loa(iblk)%wlev,1))//') do not match the '//itoa(ng)//' hydrostatic groups')
+    if(size(native_loa(iblk)%wlev,2)/=n) call native_error('LOA: step '//itoa(iblk)//': water_level levels count ('// &
+      itoa(size(native_loa(iblk)%wlev,2))//') must equal the step substeps ('//itoa(n)//')')
+    cw=native_loa(iblk)%wlev
   end subroutine
 end module native_input

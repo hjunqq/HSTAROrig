@@ -3682,12 +3682,16 @@
         if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
             toler_force,toler_var(1:mdofn))
 
+        if(native_mode) cwater=native_water_level_flag(iblks)   ! [[step.water_level]] (user 2026-10-20)
         if(cwater/=0.and.delgroup>0)then
-            if(native_mode) call native_man_deferred('water-level coefficients (cwater/=0)')
             allocate(coef_water(delgroup,nstep))
+            if(native_mode) then
+                call native_water_levels(iblks,delgroup,nstep,coef_water)
+            else
             do idelgroup=1,delgroup
                 read(mainunit,*)i0,coef_water(idelgroup,:)
             end do
+            endif
         end if
 
 
