@@ -3249,7 +3249,7 @@ contains
       degen=.false.
       ! user 2026-10-17: a B8 solid row may collapse in any node pattern (as legacy); the 2x2x2 Gauss-point Jacobian
       ! check below decides (a collapse that leaves any Gauss point with det J <= 0 is rejected)
-      if(nn==8 .and. native_gindex(g)==9 .and. .not.native_gjoint(g)) then
+      if(nn==8 .and. (native_gindex(g)==9 .or. native_gut(g)) .and. .not.native_gjoint(g)) then   ! UT pilot: 18 as 9
         do j=2,8
           if(any(nodes(1:j-1)==nodes(j))) degen=.true.
         enddo
@@ -3309,7 +3309,7 @@ contains
       elseif(nn==2) then
         if(sum((xyz(:,nodes(2))-xyz(:,nodes(1)))**2)<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': L2 element has zero length')
-      elseif(native_gindex(g)==7) then
+      elseif(native_gindex(g)==7 .or. (native_gut(g) .and. nn==4)) then   ! UT pilot: 17 as 7
         if(t4_jacobian(xyz(:,nodes(1:4)))<=0) &
           call native_error('GLB: 1.ele row '//itoa(k)//': T4 Jacobian is not positive (node order / distortion)')
       elseif(nn==4 .and. degen) then
