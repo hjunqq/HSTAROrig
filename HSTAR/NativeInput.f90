@@ -200,6 +200,8 @@ module native_input
   integer, parameter :: NATIVE_MAXI=100
   integer :: native_ninc(NATIVE_MAXB)=0
   real(real64) :: native_inc_dt(NATIVE_MAXI,NATIVE_MAXB)=0._real64, native_inc_tol(NATIVE_MAXI,NATIVE_MAXB)=0._real64
+  real(real64) :: native_inc_told(NATIVE_MAXI,NATIVE_MAXB)=0._real64   ! man pilot D3: tolerance_dof (native_inc_tol = tolerance_force)
+  logical :: native_inc_on(NATIVE_MAXB)=.false.   ! man pilot M1: static step given as [[step.increment]]
   integer :: native_inc_nstep(NATIVE_MAXI,NATIVE_MAXB)=0, native_inc_miter(NATIVE_MAXI,NATIVE_MAXB)=0
   logical :: native_mat_heat(NATIVE_MAXG)=.false.
   ! joint pilot D3a: GOODMAN node-pair joints (section element="joint", formulation="goodman"), FCM sub-model only
@@ -411,6 +413,8 @@ contains
     do i=1,native_blocks
       if(native_heat .or. native_seep_tr .or. native_uw_tr) exit   ! transient_heat / transient_seepage / consolidation: [[step.increment]] (parse_man)
       if(.not.native_loa_toml) native_gravity(i)=number(indexed('step',i)//'.load[1].magnitude')
+      native_inc_on(i)=doc%count_of(indexed('step',i)//'.increment')>0   ! man pilot M1
+      if(native_inc_on(i)) cycle
       native_substeps(i)=integer_value(indexed('step',i)//'.controls.substeps')
       native_iterations(i)=integer_value(indexed('step',i)//'.controls.max_iterations')
       if(.not.native_loa_toml .and. (native_gravity(i)<=0 .or. native_gravity(i)>1.e4_real64)) call native_error('gravity out of range (0,1e4]')
@@ -418,6 +422,7 @@ contains
       if(native_iterations(i)<1 .or. native_iterations(i)>100) call native_error('max_iterations out of range [1,100]')
     enddo
     if(native_man_toml) call parse_man()
+    call man_fill_static()   ! man pilot M1/M3: [step.controls] -> one increment card
     if(native_loa_toml) call parse_loa()
     if(native_pre_toml) call parse_pre()
     if(native_heat) call heat_resolve()
@@ -2263,26 +2268,56 @@ contains
 
   ! transient_heat (T3): [[step.increment]] = one legacy time_dependent increment card.
   subroutine parse_man_heat()
-    integer :: i, j, n, k
-    character(:), allocatable :: p, q
+    integer :: i
     do i=1,native_blocks
-      p=indexed("step",i)
-      n=doc%count_of(p//".increment")
-      if(n<1 .or. n>NATIVE_MAXI) call native_error("MAN: "//p//" needs 1.."//itoa(NATIVE_MAXI)//" [[step.increment]] tables")
-      native_ninc(i)=n
-      do j=1,n
-        q=indexed(p//".increment",j)
-        k=key_index(q//".@table")
-        call glb_check_keys(q,"@table time_increment substeps max_iterations tolerance","")
-        native_inc_dt(j,i)=number(q//".time_increment")
-        if(native_inc_dt(j,i)<=0 .or. native_inc_dt(j,i)>1.e6_real64) call native_error("MAN: "//q//".time_increment out of range (0,1e6]")
-        native_inc_nstep(j,i)=integer_value(q//".substeps")
-        if(native_inc_nstep(j,i)<1 .or. native_inc_nstep(j,i)>100000) call native_error("MAN: "//q//".substeps out of range [1,100000]")
-        native_inc_miter(j,i)=integer_value(q//".max_iterations")
-        if(native_inc_miter(j,i)<1 .or. native_inc_miter(j,i)>100) call native_error("MAN: "//q//".max_iterations out of range [1,100]")
-        native_inc_tol(j,i)=number(q//".tolerance")
-        if(native_inc_tol(j,i)<=0 .or. native_inc_tol(j,i)>1._real64) call native_error("MAN: "//q//".tolerance out of range (0,1]")
-      enddo
+      call parse_man_incs(i)
+    enddo
+  end subroutine
+
+  ! man pilot M1/M3 (DESIGN-man 3, D3): [[step.increment]] = one legacy .man increment card (C1 + C2), any procedure.
+  ! tolerance = shorthand for tolerance_force = tolerance_dof.
+  subroutine parse_man_incs(i)
+    integer, intent(in) :: i
+    integer :: j, n, k
+    character(:), allocatable :: p, q
+    p=indexed("step",i)
+    n=doc%count_of(p//".increment")
+    if(n<1 .or. n>NATIVE_MAXI) call native_error("MAN: "//p//" needs 1.."//itoa(NATIVE_MAXI)//" [[step.increment]] tables")
+    native_ninc(i)=n
+    native_substeps(i)=0
+    do j=1,n
+      q=indexed(p//".increment",j)
+      k=key_index(q//".@table")
+      call glb_check_keys(q,"@table time_increment substeps max_iterations tolerance tolerance_force tolerance_dof","")
+      native_inc_dt(j,i)=number(q//".time_increment")
+      if(native_inc_dt(j,i)<=0 .or. native_inc_dt(j,i)>1.e6_real64) call native_error("MAN: "//q//".time_increment out of range (0,1e6]")
+      native_inc_nstep(j,i)=integer_value(q//".substeps")
+      if(native_inc_nstep(j,i)<1 .or. native_inc_nstep(j,i)>100000) call native_error("MAN: "//q//".substeps out of range [1,100000]")
+      native_inc_miter(j,i)=integer_value(q//".max_iterations")
+      if(native_inc_miter(j,i)<1 .or. native_inc_miter(j,i)>100) call native_error("MAN: "//q//".max_iterations out of range [1,100]")
+      if(present_key(q//".tolerance")) then
+        if(present_key(q//".tolerance_force") .or. present_key(q//".tolerance_dof")) &
+          call native_error("MAN: "//q//": give tolerance or tolerance_force + tolerance_dof, not both")
+        native_inc_tol(j,i)=number(q//".tolerance"); native_inc_told(j,i)=native_inc_tol(j,i)
+      else
+        native_inc_tol(j,i)=number(q//".tolerance_force"); native_inc_told(j,i)=number(q//".tolerance_dof")
+      endif
+      if(native_inc_tol(j,i)<=0 .or. native_inc_tol(j,i)>1._real64) call native_error("MAN: "//q//": tolerance(_force) out of range (0,1]")
+      if(native_inc_told(j,i)<=0 .or. native_inc_told(j,i)>1._real64) call native_error("MAN: "//q//": tolerance(_dof) out of range (0,1]")
+      native_substeps(i)=native_substeps(i)+native_inc_nstep(j,i)
+    enddo
+    native_iterations(i)=native_inc_miter(1,i)
+  end subroutine
+
+  ! man pilot M1/M3: a static step without [[step.increment]] is one card from [step.controls] (or the contract defaults)
+  subroutine man_fill_static()
+    integer :: i
+    if(native_heat .or. native_seep_tr .or. native_uw_tr) return
+    do i=1,native_blocks
+      if(native_inc_on(i)) cycle
+      native_ninc(i)=1
+      native_inc_dt(1,i)=native_ditime(i); native_inc_nstep(1,i)=native_substeps(i); native_inc_miter(1,i)=native_iterations(i)
+      native_inc_tol(1,i)=native_tol_force(i); native_inc_told(1,i)=native_tol_dof(i)
     enddo
   end subroutine
 
@@ -2294,6 +2329,10 @@ contains
       return
     endif
     do i=1,native_blocks
+      if(native_inc_on(i)) then   ! man pilot M1
+        call parse_man_incs(i)
+        cycle
+      endif
       p=indexed("step",i)//".controls"
       native_ditime(i)=number(p//".time_increment")
       if(native_ditime(i)<=0 .or. native_ditime(i)>1.e6_real64) &
@@ -2944,7 +2983,12 @@ contains
       if(native_seep_tr .and. present_key(p//'.controls.@table')) &
         call native_error('GLB: '//p//': a transient_seepage step takes [[step.increment]], not [step.controls]')
       if(.not.(native_heat .or. native_seep_tr .or. native_uw_tr)) then
+      if(doc%count_of(p//'.increment')>0) then   ! man pilot M1: [step.controls] keeps only stiffness_update
+        if(.not.native_man_toml) call native_error('GLB: '//p//': [[step.increment]] needs HSTAR_NATIVE_MAN=toml')
+        call glb_check_keys(p//'.controls','@table stiffness_update','')
+      else
       if(integer_value(p//'.controls.increments')/=1) call native_error('GLB: '//p//'.controls.increments must be 1')
+      endif
       s=string_value(p//'.controls.stiffness_update')
       if(s/='first_iteration' .and. s/='every_iteration') &
         call native_error('GLB: '//p//'.controls.stiffness_update must be "first_iteration" or "every_iteration"')
@@ -3904,7 +3948,31 @@ contains
     real(real64), intent(out) :: ditime,tolf,tolv(:)
     miter=native_inc_miter(i,iblk); ditime=native_inc_dt(i,iblk); nstep=native_inc_nstep(i,iblk)
     noutn=1; noutf=1; inc_step=1; nresta=1; nmcon=0; nbasef=0     ! validated implied values (T3)
-    tolf=native_inc_tol(i,iblk); tolv=native_inc_tol(i,iblk)
+    tolf=native_inc_tol(i,iblk); tolv=native_inc_told(i,iblk)
+  end subroutine
+
+  ! man pilot M3: one static increment card (static_U, static_U_PW); cwater/Qstatic are set by the caller
+  subroutine native_man_card(iblk,i,miter,ditime,noutn,noutf,nstep,inc_step,nresta,tolf,tolv)
+    integer, intent(in) :: iblk,i
+    integer, intent(out) :: miter,noutn,noutf,nstep,inc_step,nresta
+    real(real64), intent(out) :: ditime,tolf,tolv(:)
+    integer :: nmcon,nbasef
+    if(i<1 .or. i>native_ninc(iblk)) call native_error('MAN: increment '//itoa(i)//' of step '//itoa(iblk)//' not defined')
+    call native_man_inc(iblk,i,miter,ditime,noutn,noutf,nstep,inc_step,nresta,nmcon,nbasef,tolf,tolv)
+  end subroutine
+
+  ! man pilot T2: every increment card as read (legacy) or built (TOML); HSTAR_MAN_CARDS=1, works in both modes
+  subroutine native_man_card_receipt(iblk,i,miter,ditime,noutn,noutf,nstep,inc_step,nresta,c8,c9,tolf,tolv)
+    integer, intent(in) :: iblk,i,miter,noutn,noutf,nstep,inc_step,nresta,c8,c9
+    real(real64), intent(in) :: ditime,tolf,tolv(:)
+    integer :: u
+    character(len=8) :: e
+    call get_environment_variable('HSTAR_MAN_CARDS',e)
+    if(trim(e)/='1') return
+    open(newunit=u,file='man-cards.txt',position='append',action='write')
+    write(u,'(a,i0,a,i0,9(1x,i0),1x,es23.15e3,1x,es23.15e3,*(1x,es23.15e3))') 'b',iblk,' i',i,miter,noutn,noutf,nstep,inc_step,nresta, &
+      c8,c9,size(tolv),ditime,tolf,tolv
+    close(u)
   end subroutine
 
   integer function native_nrt_ntie() result(n)
@@ -4454,7 +4522,8 @@ contains
     logical :: hit(max(nh,1))
     n=doc%count_of(sp//'.water_level')
     if(n==0) return
-    if(native_heat .or. native_seep .or. native_uw .or. trim(native_atype)/='static') &
+    if(native_ninc(s)>1) call native_man_deferred('[[step.water_level]] with more than one [[step.increment]] (man-pilot M1)')
+    if(native_heat .or. native_seep .or. native_uw_tr .or. (trim(native_atype)/='static' .and. trim(native_atype)/='steady_coupled')) &
       call native_error('LOA: step '//itoa(s)//': [[step.water_level]] applies only to static analyses')
     if(n/=nh) call native_error('LOA: step '//itoa(s)//': [[step.water_level]] needs one entry per hydrostatic load '// &
       'of the step ('//itoa(nh)//' loads; legacy reads one water-level row per hydrostatic group), found '//itoa(n))

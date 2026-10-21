@@ -283,6 +283,7 @@
     line_load_block=0
     line_temp_block=0
     nincs=0
+    if(native_mode .and. restart/=0) call native_man_deferred('restart (inp restart/=0, man-pilot D7)')
     if (restart==0)then
         lblks=0
         lttime=0.0
@@ -2414,6 +2415,7 @@
     !read(observ_unit,*)text
 
 
+    if(native_mode) call native_man_deferred('back_analysis (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -3004,6 +3006,7 @@
     !read(observ_unit,*)text
 
 
+    if(native_mode) call native_man_deferred('back_d_analysis (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -3605,7 +3608,7 @@
     if(native_mode) text='TOML-03'
     if(.not.native_mode) read(mainunit,*)text
     if(native_mode) then
-        nincs=1
+        nincs=native_man_nincs(iblks)   ! man pilot M1: [[step.increment]] (or [step.controls] = 1 increment)
     else
     read(mainunit,*)nincs
     endif
@@ -3615,22 +3618,15 @@
     if(ngaps/=0.or.nrcsteel/=0)allocate(tofor0(ntotv)) !!ctt2005
 
     do iincs=1,lincs
-        if(native_mode) then
-            miter=native_iterations(iblks)
-            ditime=native_ditime(iblks)
-            noutn=1
-            noutf=1
-            nstep=native_substeps(iblks)
-            inc_step=1
-            nresta=1
+        if(native_mode) then          ! man pilot M3: one increment card (native_man_card)
+            call native_man_card(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta,toler_force,toler_var(1:mdofn))
             cwater=0.
             Qstatic=0
         else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=native_tol_force(iblks)
-            toler_var(1:mdofn)=native_tol_dof(iblks)
+            continue                  ! man pilot M3: tolerances from native_man_card
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -3656,22 +3652,15 @@
     do iincs=lincs+1,nincs
         print *,'iincs=',iincs,'lincs=',lincs
 
-        if(native_mode) then
-            miter=native_iterations(iblks)
-            ditime=native_ditime(iblks)
-            noutn=1
-            noutf=1
-            nstep=native_substeps(iblks)
-            inc_step=1
-            nresta=1
+        if(native_mode) then          ! man pilot M3: one increment card (native_man_card)
+            call native_man_card(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta,toler_force,toler_var(1:mdofn))
             cwater=0.
             Qstatic=0
         else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=native_tol_force(iblks)
-            toler_var(1:mdofn)=native_tol_dof(iblks)
+            continue                  ! man pilot M3: tolerances from native_man_card
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -3683,6 +3672,8 @@
             toler_force,toler_var(1:mdofn))
 
         if(native_mode) cwater=native_water_level_flag(iblks)   ! [[step.water_level]] (user 2026-10-20)
+        call native_man_card_receipt(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta, &
+            merge(1,0,cwater/=0),int(Qstatic),toler_force,toler_var(1:mdofn))
         if(cwater/=0.and.delgroup>0)then
             allocate(coef_water(delgroup,nstep))
             if(native_mode) then
@@ -4835,6 +4826,7 @@
         read(stocunit,*)cov(i,:)  !correlation matrix
     end do
 
+    if(native_mode) call native_man_deferred('STATIC_U_reli (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -6077,6 +6069,7 @@
 
     !if(meshc==1.or.rmesh/=0)rewind(mainunit)
 
+    if(native_mode) call native_man_deferred('STATIC_rigid_reli (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -6312,6 +6305,7 @@
 
     !if(meshc==1.or.rmesh/=0)rewind(mainunit)
 
+    if(native_mode) call native_man_deferred('STATIC_rigid_1 (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -7488,6 +7482,7 @@
     integer(ink) iintf,nintf,iieq   !!int2000
 
     print *,'in static_u_p'
+    if(native_mode) call native_man_deferred('STATIC_U_P (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
 
@@ -7684,7 +7679,7 @@
     if(native_mode) text='TOML-03'      ! seepage S1: .man from [step.controls] (as static_U)
     if(.not.native_mode) read(mainunit,*)text
     if(native_mode) then
-        nincs=1
+        nincs=native_man_nincs(iblks)   ! man pilot M1: [[step.increment]] (or [step.controls] = 1 increment)
     else
     read(mainunit,*)nincs
     endif
@@ -7694,22 +7689,15 @@
 
 
     do iincs=1,lincs
-        if(native_mode) then
-            miter=native_iterations(iblks)
-            ditime=native_ditime(iblks)
-            noutn=1
-            noutf=1
-            nstep=native_substeps(iblks)
-            inc_step=1
-            nresta=1
+        if(native_mode) then          ! man pilot M3: one increment card (native_man_card)
+            call native_man_card(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta,toler_force,toler_var(1:mdofn))
             cwater=0.
             Qstatic=0
         else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=native_tol_force(iblks)
-            toler_var(1:mdofn)=native_tol_dof(iblks)
+            continue                  ! man pilot M3: tolerances from native_man_card
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -7728,22 +7716,15 @@
 
     xtime=0.0
     do iincs=lincs+1,nincs
-        if(native_mode) then
-            miter=native_iterations(iblks)
-            ditime=native_ditime(iblks)
-            noutn=1
-            noutf=1
-            nstep=native_substeps(iblks)
-            inc_step=1
-            nresta=1
+        if(native_mode) then          ! man pilot M3: one increment card (native_man_card)
+            call native_man_card(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta,toler_force,toler_var(1:mdofn))
             cwater=0.
             Qstatic=0
         else
         read(mainunit,*)miter,ditime,noutn,noutf,nstep,inc_step,nresta,cwater,Qstatic
         endif
         if(native_mode) then
-            toler_force=native_tol_force(iblks)
-            toler_var(1:mdofn)=native_tol_dof(iblks)
+            continue                  ! man pilot M3: tolerances from native_man_card
         else
         read(mainunit,*)toler_force,toler_var(1:mdofn)
         endif
@@ -7752,12 +7733,18 @@
         if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
             toler_force,toler_var(1:mdofn))
 
+        if(native_mode) cwater=native_water_level_flag(iblks)   ! man pilot M2: [[step.water_level]] as in static_U
+        call native_man_card_receipt(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta, &
+            merge(1,0,cwater/=0),int(Qstatic),toler_force,toler_var(1:mdofn))
         if(cwater/=0.and.delgroup>0)then
-            if(native_mode) call native_man_deferred('water-level coefficients (cwater/=0)')
             allocate(coef_water(delgroup,nstep))
+            if(native_mode) then
+                call native_water_levels(iblks,delgroup,nstep,coef_water)
+            else
             do idelgroup=1,delgroup
                 read(mainunit,*)i0,coef_water(idelgroup,:)
             end do
+            endif
         end if
 
 
@@ -8760,6 +8747,8 @@
         if(.not.native_mode) read(mainunit,*)toler_force,toler_var(1:mdofn)
         if(native_mode) call native_man_receipt(iblks,iincs,miter,ditime,nstep,inc_step,noutn,noutf, &
             toler_force,toler_var(1:mdofn))
+        call native_man_card_receipt(iblks,iincs,miter,ditime,noutn,noutf,nstep,inc_step,nresta, &
+            int(nmcon),int(nbasef),toler_force,toler_var(1:mdofn))
         if(nmcon/=0)allocate(lmcon(nmcon),rmcon(ndimn,nmcon))
         if (nmcon/=0) then
             if(native_mode) call native_man_deferred('nmcon/=0 (moving constraints)')
@@ -9973,6 +9962,7 @@
 
     if(allocated(fachv))deallocate(fachv)
     allocate(fachv(ndimn))
+    if(native_mode) call native_man_deferred('frequency_analysis (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs,fachv
 
@@ -10113,6 +10103,7 @@
     print *,     'in explicit'
     if(iblks==1)call cvoid(0)
     allocate(earthquake_curve(ndimn),fachv(ndimn))
+    if(native_mode) call native_man_deferred('explicit (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs,earthquake_curve(1:ndimn)
     time=0.0
@@ -10294,6 +10285,7 @@
     if(nifsgroup/=0)allocate(deltafp(ntotv))
     allocate(disthree(ntotv),loadthree(ntotv),distwo(ntotv),loadtwo(ntotv))
 
+    if(native_mode) call native_man_deferred('response_spectrum (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     read(mainunit,*)nincs
     time=0.0
@@ -18556,6 +18548,7 @@
         allocate(earthquake_curve(ndimn))
         earthquake_curve=0
     endif
+    if(native_mode) call native_man_deferred('GHM2ADINA (.man module without a TOML path, man-pilot D5/D8)')
     read(mainunit,*)text
     !read(mainunit,*)nincs,r0,r1,earthquake_curve
     read(mainunit,*)nincs,earthquake_curve
